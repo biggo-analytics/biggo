@@ -64,6 +64,14 @@ biggo repl                   # try things one line at a time
 biggo check hello.bgo        # type-check only
 ```
 
+Releases, starting with 0.2.0, come with executables built for macOS, Linux and Windows, so
+that Rust is not needed. This puts the latest one in `~/.local/bin`, after checking it against
+the checksums of the release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/biggo-analytics/biggo/main/install.sh | sh
+```
+
 Read on: [Getting started](docs/01-getting-started.md)
 
 ## The language at a glance
@@ -200,13 +208,14 @@ ok
 
 | Command | What it does |
 | --- | --- |
-| `biggo run file.bgo` | Runs a program |
-| `biggo repl` | Interactive mode |
+| `biggo run file.bgo` | Runs a program; `biggo run -e '...'` runs one given on the command line |
+| `biggo repl` | Interactive mode, with line editing, history, `:type` and `:help` |
 | `biggo check file.bgo` | Reports syntax and type errors without running the program |
 | `biggo explain file.bgo` | Shows each query's plan before and after optimization, without running it |
 | `biggo test [path]` | Runs the tests in `*_test.bgo` files |
 | `biggo fmt [--check] files` | Formats code |
 | `biggo build file.bgo -o app` | Builds a standalone executable |
+| `biggo help substring` | What a built-in function does |
 | `biggo lsp` | Language server for editors (errors as you type, hover, formatting) |
 
 The VS Code extension is in [`editors/vscode`](editors/vscode).

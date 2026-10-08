@@ -7,12 +7,17 @@ formatter, the test runner, the executable builder, and the language server for 
 usage: biggo <command> [args]
 
 commands:
-  run <file>               run a program
+  run <file> [<arg>...]    run a program; `args()` gives it the arguments
+  run -e <code> [<arg>...] run a program given on the command line
   repl                     evaluate code interactively
   check <file>             report the syntax and type errors of a program
-  explain <file>           show the query plans of a program without running them
+  explain <file> [<arg>...]  show the query plans of a program without running them
   test [<path>...]         run the tests in the `*_test.bgo` files under the paths
   fmt [--check] <file>...  format programs in place, or list those that need it
+  help <function>          describe a built-in function
+
+`-` in place of a file is standard input. `fmt -` writes the formatted program to standard
+output.
   build <file> [-o <out>]  make a standalone executable of a program
   lsp                      serve an editor over the Language Server Protocol
   parse <file>             print the syntax tree of a program
@@ -66,6 +71,19 @@ report for 2026-01 in all regions
   (`index 0 is out of range for a list of 0 items`), so look at `len(args())` first.
 - `biggo explain` and an executable made by `biggo build` take arguments the same way. In the REPL
   and under `biggo test`, `args()` is empty.
+
+A short program can be given on the command line with `-e`, and a program can come from
+standard input with `-` in place of the file. What follows is passed to the program in both
+cases:
+
+```sh
+biggo run -e 'print(read_csv<{ region: string, qty: int }>("sales.csv") |> count_by(region))'
+biggo run -e 'print(to_int(args()[0]) * 2)' 21
+cat report.bgo | biggo run - 2026-01 north
+```
+
+Paths in such a program are relative to the folder you run the command from. `biggo explain`
+and `biggo check` take `-` the same way, and `biggo explain` takes `-e`.
 
 The number of threads the engine uses is set with `RAYON_NUM_THREADS` (the default is the total
 number of cores):
@@ -130,7 +148,7 @@ Inside a program, you can call `explain(table)` to print the plan of a single ta
 
 ```text
 $ biggo repl
-biggo 0.1.0 (Ctrl-D to exit)
+biggo 0.1.0 (:help for commands, Ctrl-D to exit)
 >> type Sale = { region: string, qty: int }
 >> let sales = read_csv<Sale>("docs/data/sales.csv")
 >> sales |> group(region) |> agg(units = sum(qty))
@@ -159,12 +177,35 @@ error: cannot apply `>` to int and string
 - An error does not end the session. What you declared earlier is still there.
 - File paths are relative to the folder where you started the REPL.
 - It accepts input from a pipe: `echo 'print(1 + 1)' | biggo repl` (no prompt).
+- On a terminal the line can be edited with the arrow keys, Home and End, and Up and Down bring
+  back earlier entries, those of earlier sessions too (they are kept in `~/.biggo_history`).
+  Ctrl-C drops the entry being typed, and Ctrl-D leaves.
+
+A line that starts with `:` is a command to the REPL itself:
+
+| Command | What it does |
+| --- | --- |
+| `:help` | Lists these commands |
+| `:help <name>` | What a built-in function does, as [`biggo help`](#biggo-help) prints it |
+| `:type <expr>` | The type of an expression, without running it; for a table, its columns |
+| `:quit` | Leaves, as Ctrl-D does |
+
+```text
+>> :type sales |> group(region) |> agg(units = sum(qty))
+table<{region: string, units: int}>
+>> :help starts_with
+string:
+  starts_with(s, part)
+    Returns: bool
+    `s` starts with `part`
+```
 
 ## biggo fmt
 
 ```sh
 biggo fmt report.bgo other.bgo     # format the files and overwrite them
 biggo fmt --check *.bgo            # change no files, only print the names of files not yet formatted (exit 1 if any)
+biggo fmt - < draft.bgo            # format standard input and print the result, which is what editors call
 ```
 
 Formats code into one standard style. There are no options to set. Before and after:
@@ -343,6 +384,31 @@ on the target machine.
 - On macOS, the executable is ad-hoc signed with `codesign` (requires the Xcode Command Line Tools).
 - The executable works on the same operating system and CPU as the `biggo` that built it (no
   cross-compilation).
+
+## biggo help
+
+```text
+$ biggo help substring
+string:
+  substring(s, start), substring(s, start, length)
+    Returns: string
+    The part of `s` that starts at position `start` and runs to the end, or for `length` characters
+
+The full reference, with examples: https://github.com/biggo-analytics/biggo/blob/main/docs/06-builtins.md
+```
+
+Prints what the [built-in reference](06-builtins.md) says about a function: how it is called,
+what it takes and returns, and what it does. A name with several meanings, such as `sum` (an
+aggregate, and a function of lists), has an entry for each. A name that is not a function gets
+the names close to it:
+
+```text
+$ biggo help substr
+biggo help: there is no built-in function `substr`; close to it: substring
+```
+
+The entries are the tables of the reference, built into the executable, so they are the ones
+for the version of biggo that you run.
 
 ## biggo parse
 

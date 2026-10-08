@@ -174,6 +174,23 @@ impl<W: Write> Session<W> {
         }
     }
 
+    /// The type of `source`, written out, if it is one expression. Nothing runs, and nothing
+    /// joins the session.
+    pub fn type_of(&mut self, name: &str, source: &str) -> Result<Option<String>, StaticErrors> {
+        let errors = |diagnostics| StaticErrors {
+            name: name.to_string(),
+            source: source.to_string(),
+            diagnostics,
+            import: None,
+        };
+        let parsed = biggo_syntax::parse(source, &mut self.interner);
+        if !parsed.diagnostics.is_empty() {
+            return Err(errors(parsed.diagnostics));
+        }
+        let ty = self.checker.type_of(&parsed.ast, &mut self.interner);
+        Ok(ty.map_err(errors)?.map(|ty| ty.to_string()))
+    }
+
     /// Checks and runs `source`, after the files it imports, and returns the value of its
     /// last statement. With `echo`, that value is also printed the way a REPL shows a result.
     pub fn run(&mut self, name: &str, source: &str, echo: bool) -> Result<Value, Failure> {

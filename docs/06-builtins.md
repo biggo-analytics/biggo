@@ -364,7 +364,6 @@ A pattern is text in which each `%` code stands for a part of the date:
 | `to_string(x)` | any | `string` |
 | `to_date(x)` | `string` `date` `datetime` | `date` |
 | `to_datetime(x)` | `string` `date` `datetime` | `datetime` |
-
 | `to_bool(x)` | `string` `int` `bool` | `bool` |
 | `try_to_int(x)`, `try_to_float(x)`, `try_to_decimal(x)`, `try_to_date(x)`, `try_to_datetime(x)`, `try_to_bool(x)` | as the function without `try_` | the same type, nullable |
 | `parse_number(s)` | `string` | `float?` |
@@ -595,6 +594,7 @@ noted).
 | `rename(t, new = old, ...)` | Renames columns |
 | `derive(t, c = expr, ...)` | Adds or replaces columns |
 | `sort(t, key, desc(key), asc(key), ...)` | Sorts rows; nulls go last, or first with `nulls = "first"` |
+| `desc(key)`, `asc(key)` | Inside `sort`, and in the `order` of `window`: the key from largest to smallest, or from smallest to largest, which is what a key alone means |
 | `take(t, n)` | The first `n` rows |
 | `skip(t, n)` | Skips the first `n` rows |
 | `tail(t, n)` | The last `n` rows |

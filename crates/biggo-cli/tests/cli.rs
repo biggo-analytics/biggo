@@ -629,3 +629,126 @@ fn a_file_is_replaced_only_by_a_whole_result() {
         ]
     );
 }
+
+#[test]
+fn a_program_can_come_from_the_command_line_or_standard_input() {
+    let (stdout, stderr, code) = biggo(&["run", "-e", "print(1 + 1, args())", "a", "b"], "");
+    assert_eq!(stdout, "2 [\"a\", \"b\"]\n");
+    assert_eq!((stderr.as_str(), code), ("", Some(0)));
+
+    let (stdout, stderr, code) = biggo(&["run", "-", "x"], "print(args(), 6 * 7)\n");
+    assert_eq!(stdout, "[\"x\"] 42\n");
+    assert_eq!((stderr.as_str(), code), ("", Some(0)));
+
+    // Errors name where the program came from.
+    let (stdout, stderr, code) = biggo(&["run", "-e", "print(nope)"], "");
+    assert!(stderr.contains(" --> <command line>:1:7"), "{stderr}");
+    assert_eq!((stdout.as_str(), code), ("", Some(1)));
+    let (_, stderr, code) = biggo(&["check", "-"], "let x: int = \"a\"\n");
+    assert!(stderr.contains(" --> <stdin>:1:14"), "{stderr}");
+    assert!(stderr.ends_with("1 error in <stdin>\n"), "{stderr}");
+    assert_eq!(code, Some(1));
+
+    // Paths in such a program start from the directory biggo runs in.
+    let program = "print(read_csv<{ qty: int }>(\"testdata/run/data/sales.csv\") |> count())";
+    let (stdout, stderr, code) = biggo(&["run", "-e", program], "");
+    assert_eq!(
+        (stdout.as_str(), stderr.as_str(), code),
+        ("10\n", "", Some(0))
+    );
+
+    let (_, stderr, code) = biggo(&["run", "-e"], "");
+    assert!(
+        stderr.starts_with("biggo run: expected a program after `-e`\n"),
+        "{stderr}"
+    );
+    assert_eq!(code, Some(2));
+}
+
+#[test]
+fn fmt_formats_standard_input_to_standard_output() {
+    let (stdout, stderr, code) = biggo(&["fmt", "-"], "let  xs=[1,2 ,3]\nprint( xs )\n");
+    assert_eq!(stdout, "let xs = [1, 2, 3]\nprint(xs)\n");
+    assert_eq!((stderr.as_str(), code), ("", Some(0)));
+
+    // Text that does not parse is reported, and nothing is written.
+    let (stdout, stderr, code) = biggo(&["fmt", "-"], "let x = \n");
+    assert!(stderr.contains(" --> <stdin>:1:"), "{stderr}");
+    assert_eq!((stdout.as_str(), code), ("", Some(1)));
+}
+
+#[test]
+fn help_describes_a_builtin_function() {
+    let (stdout, stderr, code) = biggo(&["help", "starts_with"], "");
+    assert!(
+        stdout.starts_with("string:\n  starts_with(s, part)\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("    Returns: bool\n"), "{stdout}");
+    assert_eq!((stderr.as_str(), code), ("", Some(0)));
+
+    let (stdout, stderr, code) = biggo(&["help", "start"], "");
+    assert!(
+        stderr.starts_with("biggo help: there is no built-in function `start`;"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("starts_with") && stderr.contains("start_of_month"),
+        "{stderr}"
+    );
+    assert_eq!((stdout.as_str(), code), ("", Some(1)));
+}
+
+/// `biggo help` knows every function that the checker does.
+#[test]
+fn help_has_an_entry_for_every_builtin_function() {
+    for name in biggo_types::builtin_names() {
+        let (stdout, stderr, code) = biggo(&["help", name], "");
+        assert!(code == Some(0) && stdout.contains(name), "{name}: {stderr}");
+    }
+}
+
+#[test]
+fn repl_has_commands_of_its_own() {
+    let session = "\
+let t = from_rows([{ a: 1, b: \"x\" }])
+:type t |> where(a > 0) |> select(b)
+:type 1 + 2.5
+:type fn(n: int) { [n] }
+:help ends_with
+:type let y = 1
+:type
+:type nope
+:wat
+:help nonesuch
+y
+:quit
+print(\"not reached\")
+";
+    let (stdout, stderr, code) = biggo(&["repl"], session);
+    let shown = "\
+table<{b: string}>
+float
+fn(n: int) -> list<int>
+string:
+  ends_with(s, part)
+";
+    assert!(stdout.starts_with(shown), "{stdout}");
+    assert!(!stdout.contains("not reached"), "{stdout}");
+    let complaints = "\
+`:type` takes one expression
+`:type` takes an expression, as in `:type 1 + 2`
+error: undefined name `nope`
+ --> <repl>:1:1
+  |
+1 | nope
+  | ^^^^
+
+unknown command `:wat`; `:help` lists the commands
+there is no built-in function `nonesuch`
+error: undefined name `y`
+";
+    // Asking for a type defines nothing: `y` is still unknown afterwards.
+    assert!(stderr.starts_with(complaints), "{stderr}");
+    assert_eq!(code, Some(0));
+}

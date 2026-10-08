@@ -1,8 +1,9 @@
 mod build;
+mod help;
 mod repl;
 mod test;
 
-use std::io::{self, BufWriter, Write};
+use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -14,11 +15,16 @@ usage: biggo <command> [args]
 
 commands:
   run <file> [<arg>...]    run a program; `args()` gives it the arguments
+  run -e <code> [<arg>...] run a program given on the command line
   repl                     evaluate code interactively
   check <file>             report the syntax and type errors of a program
   explain <file> [<arg>...]  show the query plans of a program without running them
   test [<path>...]         run the tests in the `*_test.bgo` files under the paths
   fmt [--check] <file>...  format programs in place, or list those that need it
+  help <function>          describe a built-in function
+
+`-` in place of a file is standard input. `fmt -` writes the formatted program to standard
+output.
   build <file> [-o <out>]  make a standalone executable of a program
   lsp                      serve an editor over the Language Server Protocol
   parse <file>             print the syntax tree of a program
@@ -58,6 +64,24 @@ fn command(args: &[&str]) -> u8 {
         ["help" | "--help" | "-h"] => {
             print!("{USAGE}");
             0
+        }
+        ["help", name] => match help::entry(name) {
+            Some(entry) => {
+                print!("{entry}");
+                0
+            }
+            None => {
+                eprintln!("biggo help: {}", help::unknown(name));
+                1
+            }
+        },
+        [command @ ("run" | "explain"), "-e", code, ref rest @ ..] => {
+            let explain = command == "explain";
+            run_source("<command line>", code, Path::new(""), explain, &[], rest)
+        }
+        [command @ ("run" | "explain"), "-e"] => {
+            eprintln!("biggo {command}: expected a program after `-e`\n\n{USAGE}");
+            2
         }
         ["run", path, ref rest @ ..] => run(path, false, rest),
         ["explain", path, ref rest @ ..] => run(path, true, rest),
@@ -112,8 +136,23 @@ fn command(args: &[&str]) -> u8 {
     }
 }
 
+/// The name that stands for standard input where a file is expected.
+const STDIN: &str = "-";
+
+/// The name of a source in messages.
+fn shown(path: &str) -> &str {
+    if path == STDIN { "<stdin>" } else { path }
+}
+
 fn read(path: &str) -> Option<String> {
-    match std::fs::read_to_string(path) {
+    let text = match path {
+        STDIN => {
+            let mut text = String::new();
+            io::stdin().read_to_string(&mut text).map(|_| text)
+        }
+        _ => std::fs::read_to_string(path),
+    };
+    match text {
         Ok(source) => Some(source),
         Err(err) => {
             eprintln!("biggo: cannot read {path}: {err}");
@@ -135,7 +174,7 @@ fn check(path: &str) -> u8 {
     };
     let mut session = Session::new(io::sink());
     session.vm().set_base_dir(base_dir(path));
-    match session.check(path, &source) {
+    match session.check(shown(path), &source) {
         Ok(_) => 0,
         Err(errors) => {
             report(&errors);
@@ -154,7 +193,7 @@ fn parse(path: &str) -> u8 {
         print!("{}", parsed.ast.dump(&interner));
         return 0;
     }
-    let file = SourceFile::new(path, &source);
+    let file = SourceFile::new(shown(path), &source);
     for diag in &parsed.diagnostics {
         eprintln!("{}", file.render(diag));
     }
@@ -169,6 +208,9 @@ fn fmt(paths: &[&str], check: bool) -> u8 {
             continue;
         };
         match biggo_fmt::format(&source) {
+            // Standard input has no file to write back to: the result goes to standard
+            // output, which is how an editor formats text that is not saved yet.
+            Ok(formatted) if *path == STDIN && !check => print!("{formatted}"),
             Ok(formatted) if formatted == source => {}
             // With `--check` nothing is written: the files that would change are listed.
             Ok(_) if check => {
@@ -182,7 +224,7 @@ fn fmt(paths: &[&str], check: bool) -> u8 {
                 }
             }
             Err(diagnostics) => {
-                let file = SourceFile::new(path, &source);
+                let file = SourceFile::new(shown(path), &source);
                 for diag in &diagnostics {
                     eprintln!("{}", file.render(diag));
                 }
@@ -215,7 +257,7 @@ fn run(path: &str, explain: bool, args: &[&str]) -> u8 {
     let Some(source) = read(path) else {
         return 1;
     };
-    run_source(path, &source, base_dir(path), explain, &[], args)
+    run_source(shown(path), &source, base_dir(path), explain, &[], args)
 }
 
 /// Runs a program. `bundled` are the files it imports, when they come with it and are not

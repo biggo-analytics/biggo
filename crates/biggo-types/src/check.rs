@@ -64,12 +64,7 @@ impl Checker {
         ast: &Ast,
         interner: &mut Interner,
     ) -> Result<Checked, Vec<Diagnostic>> {
-        let saved = (
-            self.scope.len(),
-            self.functions.len(),
-            self.aliases.len(),
-            self.globals,
-        );
+        let saved = self.mark();
         let first_function = self.functions.len() as u32;
         let mut cx = Cx {
             checker: self,
@@ -91,10 +86,7 @@ impl Checker {
             ..
         } = cx;
         if !diags.is_empty() {
-            self.scope.truncate(saved.0);
-            self.functions.truncate(saved.1);
-            self.aliases.truncate(saved.2);
-            self.globals = saved.3;
+            self.rewind(saved);
             diags.sort_by_key(|diag| diag.span.start);
             return Err(diags);
         }
@@ -109,6 +101,42 @@ impl Checker {
             result,
         };
         Ok(Checked { program, types })
+    }
+
+    /// The type of the one expression that `ast` consists of, with nothing joining the
+    /// session. `None` if `ast` is anything else.
+    pub fn type_of(
+        &mut self,
+        ast: &Ast,
+        interner: &mut Interner,
+    ) -> Result<Option<Type>, Vec<Diagnostic>> {
+        let [stmt] = &ast.stmts[..] else {
+            return Ok(None);
+        };
+        let StmtKind::Expr(expr) = stmt.kind else {
+            return Ok(None);
+        };
+        let saved = self.mark();
+        let checked = self.check(ast, interner);
+        self.rewind(saved);
+        Ok(checked?.types[expr.index()].clone())
+    }
+
+    /// How much the session holds, to come back to when a module does not join it.
+    fn mark(&self) -> (usize, usize, usize, u32) {
+        (
+            self.scope.len(),
+            self.functions.len(),
+            self.aliases.len(),
+            self.globals,
+        )
+    }
+
+    fn rewind(&mut self, (scope, functions, aliases, globals): (usize, usize, usize, u32)) {
+        self.scope.truncate(scope);
+        self.functions.truncate(functions);
+        self.aliases.truncate(aliases);
+        self.globals = globals;
     }
 }
 

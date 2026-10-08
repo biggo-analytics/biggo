@@ -1,0 +1,7 @@
+# Programs, snapshots and data are compared byte for byte by the tests, on every system.
+* text=auto eol=lf
+*.csv -text
+*.tsv -text
+*.parquet binary
+*.db binary
+*.sqlite binary
