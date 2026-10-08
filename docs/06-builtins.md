@@ -327,6 +327,7 @@ A pattern is text in which each `%` code stands for a part of the date:
 | `to_bool(x)` | `string` `int` `bool` | `bool` |
 | `try_to_int(x)`, `try_to_float(x)`, `try_to_decimal(x)`, `try_to_date(x)`, `try_to_datetime(x)`, `try_to_bool(x)` | as the function without `try_` | the same type, nullable |
 | `parse_number(s)` | `string` | `float?` |
+| `hash(x)`, `hash(x, seed)` | any, `int` | `int` |
 | `null_if(x, value)` | two values of one type | that type, nullable |
 
 A value that cannot be converted stops the program with an error. The `try_` form of each
@@ -355,6 +356,9 @@ print(parse_number("1,234.50"), parse_number("45%"), parse_number("(120)"), pars
   case and with spaces around them, and the ints 1 and 0.
 - `parse_number` reads numbers as people write them: with `,` between thousands, with `%` (the
   result is divided by 100), and in parentheses for a negative amount. Anything else gives null.
+- `hash(x)` is a number from 0 up that is the same for the same value on every machine and in
+  every version, and spread evenly: `where(hash(customer) % 10 == 0)` keeps the same tenth of
+  the customers in every table. A `seed` gives another spread.
 - `null_if(x, value)` gives null when `x` equals `value` and `x` otherwise. It turns the markers
   that files use for "no value" into null: `null_if(amount, -999)`, `null_if(name, "")`.
 - `to_int` and `try_to_int` take digits with an optional sign, and allow spaces around them:
@@ -549,20 +553,87 @@ noted).
 | `drop(t, a, ...)` | Every column except the ones named |
 | `rename(t, new = old, ...)` | Renames columns |
 | `derive(t, c = expr, ...)` | Adds or replaces columns |
-| `sort(t, key, desc(key), asc(key), ...)` | Sorts rows; nulls go last |
+| `sort(t, key, desc(key), asc(key), ...)` | Sorts rows; nulls go last, or first with `nulls = "first"` |
 | `take(t, n)` | The first `n` rows |
 | `skip(t, n)` | Skips the first `n` rows |
+| `tail(t, n)` | The last `n` rows |
+| `sample(t, n)`, `sample(t, fraction = 0.1)` | `n` rows, or about a share of the rows, picked at random; `seed = 7` picks others |
 | `distinct(t)`, `distinct(t, a, ...)` | Unique rows or values |
+| `count_by(t, a, ...)` | The number of rows for each value of the columns, in a column `count`, the most frequent first |
+| `drop_nulls(t)`, `drop_nulls(t, a, ...)` | Without the rows that have a null in any column, or in those named |
+| `fill_nulls(t, a = value, ...)` | Nulls of the named columns replaced by a value |
 | `group(t, a, k = expr, ...)` | A grouped table, to pass on to `agg` or `pivot` |
 | `agg(t, name = aggregate, ...)` | One row per group |
 | `join(a, b, on = k, how = "inner")` | Matches rows of two tables; `how`: `inner` `left` `right` `full` `semi` `anti` |
+| `join(a, b, how = "cross")` | Every row of `a` with every row of `b` |
 | `window(t, by = k, order = k, name = fn, ...)` | Adds columns computed from neighboring rows |
-| `union(a, b, ...)` | Appends the rows of several tables |
+| `union(a, b, ...)` | Appends the rows of several tables; columns go by name |
+| `intersect(a, b)` | The distinct rows of `a` that are also rows of `b` |
+| `except(a, b)` | The distinct rows of `a` that are not rows of `b` |
 | `pivot(t, column, [values], aggregate)` | The values of `column` become columns |
 | `unpivot(t, a, b, names = "name", values = "value")` | Columns become rows |
 | `explode(t, column)`, `explode(t, column, sep)` | Splits a string that holds several values into several rows |
 | `collect(t)` | Runs the query and keeps the result in memory |
 | `count(t)` | Number of rows (`int`) |
+| `columns(t)` | The names of the columns (`list<string>`), known without running the query |
+
+```biggo
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+let sales = read_csv<Sale>("data/sales.csv")
+print(sales |> count_by(product))
+print(sales |> drop_nulls(price) |> count(), sales |> fill_nulls(price = 0) |> agg(least = min(price)))
+print(sales |> sort(price, nulls = "first") |> select(product, price) |> take(2))
+print(sales |> sample(3) |> select(date, product), sales |> tail(1) |> select(date, product))
+print(columns(sales))
+```
+
+```text output
++---------+-------+
+| product | count |
++---------+-------+
+| widget  | 5     |
+| gadget  | 3     |
+| gizmo   | 2     |
++---------+-------+
+9
++-------+
+| least |
++-------+
+| 0.0   |
++-------+
++---------+-------+
+| product | price |
++---------+-------+
+| gadget  | null  |
+| widget  | 2.5   |
++---------+-------+
++------------+---------+
+| date       | product |
++------------+---------+
+| 2026-02-02 | gadget  |
+| 2025-12-30 | widget  |
+| 2026-03-15 | gizmo   |
++------------+---------+
++------------+---------+
+| date       | product |
++------------+---------+
+| 2026-03-15 | gizmo   |
++------------+---------+
+["date", "region", "product", "qty", "price"]
+```
+
+- `sample` picks the same rows every time, so a query gives one result. Each row gets a number
+  from its position and the seed, scattered evenly by `hash`, and the rows with the smallest
+  numbers are the sample. Give another `seed` for another sample. The rows come out in the order
+  of the table. `sample(t, fraction = 0.1)` keeps each row with that chance, so the number of
+  rows is only about a tenth.
+- After `drop_nulls`, the columns it looked at are no longer nullable: `price * 2` needs no `??`.
+- `intersect` and `except` compare whole rows and take two nulls as equal, where `join` matches
+  no null key. Their result has no repeated rows.
+- `count_by(t, a)` is `t |> group(a) |> agg(count = count()) |> sort(desc(count))`. Values that
+  are as frequent keep the order they first appeared in.
+- A cross join of a table of 1,000 rows with another of 1,000 has a million rows: it is for
+  small tables, such as every size with every color.
 
 `desc` and `asc` are not functions. They are markers on the keys of `sort` and on the `order` of
 `window`.

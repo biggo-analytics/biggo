@@ -9,7 +9,7 @@ use arrow::array::{
     RecordBatch, UInt32Array,
 };
 use arrow::compute::kernels::cmp::distinct;
-use arrow::compute::{cast, take};
+use arrow::compute::{SortOptions, cast, take};
 use arrow::datatypes::{DataType as ArrowType, Float64Type, Int64Type};
 use arrow::row::{RowConverter, SortField};
 use biggo_plan::{AggCall, DataType, Expr, Schema, SortKey, WindowCall, WindowFn};
@@ -570,11 +570,16 @@ pub fn window(
     for key in order {
         order_columns.push(eval_array(&key.expr, &batch)?);
     }
+    let options = |descending, nulls_first| SortOptions {
+        descending,
+        nulls_first,
+    };
     let by_partition = partition_columns
         .iter()
-        .map(|column| (column.clone(), false));
+        .map(|column| (column.clone(), options(false, false)));
     let by_order = order_columns.iter().zip(order);
-    let by_order = by_order.map(|(column, key)| (column.clone(), key.descending));
+    let by_order =
+        by_order.map(|(column, key)| (column.clone(), options(key.descending, key.nulls_first)));
     let sorted = sort_indices(&batch, by_partition.chain(by_order), None)?;
 
     let new_partition = changes(&partition_columns, &sorted)?;

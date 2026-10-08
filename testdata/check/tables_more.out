@@ -1,0 +1,215 @@
+error: `count_by` takes a table and the columns to count by
+ --> check/tables_more.bgo:6:1
+  |
+6 | sales |> count_by()
+  | ^^^^^^^^^^^^^^^^^^^
+
+error: the table has no column `nothing`; its columns are region, qty, price, count
+ --> check/tables_more.bgo:7:19
+  |
+7 | sales |> count_by(nothing)
+  |                   ^^^^^^^
+
+error: `count_by` names its result `count`; rename this column first
+ --> check/tables_more.bgo:8:19
+  |
+8 | sales |> count_by(count)
+  |                   ^^^^^
+
+error: `count_by` takes column names here; write `name = expression` to compute a column
+ --> check/tables_more.bgo:9:19
+  |
+9 | sales |> count_by(qty + 1)
+  |                   ^^^^^^^
+
+error: the table has no column `nothing`; its columns are region, qty, price, count
+  --> check/tables_more.bgo:10:21
+   |
+10 | sales |> drop_nulls(nothing)
+   |                     ^^^^^^^
+
+error: `drop_nulls` does not take named arguments
+  --> check/tables_more.bgo:11:21
+   |
+11 | sales |> drop_nulls(price = 1)
+   |                     ^^^^^
+
+error: `fill_nulls` takes a table and `column = value` for each column to fill
+  --> check/tables_more.bgo:12:1
+   |
+12 | sales |> fill_nulls()
+   | ^^^^^^^^^^^^^^^^^^^^^
+
+error: `fill_nulls` takes `column = value`, as in `fill_nulls(t, qty = 0)`
+  --> check/tables_more.bgo:13:21
+   |
+13 | sales |> fill_nulls(price)
+   |                     ^^^^^
+
+error: the table has no column `nothing`; its columns are region, qty, price, count
+  --> check/tables_more.bgo:14:21
+   |
+14 | sales |> fill_nulls(nothing = 1)
+   |                     ^^^^^^^
+
+error: column `price` is float?, so the value to fill it with must be float, found string
+  --> check/tables_more.bgo:15:29
+   |
+15 | sales |> fill_nulls(price = "none")
+   |                             ^^^^^^
+
+error: column `price` is filled twice
+  --> check/tables_more.bgo:16:32
+   |
+16 | sales |> fill_nulls(price = 1, price = 2)
+   |                                ^^^^^
+
+error: undefined name `qty`
+  --> check/tables_more.bgo:17:29
+   |
+17 | sales |> fill_nulls(price = qty)
+   |                             ^^^
+
+error: `columns` takes only a table
+  --> check/tables_more.bgo:18:1
+   |
+18 | columns(sales, 1)
+   | ^^^^^^^^^^^^^^^^^
+
+error: `columns` works on a table, found int
+  --> check/tables_more.bgo:19:9
+   |
+19 | columns(1)
+   |         ^
+
+error: `intersect` takes two tables
+  --> check/tables_more.bgo:20:1
+   |
+20 | intersect(sales)
+   | ^^^^^^^^^^^^^^^^
+
+error: the tables of `intersect` need the same columns, found {region: string, qty: int, price: float?, count: int} and {region: string, qty: float}
+  --> check/tables_more.bgo:21:18
+   |
+21 | intersect(sales, other)
+   |                  ^^^^^
+
+error: `except` works on a table, found int
+  --> check/tables_more.bgo:22:15
+   |
+22 | except(sales, 1)
+   |               ^
+
+error: the tables of a `union` need the same columns, found {region: string, qty: int, price: float?, count: int} and {region: string, qty: float}
+  --> check/tables_more.bgo:23:14
+   |
+23 | union(sales, other)
+   |              ^^^^^
+
+error: a cross join takes no keys: every row is paired with every row
+  --> check/tables_more.bgo:24:1
+   |
+24 | sales |> join(other, how = "cross", on = region)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: both tables have a column `region`; rename or drop one before the join
+  --> check/tables_more.bgo:25:1
+   |
+25 | sales |> join(sales, how = "cross")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `how` must be one of "inner", "left", "right", "full", "semi", "anti", or "cross"
+  --> check/tables_more.bgo:26:28
+   |
+26 | sales |> join(other, how = "sideways")
+   |                            ^^^^^^^^^^
+
+error: `tail` takes a table and a number of rows
+  --> check/tables_more.bgo:27:1
+   |
+27 | sales |> tail()
+   | ^^^^^^^^^^^^^^^
+
+error: the number of rows must be int, found string
+  --> check/tables_more.bgo:28:15
+   |
+28 | sales |> tail("2")
+   |               ^^^
+
+error: `sample` takes a table and a number of rows, or `fraction = 0.1`
+  --> check/tables_more.bgo:29:1
+   |
+29 | sales |> sample()
+   | ^^^^^^^^^^^^^^^^^
+
+error: `sample` takes a table and a number of rows, or `fraction = 0.1`
+  --> check/tables_more.bgo:30:1
+   |
+30 | sales |> sample(2, fraction = 0.5)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the fraction of `sample` is from 0 to 1, not 1.5
+  --> check/tables_more.bgo:31:28
+   |
+31 | sales |> sample(fraction = 1.5)
+   |                            ^^^
+
+error: the seed must be int, found string
+  --> check/tables_more.bgo:32:27
+   |
+32 | sales |> sample(2, seed = "x")
+   |                           ^^^
+
+error: `sample` has no argument `weight`; it takes `fraction` and `seed`
+  --> check/tables_more.bgo:33:20
+   |
+33 | sales |> sample(2, weight = 1)
+   |                    ^^^^^^
+
+error: the number of rows must be int, found string
+  --> check/tables_more.bgo:34:17
+   |
+34 | sales |> sample("some")
+   |                 ^^^^^^
+
+error: `nulls` must be "first" or "last"
+  --> check/tables_more.bgo:35:28
+   |
+35 | sales |> sort(qty, nulls = "middle")
+   |                            ^^^^^^^^
+
+error: `sort` has no argument `order`; it takes `nulls`
+  --> check/tables_more.bgo:36:20
+   |
+36 | sales |> sort(qty, order = "desc")
+   |                    ^^^^^
+
+error: `sort` needs at least one key
+  --> check/tables_more.bgo:37:1
+   |
+37 | sales |> sort(nulls = "first")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `hash` takes 1 or 2 arguments
+  --> check/tables_more.bgo:38:1
+   |
+38 | hash()
+   | ^^^^^^
+
+error: `hash` takes 1 or 2 arguments
+  --> check/tables_more.bgo:39:1
+   |
+39 | hash(1, 2, 3)
+   | ^^^^^^^^^^^^^
+
+error: `hash` expects an int, found string
+  --> check/tables_more.bgo:40:9
+   |
+40 | hash(1, "seed")
+   |         ^^^^^^
+
+error: the seed of `hash` cannot depend on a column
+  --> check/tables_more.bgo:41:21
+   |
+41 | sales |> derive(h = hash(region, qty))
+   |                     ^^^^^^^^^^^^^^^^^

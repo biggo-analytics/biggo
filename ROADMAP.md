@@ -147,12 +147,12 @@ functions, `to_int` `to_float` `to_decimal` `to_string` `to_date` `to_datetime` 
 | `recode(x, mapping)`, `recode(x, mapping, default)` | value type of the map | Replaces codes by labels with a map: `recode(sex, { "M": "male", "F": "female" })` | Should |
 | `cut(x, edges)`, `cut(x, edges, labels)` | `string?` | The range a number falls in, for age groups, price bands and the like: `cut(age, [0, 18, 65])` | Should |
 | interpolated strings: `f"total: {x}"` | `string` | Values written into text without `+` and `to_string` | Should |
-| `hash(x)` | `int` | A stable number for a value, for sampling and for splitting data | Later |
 
 - [x] `in` and `not in`, `greatest` and `least`, `null_if`, the `try_` conversions and `to_bool`
 - [x] `pow`, `exp`, `ln`, `log10`, `log2`, `log`, `sign` (which keeps the type of its argument),
       `div`, `trunc`, `clamp`, `between`, `is_nan`, `is_finite`, `pi` and trigonometry
 - [x] `parse_number`, and raw strings such as `r"\d+"`
+- [x] `hash`, a stable number for a value
 
 ### 2. Dates and times
 
@@ -236,29 +236,24 @@ Exists: `row_number` `rank` `dense_rank` `percent_rank` `ntile`, `lag` `lead` `d
 
 ### 6. Table operations
 
-Exists: `where` `select` `drop` `rename` `derive` `sort` `take` `skip` `distinct` `group` + `agg`
-`join` (inner, left, right, full, semi, anti) `window` `union` `pivot` `unpivot` `explode`
-`collect` `count` `describe` `histogram` `linreg` `to_rows` `from_rows`.
+Exists: `where` `select` `drop` `rename` `derive` `sort` (with nulls first or last) `take` `skip`
+`tail` `sample` `distinct` `count_by` `drop_nulls` `fill_nulls` `group` + `agg` `join` (inner, left,
+right, full, semi, anti, cross) `window` `union` `intersect` `except` `pivot` `unpivot` `explode`
+`collect` `count` `columns` `describe` `histogram` `linreg` `to_rows` `from_rows`. A column that
+numbers the rows is `window(n = row_number())`.
 
 | Feature | Result | What it does | Priority |
 | --- | --- | --- | --- |
-| `count_by(t, a, ...)` | table | The number of rows for each value, most frequent first: `group`, `agg` and `sort` in one | Must |
-| `sample(t, n)`, `sample(t, fraction = 0.1)`, with `seed = 0` | table | Rows picked at random. The same seed picks the same rows, so the result is still reproducible | Must |
-| `join(a, b, how = "cross")` | table | Every row of one table with every row of the other | Must |
-| `intersect(a, b)`, `except(a, b)` | table | The rows in both tables, and the rows of the first that are not in the second | Must |
-| `sort(t, x, nulls = "first")` | table | Where nulls go. Today they are always last | Must |
-| `tail(t, n)` | table | The last `n` rows | Should |
-| `union` by column name | table | Today the tables need their columns in the same order | Should |
-| `drop_nulls(t)`, `drop_nulls(t, a, b)` | table | Without the rows that have a null in any column, or in those named | Should |
-| `fill_nulls(t, a = 0, b = "")` | table | Nulls replaced, column by column | Should |
-| `with_row_number(t, name)` | table | A column that numbers the rows | Should |
 | totals: `agg(..., totals = true)` | table | A row of subtotals for each group and a grand total | Should |
 | `date_range(first, last)`, `complete(t, a, b)` | table | Every day of a period, and every combination of values, so that gaps in data show as rows | Should |
-| `columns(t)` | `list<string>` | The column names of a table, as a value | Should |
 | checks: `assert_unique(t, a, ...)`, `assert_no_nulls(t, a, ...)` | | Stops the program when the data breaks an assumption the query relies on | Should |
 | joins on a range or an inequality, and the nearest earlier row (`asof`) | table | Prices in force on a date, the reading before an event | Later |
 | `select` by pattern or by type | table | `select(matching("^q[0-9]"))`, worked out at compile time | Later |
 | `transpose(t)` | table | Rows as columns | Later |
+
+- [x] `count_by`, `sample` (the same rows for the same seed), `tail`
+- [x] Cross joins, `intersect` and `except`, and `union` by column name
+- [x] `drop_nulls`, `fill_nulls`, `sort(..., nulls = "first")`, `columns`
 
 ### 7. Lists, maps and records
 

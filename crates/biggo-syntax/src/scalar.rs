@@ -180,6 +180,31 @@ pub fn decimal_trunc(value: i128, places: i64) -> i128 {
     }
 }
 
+/// Scrambles the bits of a number, so that numbers close together land far apart. This is
+/// the finishing step of SplitMix64; it never changes, because results depend on it.
+fn mix(mut bits: u64) -> u64 {
+    bits = (bits ^ (bits >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    bits = (bits ^ (bits >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    bits ^ (bits >> 31)
+}
+
+/// A number from 0 up that is spread evenly over the ints, the same for the same `value` and
+/// `seed` on every machine and in every version.
+pub fn hash_int(value: i64, seed: i64) -> i64 {
+    let seeded = (value as u64) ^ mix((seed as u64).wrapping_add(0x9E37_79B9_7F4A_7C15));
+    (mix(seeded) >> 1) as i64
+}
+
+/// `hash_int` for a run of bytes, such as the text of a string.
+pub fn hash_bytes(bytes: &[u8], seed: i64) -> i64 {
+    // FNV-1a brings the bytes down to a number, which is then scrambled like any other.
+    let mut folded: u64 = 0xCBF2_9CE4_8422_2325;
+    for byte in bytes {
+        folded = (folded ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01B3);
+    }
+    hash_int(folded as i64, seed)
+}
+
 /// The form of a float that stands for all that compare equal to it: zero without a sign,
 /// and one "not a number" for the many there are.
 pub fn float_key(value: f64) -> f64 {

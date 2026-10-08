@@ -152,11 +152,12 @@ const PARALLEL_SORT_ROWS: usize = 1 << 14;
 /// power of two, so that finding the lot of a row is a shift.
 const ENCODE_SHIFT: u32 = 16;
 
-/// The permutation that sorts `batch` by `keys`, nulls last. Rows that compare equal keep
-/// their order. With `fetch`, only that many leading rows are returned.
+/// The permutation that sorts `batch` by `keys`, each with the direction it goes in and the
+/// end its nulls go to. Rows that compare equal keep their order. With `fetch`, only that
+/// many leading rows are returned.
 pub fn sort_indices(
     batch: &RecordBatch,
-    keys: impl IntoIterator<Item = (ArrayRef, bool)>,
+    keys: impl IntoIterator<Item = (ArrayRef, SortOptions)>,
     fetch: Option<usize>,
 ) -> Result<UInt32Array> {
     sort_indices_from(batch, keys, fetch, PARALLEL_SORT_ROWS)
@@ -165,21 +166,17 @@ pub fn sort_indices(
 /// `sort_indices`, sorting on all cores when there are at least `parallel_from` rows.
 fn sort_indices_from(
     batch: &RecordBatch,
-    keys: impl IntoIterator<Item = (ArrayRef, bool)>,
+    keys: impl IntoIterator<Item = (ArrayRef, SortOptions)>,
     fetch: Option<usize>,
     parallel_from: usize,
 ) -> Result<UInt32Array> {
-    let keys: Vec<(ArrayRef, bool)> = keys.into_iter().collect();
-    let options = |descending| SortOptions {
-        descending,
-        nulls_first: false,
-    };
+    let keys: Vec<(ArrayRef, SortOptions)> = keys.into_iter().collect();
     // To sort everything, each row's keys are encoded as bytes that compare the way the keys
     // do. Comparing bytes is quick, and the row numbers can then be sorted on all cores.
     // Ties go by row number, which makes the order the same however the work was divided.
     if fetch.is_none() && batch.num_rows() >= parallel_from && !keys.is_empty() {
-        let fields = keys.iter().map(|(values, descending)| {
-            SortField::new_with_options(values.data_type().clone(), options(*descending))
+        let fields = keys.iter().map(|(values, options)| {
+            SortField::new_with_options(values.data_type().clone(), *options)
         });
         let converter = RowConverter::new(fields.collect())?;
         let rows = batch.num_rows();
@@ -229,9 +226,9 @@ fn sort_indices_from(
     }
     let mut columns: Vec<SortColumn> = keys
         .into_iter()
-        .map(|(values, descending)| SortColumn {
+        .map(|(values, options)| SortColumn {
             values,
-            options: Some(options(descending)),
+            options: Some(options),
         })
         .collect();
     // The row number as the last key makes the order of ties definite.
@@ -252,7 +249,11 @@ pub fn sort(
     let batch = concat(input, schema)?;
     let mut columns = Vec::with_capacity(keys.len());
     for key in keys {
-        columns.push((eval_array(&key.expr, &batch)?, key.descending));
+        let options = SortOptions {
+            descending: key.descending,
+            nulls_first: key.nulls_first,
+        };
+        columns.push((eval_array(&key.expr, &batch)?, options));
     }
     let indices = sort_indices(&batch, columns, fetch)?;
     let sorted = take_record_batch(&batch, &indices)?;
@@ -402,9 +403,14 @@ mod tests {
         ];
         for choice in choices {
             let keys = || {
-                choice
-                    .iter()
-                    .map(|&(column, desc)| (columns[column].clone(), desc))
+                choice.iter().map(|&(column, descending)| {
+                    // Nulls go first under every other choice of keys.
+                    let options = SortOptions {
+                        descending,
+                        nulls_first: choice.len() % 2 == 0,
+                    };
+                    (columns[column].clone(), options)
+                })
             };
             let plain = sort_indices_from(&batch, keys(), None, usize::MAX).unwrap();
             let parallel = sort_indices_from(&batch, keys(), None, 0).unwrap();

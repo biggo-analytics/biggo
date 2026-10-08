@@ -1,0 +1,51 @@
+// Counting by value, sampling, set operations, cross joins, and the handling of nulls.
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+
+let sales = read_csv<Sale>("data/sales.csv")
+
+print(sales |> count_by(product))
+print(sales |> count_by(region, product) |> take(4))
+print(sales |> where(qty > 100) |> count_by(region))
+
+// Nulls: left out, replaced, and put first when sorting.
+print(sales |> drop_nulls() |> count(), sales |> drop_nulls(qty) |> count(), sales |> drop_nulls(price, region) |> count())
+print(sales |> drop_nulls(price) |> derive(double = price * 2) |> agg(total = sum(double)))
+print(sales |> fill_nulls(price = 0) |> agg(total = sum(price), least = min(price)))
+print(sales |> fill_nulls(price = 1.5, qty = 0) |> where(product == "gadget") |> select(qty, price))
+print(sales |> sort(price, nulls = "first") |> select(product, price) |> take(3))
+print(sales |> sort(desc(price), qty, nulls = "first") |> select(qty, price) |> take(3))
+print(sales |> sort(desc(price), nulls = "last") |> select(price) |> take(1))
+
+// The columns of a table are known without running it.
+print(columns(sales), columns(sales |> count_by(region)), len(columns(sales |> drop(date))))
+
+// Rows in both tables, and in one but not the other. Two nulls are the same value here.
+let first = from_rows([{ k: 1, s: "x" }, { k: null, s: "y" }, { k: 2, s: null }, { k: 1, s: "x" }, { k: 3, s: "w" }])
+let second = from_rows([{ s: "y", k: null }, { s: null, k: 2 }, { s: "z", k: 9 }])
+print(intersect(first, second))
+print(except(first, second))
+print(except(second, first))
+// A union goes by the names of the columns, whatever order they come in.
+print(union(first, second) |> count(), union(second, first) |> take(2))
+
+// Every row with every row.
+let sizes = from_rows([{ size: "S" }, { size: "M" }])
+let colors = from_rows([{ color: "red" }, { color: "blue" }, { color: "green" }])
+print(sizes |> join(colors, how = "cross"))
+print(sizes |> join(colors, how = "cross") |> where(size == "M" and color != "red") |> count())
+
+// The last rows.
+print(sales |> tail(2) |> select(date, qty), sales |> tail(0) |> count(), sales |> tail(99) |> count())
+
+// A sample is the same rows every time for one seed, in the order of the table.
+print(sales |> sample(3) |> select(date, product))
+print(sales |> sample(3, seed = 7) |> select(date, product))
+print(sales |> sample(99) |> count(), sales |> sample(0) |> count())
+print(sales |> sample(fraction = 0.4) |> count(), sales |> sample(fraction = 0.0) |> count(), sales |> sample(fraction = 1.0) |> count())
+// The rows are chosen before anything that follows.
+print(sales |> sample(5) |> where(qty > 3) |> select(product, qty))
+explain(sales |> sample(3) |> where(qty > 1) |> select(product))
+
+// A stable number for a value.
+print(hash(1), hash(1, 7), hash("a"), hash(@2026-01-01), hash(1.5), hash(0.0) == hash(-0.0), hash(true))
+print(sales |> where(hash(product) % 2 == 0) |> distinct(product))

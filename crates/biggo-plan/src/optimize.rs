@@ -32,7 +32,7 @@ fn map_named(columns: &Named, f: &mut impl FnMut(&Expr) -> Expr) -> Named {
 fn map_keys(keys: &[SortKey], f: &mut impl FnMut(&Expr) -> Expr) -> Vec<SortKey> {
     let mapped = keys.iter().map(|key| SortKey {
         expr: f(&key.expr),
-        descending: key.descending,
+        ..key.clone()
     });
     mapped.collect()
 }

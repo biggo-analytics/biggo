@@ -151,6 +151,37 @@ fn sign(array: &ArrayRef) -> Result<ArrayRef> {
     })
 }
 
+/// A stable number for each value: see `scalar::hash_int`. Values that compare equal have
+/// the same number, whatever their type.
+fn hash(array: &ArrayRef, seed: i64) -> Result<ArrayRef> {
+    let hashes: Int64Array = match array.data_type() {
+        ArrowType::Utf8 => {
+            let strings = array.as_string::<i32>().iter();
+            strings
+                .map(|text| Some(scalar::hash_bytes(text?.as_bytes(), seed)))
+                .collect()
+        }
+        ArrowType::Float64 => {
+            let floats = array.as_primitive::<Float64Type>();
+            floats.unary(|value| scalar::hash_int(scalar::float_key(value).to_bits() as i64, seed))
+        }
+        ArrowType::Decimal128(..) => {
+            let values = array.as_primitive::<Decimal128Type>();
+            values.unary(|value| {
+                let high = scalar::hash_int((value >> 64) as i64, seed);
+                scalar::hash_int(value as i64, high)
+            })
+        }
+        // Whole numbers, and the dates, times and truth values that are kept as such.
+        _ => {
+            let ints = arrow::compute::cast(array, &ArrowType::Int64)?;
+            ints.as_primitive::<Int64Type>()
+                .unary(|value| scalar::hash_int(value, seed))
+        }
+    };
+    Ok(Arc::new(hashes))
+}
+
 /// Applies one of the functions of this module. `rows` is the number of rows of the batch.
 pub fn call(func: ScalarFn, args: &[Col], dtype: DataType, rows: usize) -> Result<Col> {
     use ScalarFn::*;
@@ -231,6 +262,13 @@ pub fn call(func: ScalarFn, args: &[Col], dtype: DataType, rows: usize) -> Resul
                     Ok(Arc::new(cut) as ArrayRef)
                 }
             })
+        }
+        Hash => {
+            let seed = match args.get(1) {
+                Some(seed) => Ints::new(seed).get(0).unwrap_or(0),
+                None => 0,
+            };
+            first.clone().map(|array| hash(array, seed))
         }
         ParseNumber => {
             let (rows, single) = shape(args, rows);

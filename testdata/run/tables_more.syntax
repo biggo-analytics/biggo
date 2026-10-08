@@ -1,0 +1,104 @@
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(call print (|> sales (call count_by product)))
+(call print (|> sales (call count_by region product) (call take 4)))
+(call print (|> sales (call where (> qty 100)) (call count_by region)))
+(call print
+  (|> sales (call drop_nulls) (call count))
+  (|> sales (call drop_nulls qty) (call count))
+  (|> sales (call drop_nulls price region) (call count)))
+(call print
+  (|> sales
+    (call drop_nulls price)
+    (call derive (double: (* price 2)))
+    (call agg (total: (call sum double)))))
+(call print
+  (|> sales
+    (call fill_nulls (price: 0))
+    (call agg (total: (call sum price)) (least: (call min price)))))
+(call print
+  (|> sales
+    (call fill_nulls (price: 1.5) (qty: 0))
+    (call where (== product "gadget"))
+    (call select qty price)))
+(call print
+  (|> sales
+    (call sort price (nulls: "first"))
+    (call select product price)
+    (call take 3)))
+(call print
+  (|> sales
+    (call sort (call desc price) qty (nulls: "first"))
+    (call select qty price)
+    (call take 3)))
+(call print
+  (|> sales
+    (call sort (call desc price) (nulls: "last"))
+    (call select price)
+    (call take 1)))
+(call print
+  (call columns sales)
+  (call columns (|> sales (call count_by region)))
+  (call len (call columns (|> sales (call drop date)))))
+(let first
+  (call from_rows
+    (list
+      (record (k: 1) (s: "x"))
+      (record (k: null) (s: "y"))
+      (record (k: 2) (s: null))
+      (record (k: 1) (s: "x"))
+      (record (k: 3) (s: "w")))))
+(let second
+  (call from_rows
+    (list
+      (record (s: "y") (k: null))
+      (record (s: null) (k: 2))
+      (record (s: "z") (k: 9)))))
+(call print (call intersect first second))
+(call print (call except first second))
+(call print (call except second first))
+(call print
+  (|> (call union first second) (call count))
+  (|> (call union second first) (call take 2)))
+(let sizes (call from_rows (list (record (size: "S")) (record (size: "M")))))
+(let colors
+  (call from_rows
+    (list
+      (record (color: "red"))
+      (record (color: "blue"))
+      (record (color: "green")))))
+(call print (|> sizes (call join colors (how: "cross"))))
+(call print
+  (|> sizes
+    (call join colors (how: "cross"))
+    (call where (and (== size "M") (!= color "red")))
+    (call count)))
+(call print
+  (|> sales (call tail 2) (call select date qty))
+  (|> sales (call tail 0) (call count))
+  (|> sales (call tail 99) (call count)))
+(call print (|> sales (call sample 3) (call select date product)))
+(call print (|> sales (call sample 3 (seed: 7)) (call select date product)))
+(call print
+  (|> sales (call sample 99) (call count))
+  (|> sales (call sample 0) (call count)))
+(call print
+  (|> sales (call sample (fraction: 0.4)) (call count))
+  (|> sales (call sample (fraction: 0.0)) (call count))
+  (|> sales (call sample (fraction: 1.0)) (call count)))
+(call print
+  (|> sales (call sample 5) (call where (> qty 3)) (call select product qty)))
+(call explain
+  (|> sales (call sample 3) (call where (> qty 1)) (call select product)))
+(call print
+  (call hash 1)
+  (call hash 1 7)
+  (call hash "a")
+  (call hash @2026-01-01)
+  (call hash 1.5)
+  (== (call hash 0.0) (call hash (- 0.0)))
+  (call hash true))
+(call print
+  (|> sales
+    (call where (== (% (call hash product) 2) 0))
+    (call distinct product)))

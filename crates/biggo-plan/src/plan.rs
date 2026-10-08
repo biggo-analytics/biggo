@@ -290,7 +290,7 @@ impl TableOp {
         let bind_keys = |keys: &[SortKey]| -> Vec<SortKey> {
             let bound = keys.iter().map(|key| SortKey {
                 expr: bind(&key.expr),
-                descending: key.descending,
+                ..key.clone()
             });
             bound.collect()
         };

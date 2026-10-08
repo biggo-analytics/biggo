@@ -32,7 +32,7 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 60] = [
+const VERBS: [&str; 68] = [
     "print",
     "read_csv",
     "read_parquet",
@@ -76,6 +76,14 @@ const VERBS: [&str; 60] = [
     "all",
     "count_null",
     "weighted_mean",
+    "count_by",
+    "drop_nulls",
+    "fill_nulls",
+    "columns",
+    "intersect",
+    "except",
+    "sample",
+    "tail",
     "where",
     "select",
     "drop",
@@ -174,7 +182,7 @@ fn shift_params(expr: &plan::Expr, offset: usize) -> plan::Expr {
     }
 }
 
-fn pass_through(field: &Field) -> (Arc<str>, plan::Expr) {
+pub(crate) fn pass_through(field: &Field) -> (Arc<str>, plan::Expr) {
     (
         field.name.clone(),
         plan::Expr::column(field.name.clone(), field.ty),
@@ -321,6 +329,13 @@ impl Cx<'_> {
             "window" => self.verb_window(call),
             "union" => self.verb_union(call),
             "count_if" | "any" | "all" | "count_null" | "weighted_mean" => self.derived_agg(call),
+            "count_by" => self.verb_count_by(call),
+            "drop_nulls" => self.verb_drop_nulls(call),
+            "fill_nulls" => self.verb_fill_nulls(call),
+            "columns" => self.verb_columns(call),
+            "intersect" | "except" => self.verb_set(call),
+            "sample" => self.verb_sample(call),
+            "tail" => self.verb_tail(call),
             "desc" | "asc" => {
                 let message = format!(
                     "`{0}` marks a sort key, as in `sort({0}(x))`; it is not a function",
@@ -452,7 +467,12 @@ impl Cx<'_> {
     }
 
     /// The column that `value` names, which must be nothing more than a column name.
-    fn column_name(&mut self, call: &Call, schema: &Schema, value: ExprId) -> Option<Field> {
+    pub(crate) fn column_name(
+        &mut self,
+        call: &Call,
+        schema: &Schema,
+        value: ExprId,
+    ) -> Option<Field> {
         let span = self.ast.span(value);
         let ast::Expr::Name(name) = self.ast.expr(value) else {
             let message = format!(
@@ -475,7 +495,7 @@ impl Cx<'_> {
         field
     }
 
-    fn plan_expr(&mut self, expr: Expr, params: &mut Vec<Expr>) -> Option<plan::Expr> {
+    pub(crate) fn plan_expr(&mut self, expr: Expr, params: &mut Vec<Expr>) -> Option<plan::Expr> {
         let lowered = self.lower(expr, params)?;
         self.finish(lowered, params)
     }
@@ -626,6 +646,7 @@ impl Cx<'_> {
                         // These are worked out once for the whole column.
                         let fixed: &[(usize, &str)] = match func {
                             ScalarFn::Round | ScalarFn::Trunc => &[(1, "the number of digits")],
+                            ScalarFn::Hash => &[(1, "the seed")],
                             ScalarFn::RegexMatch | ScalarFn::RegexReplace => &[(1, "the pattern")],
                             ScalarFn::RegexExtract => &[(1, "the pattern"), (2, "the group")],
                             ScalarFn::FormatDate
@@ -1406,7 +1427,7 @@ impl Cx<'_> {
     }
 
     /// Builds a projection of `input` with the given output columns.
-    fn project(
+    pub(crate) fn project(
         &self,
         span: Span,
         input: Expr,
@@ -1597,6 +1618,7 @@ impl Cx<'_> {
         Some(SortKey {
             expr,
             descending: key.1,
+            nulls_first: false,
         })
     }
 
@@ -1604,12 +1626,27 @@ impl Cx<'_> {
         let Some((input, schema)) = self.table_arg(call, 0) else {
             return Expr::error(call.span);
         };
-        if !self.all_positional(call, call.args) {
-            return Expr::error(call.span);
-        }
+        // After the keys, `nulls = "first"` puts nulls before every value.
+        let mut nulls_first = false;
         let mut params = Vec::new();
         let mut keys = Vec::new();
         for arg in &call.args[1..] {
+            if let Some(name) = arg.name {
+                let option = self.text(name.name);
+                if &*option != "nulls" {
+                    let message = format!("`sort` has no argument `{option}`; it takes `nulls`");
+                    return self.error(name.span, message);
+                }
+                nulls_first = match self.ast.expr(arg.value) {
+                    ast::Expr::Str(end) if &**end == "first" => true,
+                    ast::Expr::Str(end) if &**end == "last" => false,
+                    _ => {
+                        let span = self.ast.span(arg.value);
+                        return self.error(span, "`nulls` must be \"first\" or \"last\"");
+                    }
+                };
+                continue;
+            }
             match self.sort_key(&schema, arg.value, &mut params) {
                 Some(key) => keys.push(key),
                 None => return Expr::error(call.span),
@@ -1617,6 +1654,9 @@ impl Cx<'_> {
         }
         if keys.is_empty() {
             return self.error(call.span, "`sort` needs at least one key");
+        }
+        for key in &mut keys {
+            key.nulls_first = nulls_first;
         }
         self.table(
             call.span,
@@ -1645,7 +1685,7 @@ impl Cx<'_> {
     }
 
     /// Groups `input` by all of its columns and keeps one row per group.
-    fn distinct_rows(&self, span: Span, input: Expr, schema: Arc<Schema>) -> Expr {
+    pub(crate) fn distinct_rows(&self, span: Span, input: Expr, schema: Arc<Schema>) -> Expr {
         let keys = schema.fields.iter().map(pass_through).collect();
         let grouped = self.table(
             span,
@@ -2328,6 +2368,7 @@ impl Cx<'_> {
                             "full" => "full",
                             "semi" => "semi",
                             "anti" => "anti",
+                            "cross" => "cross",
                             _ => "",
                         },
                         _ => "",
@@ -2335,7 +2376,7 @@ impl Cx<'_> {
                     if how.is_empty() {
                         let span = self.ast.span(arg.value);
                         let message = "`how` must be one of \"inner\", \"left\", \"right\", \
-                                       \"full\", \"semi\", or \"anti\"";
+                                       \"full\", \"semi\", \"anti\", or \"cross\"";
                         return self.error(span, message);
                     }
                 }
@@ -2344,6 +2385,14 @@ impl Cx<'_> {
                     return self.error(name.span, message);
                 }
             }
+        }
+        // A cross join pairs every row with every row: it has no keys to go by.
+        if how == "cross" {
+            if on.is_some() || left_on.is_some() || right_on.is_some() {
+                let message = "a cross join takes no keys: every row is paired with every row";
+                return self.error(call.span, message);
+            }
+            return self.cross_join(call.span, (left, &left_schema), (right, &right_schema));
         }
         let shared = on.is_some();
         let (left_keys, right_keys) = match (on, left_on, right_on) {
@@ -2481,14 +2530,18 @@ impl Cx<'_> {
             let Some((input, schema)) = self.table_arg(call, index) else {
                 return Expr::error(call.span);
             };
+            let mut input = input;
             if index == 0 {
                 fields = schema.fields.clone();
             } else {
+                // The columns go by name: a table that has them in another order is put in
+                // the order of the first.
+                let other = |field: &Field| {
+                    let other = schema.field(&field.name);
+                    other.filter(|other| other.ty.dtype == field.ty.dtype)
+                };
                 let same = fields.len() == schema.fields.len()
-                    && fields
-                        .iter()
-                        .zip(&schema.fields)
-                        .all(|(a, b)| a.name == b.name && a.ty.dtype == b.ty.dtype);
+                    && fields.iter().all(|field| other(field).is_some());
                 if !same {
                     let message = format!(
                         "the tables of a `union` need the same columns, found {} and {schema}",
@@ -2496,7 +2549,16 @@ impl Cx<'_> {
                     );
                     return self.error(input.span, message);
                 }
-                for (field, other) in fields.iter_mut().zip(&schema.fields) {
+                let ordered: Vec<Field> = fields.iter().filter_map(other).cloned().collect();
+                if ordered
+                    .iter()
+                    .zip(&schema.fields)
+                    .any(|(a, b)| a.name != b.name)
+                {
+                    let columns = ordered.iter().map(pass_through).collect();
+                    input = self.project(input.span, input, columns, Vec::new());
+                }
+                for (field, other) in fields.iter_mut().zip(&ordered) {
                     field.ty.nullable |= other.ty.nullable;
                 }
             }
@@ -2509,6 +2571,41 @@ impl Cx<'_> {
             Vec::new(),
             Arc::new(Schema::new(fields)),
         )
+    }
+
+    /// Every row of one table with every row of the other. It runs as a join on a key that
+    /// is the same in every row.
+    fn cross_join(
+        &mut self,
+        span: Span,
+        (left, left_schema): (Expr, &Schema),
+        (right, right_schema): (Expr, &Schema),
+    ) -> Expr {
+        let mut columns = Vec::new();
+        let mut fields = left_schema.fields.clone();
+        for field in &left_schema.fields {
+            columns.push((field.name.clone(), JoinColumn::Left(field.name.clone())));
+        }
+        for field in &right_schema.fields {
+            if left_schema.field(&field.name).is_some() {
+                let message = format!(
+                    "both tables have a column `{}`; rename or drop one before the join",
+                    field.name
+                );
+                return self.error(span, message);
+            }
+            columns.push((field.name.clone(), JoinColumn::Right(field.name.clone())));
+            fields.push(field.clone());
+        }
+        let one = || plan::Expr::literal(Scalar::Int(1), ColType::required(DataType::Int));
+        let schema = Arc::new(Schema::new(fields));
+        let op = TableOp::Join {
+            kind: JoinKind::Inner,
+            on: vec![(one(), one())],
+            columns,
+            schema: schema.clone(),
+        };
+        self.table(span, op, vec![left, right], Vec::new(), schema)
     }
 
     /// A test that is true where `subject` equals `value`. Where either is null the test is
@@ -2664,6 +2761,8 @@ impl Cx<'_> {
             | ScalarFn::TryParseDateTime => &[Want::Str, Want::Str],
             ScalarFn::TimeBucket => &[Want::Moment, Want::Duration],
             ScalarFn::ToUnix => &[Want::Moment],
+            ScalarFn::Hash if args.len() == 2 => &[Want::Any, Want::Count],
+            ScalarFn::Hash => &[Want::Any],
             ScalarFn::FromUnix => &[Want::Amount],
             ScalarFn::Abs => &[Want::Number],
             ScalarFn::Round if args.len() == 2 => &[Want::Fraction, Want::Count],
@@ -2698,7 +2797,9 @@ impl Cx<'_> {
                 | ScalarFn::PadLeft
                 | ScalarFn::PadRight
                 | ScalarFn::RegexExtract => "2 or 3 arguments".to_string(),
-                ScalarFn::Round | ScalarFn::Trunc => "1 or 2 arguments".to_string(),
+                ScalarFn::Round | ScalarFn::Trunc | ScalarFn::Hash => {
+                    "1 or 2 arguments".to_string()
+                }
                 _ if dated => {
                     let what = if func == ScalarFn::FormatDate {
                         "a date"
@@ -2899,7 +3000,8 @@ impl Cx<'_> {
             | ScalarFn::MonthsBetween
             | ScalarFn::YearsBetween
             | ScalarFn::ToUnix
-            | ScalarFn::FiscalYear => Int,
+            | ScalarFn::FiscalYear
+            | ScalarFn::Hash => Int,
             ScalarFn::ToDate
             | ScalarFn::TryToDate
             | ScalarFn::StartOfWeek

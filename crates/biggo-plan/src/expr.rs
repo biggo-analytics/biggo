@@ -293,6 +293,8 @@ functions! {
     FiscalYear => "fiscal_year",
     /// The year of the Buddhist era.
     BuddhistYear => "buddhist_year",
+    /// A number that is the same for the same value everywhere, and spread evenly.
+    Hash => "hash",
     }
 }
 
@@ -401,6 +403,7 @@ impl ScalarFn {
                 | DayName
                 | IsWeekend
                 | ToUnix
+                | Hash
         )
     }
 }
@@ -556,6 +559,8 @@ pub struct WindowCall {
 pub struct SortKey {
     pub expr: Expr,
     pub descending: bool,
+    /// Whether nulls come before every value. They come after, unless this says otherwise.
+    pub nulls_first: bool,
 }
 
 fn precedence(op: BinaryOp) -> u8 {
@@ -659,6 +664,9 @@ impl fmt::Display for SortKey {
         write!(f, "{}", self.expr)?;
         if self.descending {
             f.write_str(" desc")?;
+        }
+        if self.nulls_first {
+            f.write_str(" nulls first")?;
         }
         Ok(())
     }
