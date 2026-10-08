@@ -47,14 +47,29 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: biggo-root
+          MYSQL_DATABASE: shop
+          MYSQL_USER: app
+          MYSQL_PASSWORD: biggo
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -uapp -pbiggo --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Read and write a PostgreSQL server
+      - name: Read and write a PostgreSQL and a MySQL server
         env:
           BIGGO_TEST_POSTGRES: postgres://app:biggo@localhost:5432/shop
-        run: cargo test -p biggo-cli --test cli postgres
+          BIGGO_TEST_MYSQL: mysql://app:biggo@127.0.0.1:3306/shop
+        run: cargo test -p biggo-cli --test cli server_is_read_and_written
 
   lint:
     name: Format and lints

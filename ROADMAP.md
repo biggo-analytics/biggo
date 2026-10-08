@@ -47,11 +47,11 @@ done on `main`, and a row of a table is still to do.
 | Types | `int` `float` `bool` `string` `date` `datetime` `duration` `decimal`, and a nullable form of each |
 | Library | About 240 built-in functions: math, safe conversion, dates and calendars, strings and regular expressions, aggregates, window functions, lists and maps |
 | Tables | `where` `select` `derive` `group` + `agg` `join` (7 kinds) `sort` `window` `pivot` `unpivot` `explode` `union` `intersect` `except` `distinct` `sample`, and statistics (`corr` `linreg` `describe` `histogram`) |
-| Data sources | CSV (any delimiter and encoding, titles, no header, texts for null), Excel, Parquet, JSON (lines or one array), SQLite, PostgreSQL, many files by a pattern; `biggo infer` writes the row type of a file |
-| Output | `print`, Markdown and HTML, and a `write_` function for CSV, Excel, Parquet, JSON Lines, SQLite and PostgreSQL |
+| Data sources | CSV (any delimiter and encoding, titles, no header, texts for null), Excel, Parquet, JSON (lines or one array), SQLite, PostgreSQL, MySQL, many files by a pattern; `biggo infer` writes the row type of a file |
+| Output | `print`, Markdown and HTML, and a `write_` function for CSV, Excel, Parquet, JSON Lines, SQLite, PostgreSQL and MySQL |
 | Engine | Column-at-a-time execution on Apache Arrow, a rule-based optimizer, every stage in parallel, the same result and the same errors for any number of threads |
 | Tools | `run` `repl` `check` `explain` `test` `fmt` `build` `infer` `help` `lsp` (errors, hover, completion, formatting), and a VS Code extension |
-| Testing | 194 automated tests. One runs all 119 example programs in the documentation and compares their output with what the documentation shows; 64 more programs are compared with recorded output; one reads and writes a real PostgreSQL server in CI |
+| Testing | 194 automated tests. One runs all 119 example programs in the documentation and compares their output with what the documentation shows; 64 more programs are compared with recorded output; two read and write a real PostgreSQL and a real MySQL server in CI |
 
 The main limitations today, which the rest of the plan comes from:
 
@@ -63,8 +63,8 @@ The main limitations today, which the rest of the plan comes from:
   [docs/09-performance.md](docs/09-performance.md)).
 - A function cannot pass through columns of a table that it does not name, there are no
   generic functions, and the names of every imported file share one namespace.
-- MySQL and SQL Server cannot be read. A `where` in biggo is not made part of the SQL that a
-  database runs.
+- A `where` in biggo is not made part of the SQL that a database runs, and SQL Server cannot
+  be read.
 - CI and the release build are written but have not run on GitHub yet. The tests pass on macOS
   (Apple Silicon) and on Linux (arm64, in a container); nothing has been tried on Windows, and
   there are no prebuilt binaries until the first release is tagged.
@@ -289,8 +289,7 @@ Exists: `read_csv` and `write_csv` (with `delimiter`, `encoding`, `header`, `ski
 | `read_csv(..., on_error = "null")` | A value that does not fit its column becomes null, and the number of such values is reported, instead of the first one stopping the query | Should |
 | compressed files | `.csv.gz`, `.json.gz`, `.zst` | Should |
 | standard input and output | `read_csv<T>("-")` and `write_csv(t, "-")`, to use biggo between other commands | Should |
-| MySQL | Through `read_sql` and `write_sql` with an address, as PostgreSQL is | Should |
-| pushdown of `where` | biggo's `where` becomes part of the SQL, so the database does that work. The columns and `take` already are for PostgreSQL; for SQLite nothing is yet, and the filter runs after the rows are read out | Should |
+| pushdown of `where` | biggo's `where` becomes part of the SQL, so the database does that work. The columns and `take` already are for PostgreSQL and MySQL; for SQLite nothing is yet, and the filter runs after the rows are read out | Should |
 | appending | `write_csv(t, path, append = true)`, `write_sql(t, path, name, mode = "append")` | Should |
 | files as values | `exists(path)`, `list_files(pattern)`, `read_text(path)`, `write_text(path, s)` | Should |
 | nested JSON | A field inside an object, named by its path in the row type | Should |
@@ -307,8 +306,8 @@ Exists: `read_csv` and `write_csv` (with `delimiter`, `encoding`, `header`, `ski
 - [x] Many files in one call, by a pattern such as `"logs/2026-*.csv"`, with the path of each
       row's file in a column (`file_name = "..."`)
 - [x] `env(name)` for paths and passwords that do not belong in a program
-- [x] PostgreSQL through `read_sql` and `write_sql` with an address, encrypted connections, and
-      the columns and `take` of a query done by the server
+- [x] PostgreSQL and MySQL (and MariaDB) through `read_sql` and `write_sql` with an address,
+      encrypted connections, and the columns and `take` of a query done by the server
 - [x] `read_excel` with `sheet`, `range`, `skip`, `header` and `nulls`, for `.xlsx`, `.xls` and
       `.ods`, and `write_excel`
 - [x] Programs can read their command-line arguments with `args()`

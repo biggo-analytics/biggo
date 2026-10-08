@@ -46,6 +46,7 @@ pub fn scan(scan: &Scan) -> Result<BatchIter> {
             Format::Sqlite => sqlite_pieces(&file, &shape)?,
             Format::Excel => crate::excel::pieces(&file, &shape)?,
             Format::Postgres => crate::database::pieces(&file, &shape)?,
+            Format::Mysql => crate::database::mysql_pieces(&file, &shape)?,
         });
     }
     Ok(Box::new(ScanIter {
@@ -67,8 +68,10 @@ pub fn scan(scan: &Scan) -> Result<BatchIter> {
 /// They come in the order of their names, so that a query reads them the same way each time.
 fn files(scan: &Scan) -> Result<Vec<Scan>> {
     let pattern = scan.path.to_string_lossy();
-    let one = matches!(scan.format, Format::Sqlite | Format::Postgres)
-        || !pattern.contains(['*', '?', '['])
+    let one = matches!(
+        scan.format,
+        Format::Sqlite | Format::Postgres | Format::Mysql
+    ) || !pattern.contains(['*', '?', '['])
         || scan.path.exists();
     if one {
         return Ok(vec![scan.clone()]);

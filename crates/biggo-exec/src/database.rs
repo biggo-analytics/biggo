@@ -1,13 +1,19 @@
-//! Reads from and writes to a PostgreSQL server. Rows cross the connection as CSV, with
-//! `COPY`: it is the fastest way in and out of the server, it does not hold a result in
-//! memory twice, and what arrives is text, which is read as the text of a file is.
+//! Reads from and writes to database servers. What a server sends is taken as text, which
+//! is read as the text of a file is: the declared type of a column says what it means.
+//!
+//! With PostgreSQL, rows cross the connection as CSV, with `COPY`: it is the fastest way in
+//! and out of the server, and it does not hold a result in memory twice. MySQL has no such
+//! way that servers allow by default, so rows are read from an ordinary query and written
+//! with `INSERT`.
 
 use std::io::{self, BufRead, Read};
 use std::sync::Arc;
 
+use arrow::array::{Array, ArrayRef, AsArray, RecordBatch, StringBuilder};
 use arrow::csv::{ReaderBuilder, WriterBuilder};
 use arrow::datatypes::{DataType as ArrowType, Field as ArrowField, Schema as ArrowSchema};
-use biggo_plan::{DataType, Plan, Scan};
+use biggo_plan::{DataType, Format, Plan, Scan};
+use mysql::prelude::Queryable;
 use postgres::{Client, Config};
 use regex::Regex;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -17,7 +23,7 @@ use rustls::{DigitallySignedStruct, SignatureScheme};
 use tokio_postgres_rustls::MakeRustlsConnect;
 
 use crate::scan::{BATCH_ROWS, Piece, Shape};
-use crate::{Error, Result, collect, for_text_file, sql_name};
+use crate::{Error, Result, collect, expr, for_text_file, sql_name};
 
 /// How a null is written in the CSV that crosses the connection, so that it is not taken
 /// for an empty string: a text that no value is likely to be, between two characters that
@@ -278,7 +284,7 @@ pub(crate) fn pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
 /// Writes the rows of `plan` as a table of the database at `address`, in place of the table
 /// of that name if there is one. The table changes all at once, when every row is in it, or
 /// not at all. A decimal is stored as `numeric`, and a duration as its seconds.
-pub fn write_postgres(plan: &Arc<Plan>, address: &str, table: &str) -> Result<()> {
+fn write_postgres(plan: &Arc<Plan>, address: &str, table: &str) -> Result<()> {
     let shown = match biggo_plan::source::server(address) {
         Some((_, shown)) => shown,
         None => address.to_string(),
@@ -324,9 +330,324 @@ pub fn write_postgres(plan: &Arc<Plan>, address: &str, table: &str) -> Result<()
     change.commit().map_err(fail)
 }
 
+/// The rows of one `INSERT`: enough that a table is not written a row at a time, and few
+/// enough that a statement stays far below what a server takes at once.
+const INSERT_ROWS: usize = 500;
+
+/// A name as MySQL writes it in a statement.
+fn mysql_name(name: &str) -> String {
+    format!("`{}`", name.replace('`', "``"))
+}
+
+/// What a MySQL server or the driver says is wrong.
+fn mysql_reason(err: &mysql::Error) -> String {
+    match err {
+        mysql::Error::MySqlError(said) => said.message.clone(),
+        // The driver writes its own errors as `Kind { what happened }`.
+        other => {
+            let written = other.to_string();
+            let inner = written
+                .split_once(" { ")
+                .and_then(|(_, rest)| rest.strip_suffix(" }"));
+            inner.unwrap_or(&written).to_string()
+        }
+    }
+}
+
+/// How a connection to MySQL is protected, which `ssl-mode` says in MySQL's own words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MysqlProtection {
+    Disabled,
+    /// What an address means when it does not say: encrypted if the server can.
+    Preferred,
+    Required,
+    /// `VERIFY_CA` and `VERIFY_IDENTITY`: the server must show a certificate that is
+    /// trusted, and for the second one made out for the host of the address.
+    Verified {
+        host: bool,
+    },
+}
+
+/// The protection that an address asks for, and the address as the driver takes it:
+/// without `ssl-mode`, which is read here, and with the scheme the driver knows.
+fn mysql_protection(address: &str) -> std::result::Result<(MysqlProtection, String), String> {
+    let (_, rest) = address.split_once("://").unwrap_or(("", address));
+    let (place, settings) = match rest.split_once('?') {
+        Some((place, settings)) => (place, settings),
+        None => (rest, ""),
+    };
+    let mut protection = MysqlProtection::Preferred;
+    let mut kept = Vec::new();
+    for setting in settings.split('&').filter(|setting| !setting.is_empty()) {
+        let Some(mode) = setting.strip_prefix("ssl-mode=") else {
+            kept.push(setting);
+            continue;
+        };
+        protection = match mode.to_ascii_lowercase().as_str() {
+            "disabled" => MysqlProtection::Disabled,
+            "preferred" => MysqlProtection::Preferred,
+            "required" => MysqlProtection::Required,
+            "verify_ca" => MysqlProtection::Verified { host: false },
+            "verify_identity" => MysqlProtection::Verified { host: true },
+            _ => {
+                return Err(format!(
+                    "`ssl-mode` is DISABLED, PREFERRED, REQUIRED, VERIFY_CA or \
+                     VERIFY_IDENTITY, not {mode}"
+                ));
+            }
+        };
+    }
+    let settings = match kept.is_empty() {
+        true => String::new(),
+        false => format!("?{}", kept.join("&")),
+    };
+    Ok((protection, format!("mysql://{place}{settings}")))
+}
+
+fn mysql_connect(address: &str, shown: &str) -> Result<mysql::Conn> {
+    let (protection, address) = mysql_protection(address)
+        .map_err(|why| Error(format!("cannot connect to {shown}: {why}")))?;
+    // As with PostgreSQL, the words of the driver about an address are not repeated.
+    let options = mysql::Opts::from_url(&address).map_err(|_| {
+        Error(format!(
+            "{shown} is not the address of a MySQL server, which is written \
+             mysql://user:password@host:port/database"
+        ))
+    })?;
+    let fail =
+        |err: mysql::Error| Error(format!("cannot connect to {shown}: {}", mysql_reason(&err)));
+    let with = |encryption: Option<mysql::SslOpts>| {
+        let options = mysql::OptsBuilder::from_opts(options.clone()).ssl_opts(encryption);
+        mysql::Conn::new(options)
+    };
+    let unchecked = || {
+        mysql::SslOpts::default()
+            .with_danger_accept_invalid_certs(true)
+            .with_danger_skip_domain_validation(true)
+    };
+    match protection {
+        MysqlProtection::Disabled => with(None).map_err(fail),
+        MysqlProtection::Required => with(Some(unchecked())).map_err(fail),
+        MysqlProtection::Verified { host } => {
+            let checked = mysql::SslOpts::default().with_danger_skip_domain_validation(!host);
+            with(Some(checked)).map_err(fail)
+        }
+        // Encrypted if the server can be, and plain if it says that it cannot.
+        MysqlProtection::Preferred => match with(Some(unchecked())) {
+            Err(mysql::Error::DriverError(mysql::DriverError::TlsNotSupported)) => {
+                with(None).map_err(fail)
+            }
+            other => other.map_err(fail),
+        },
+    }
+}
+
+pub(crate) fn mysql_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
+    let Some(query) = scan.query.clone() else {
+        return Err(Error(
+            "internal error: a database scan without a query".into(),
+        ));
+    };
+    let address = scan.path.to_string_lossy().into_owned();
+    let limit = scan.limit.filter(|_| scan.filters.is_empty());
+    let shape = shape.clone();
+    let piece = move || {
+        let shown = &shape.file;
+        let fail = |err: mysql::Error| Error(format!("{shown}: {}", mysql_reason(&err)));
+        let mut connection = mysql_connect(&address, shown)?;
+        let query = query.trim().trim_end_matches(';');
+        // A query that gives no rows still tells the names of its columns.
+        let described = format!("SELECT * FROM (\n{query}\n) AS biggo_source LIMIT 0");
+        let available: Vec<String> = {
+            let result = connection.query_iter(&described).map_err(fail)?;
+            let columns = result.columns();
+            let names = columns.as_ref().iter();
+            names.map(|column| column.name_str().into_owned()).collect()
+        };
+        for field in &shape.read.fields {
+            if !available.iter().any(|name| *name == *field.name) {
+                return Err(shape.missing_column(&field.name, &available));
+            }
+        }
+        let columns: Vec<String> = shape
+            .read
+            .fields
+            .iter()
+            .map(|field| mysql_name(&field.name))
+            .collect();
+        let mut select = format!(
+            "SELECT {} FROM (\n{query}\n) AS biggo_source",
+            columns.join(", ")
+        );
+        if let Some(limit) = limit {
+            select.push_str(&format!(" LIMIT {limit}"));
+        }
+
+        let width = shape.read.fields.len();
+        let mut batches = Vec::new();
+        let mut texts: Vec<StringBuilder> = (0..width).map(|_| StringBuilder::new()).collect();
+        let mut rows = 0;
+        let mut flush = |texts: &mut Vec<StringBuilder>| -> Result<()> {
+            let columns = shape.read.fields.iter().zip(texts.iter_mut());
+            let columns = columns
+                .map(|(field, text)| (&*field.name, Arc::new(text.finish()) as ArrayRef, true));
+            let batch = RecordBatch::try_from_iter_with_nullable(columns)?;
+            batches.push(shape.finish(&batch)?);
+            Ok(())
+        };
+        for row in connection.query_iter(&select).map_err(fail)? {
+            let row = row.map_err(fail)?;
+            for (index, text) in texts.iter_mut().enumerate() {
+                // Without a prepared statement, a server sends every value as text.
+                match row.as_ref(index) {
+                    None | Some(mysql::Value::NULL) => text.append_null(),
+                    Some(mysql::Value::Bytes(bytes)) => match std::str::from_utf8(bytes) {
+                        Ok(value) => text.append_value(value),
+                        Err(_) => {
+                            return Err(Error(format!(
+                                "column `{}` of {shown} holds bytes that are not text",
+                                shape.read.fields[index].name
+                            )));
+                        }
+                    },
+                    Some(other) => text.append_value(other.as_sql(true).trim_matches('\'')),
+                }
+            }
+            rows += 1;
+            if rows == BATCH_ROWS {
+                flush(&mut texts)?;
+                rows = 0;
+            }
+        }
+        if rows > 0 {
+            flush(&mut texts)?;
+        }
+        Ok(batches)
+    };
+    Ok(vec![Box::new(piece)])
+}
+
+/// A value of a column as MySQL reads it in a statement.
+fn mysql_literal(column: &ArrayRef, texts: &ArrayRef, row: usize, name: &str) -> Result<String> {
+    if column.is_null(row) {
+        return Ok("NULL".to_string());
+    }
+    let text = texts.as_string::<i32>().value(row);
+    Ok(match column.data_type() {
+        ArrowType::Int64 | ArrowType::Decimal128(..) => text.to_string(),
+        ArrowType::Boolean => (if text == "true" { "1" } else { "0" }).to_string(),
+        ArrowType::Float64 => {
+            let value: f64 = text.parse().unwrap_or(f64::NAN);
+            if !value.is_finite() {
+                return Err(Error(format!(
+                    "column `{name}` holds {text}, which a MySQL table cannot"
+                )));
+            }
+            text.to_string()
+        }
+        _ => mysql::Value::Bytes(text.as_bytes().to_vec()).as_sql(false),
+    })
+}
+
+/// Writes the rows of `plan` as a table of a MySQL database, in place of the table of that
+/// name if there is one. The rows go into a new table, which takes the name when every row
+/// is in it: MySQL cannot undo the making of a table, but it can swap two names at once.
+fn write_mysql(plan: &Arc<Plan>, address: &str, shown: &str, table: &str) -> Result<()> {
+    let fail = |err: mysql::Error| Error(format!("{shown}: {}", mysql_reason(&err)));
+    let schema = plan.schema();
+    let columns = schema.fields.iter().map(|field| {
+        let kind = match field.ty.dtype {
+            DataType::Int => "BIGINT",
+            DataType::Float | DataType::Duration => "DOUBLE",
+            DataType::Bool => "BOOLEAN",
+            DataType::Str => "LONGTEXT",
+            DataType::Date => "DATE",
+            DataType::DateTime => "DATETIME(6)",
+            DataType::Decimal => "DECIMAL(38, 6)",
+        };
+        format!("{} {kind}", mysql_name(&field.name))
+    });
+    let columns: Vec<String> = columns.collect();
+    let (name, next, last) = (
+        mysql_name(table),
+        mysql_name(&format!("{table}__biggo_new")),
+        mysql_name(&format!("{table}__biggo_old")),
+    );
+    let batches = collect(plan)?;
+
+    let mut connection = mysql_connect(address, shown)?;
+    let prepare = format!(
+        "DROP TABLE IF EXISTS {next}, {last}; CREATE TABLE {next} ({})",
+        columns.join(", ")
+    );
+    for statement in prepare.split("; ") {
+        connection.query_drop(statement).map_err(fail)?;
+    }
+    for batch in &batches {
+        // A duration goes as its seconds, and everything else as it is written in text.
+        let batch = for_text_file(batch)?;
+        let texts: Result<Vec<ArrayRef>> = batch.columns().iter().map(expr::to_strings).collect();
+        let texts = texts?;
+        for start in (0..batch.num_rows()).step_by(INSERT_ROWS) {
+            let end = (start + INSERT_ROWS).min(batch.num_rows());
+            let mut insert = format!("INSERT INTO {next} VALUES ");
+            for row in start..end {
+                insert.push_str(if row == start { "(" } else { ", (" });
+                for (index, column) in batch.columns().iter().enumerate() {
+                    if index > 0 {
+                        insert.push_str(", ");
+                    }
+                    let name = &schema.fields[index].name;
+                    insert.push_str(&mysql_literal(column, &texts[index], row, name)?);
+                }
+                insert.push(')');
+            }
+            connection.query_drop(&insert).map_err(fail)?;
+        }
+    }
+    // The table of that name, if there is one, steps aside in the same moment.
+    let exists: Option<u8> = connection
+        .query_first(format!("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = {}", mysql::Value::Bytes(table.as_bytes().to_vec()).as_sql(false)))
+        .map_err(fail)?;
+    let swap = match exists {
+        Some(_) => format!("RENAME TABLE {name} TO {last}, {next} TO {name}"),
+        None => format!("RENAME TABLE {next} TO {name}"),
+    };
+    connection.query_drop(swap).map_err(fail)?;
+    connection
+        .query_drop(format!("DROP TABLE IF EXISTS {last}"))
+        .map_err(fail)
+}
+
+/// Writes the rows of `plan` as a table of the database at `address`, in place of the table
+/// of that name if there is one.
+pub fn write_server(plan: &Arc<Plan>, address: &str, table: &str) -> Result<()> {
+    match biggo_plan::source::server(address) {
+        Some((Format::Mysql, shown)) => write_mysql(plan, address, &shown, table),
+        _ => write_postgres(plan, address, table),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_mysql_address_says_how_it_is_protected() {
+        let plain = mysql_protection("mariadb://app:pw@db:3306/shop").unwrap();
+        let taken = "mysql://app:pw@db:3306/shop".to_string();
+        assert_eq!(plain, (MysqlProtection::Preferred, taken.clone()));
+        let required = mysql_protection("mysql://app:pw@db:3306/shop?ssl-mode=REQUIRED").unwrap();
+        assert_eq!(required, (MysqlProtection::Required, taken));
+        let checked = mysql_protection("mysql://db/shop?compress=1&ssl-mode=verify_identity");
+        let taken = "mysql://db/shop?compress=1".to_string();
+        assert_eq!(
+            checked.unwrap(),
+            (MysqlProtection::Verified { host: true }, taken)
+        );
+        assert!(mysql_protection("mysql://db/shop?ssl-mode=maybe").is_err());
+        assert_eq!(mysql_name("odd`name"), "`odd``name`");
+    }
 
     #[test]
     fn an_address_says_how_it_is_protected() {

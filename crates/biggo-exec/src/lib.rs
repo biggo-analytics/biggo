@@ -17,7 +17,7 @@ mod scan;
 mod text;
 mod window;
 
-pub use database::write_postgres;
+pub use database::write_server;
 pub use excel::write_excel;
 pub use report::{to_html, to_markdown, write_html, write_markdown};
 

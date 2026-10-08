@@ -723,7 +723,9 @@ pub fn infer(path: &Path, shown: &str, known: &Known) -> Result<Guess> {
         Format::Parquet => infer_parquet(path, shown)?,
         Format::Sqlite => infer_sqlite(path, shown, known)?,
         Format::Excel => infer_excel(path, shown, known)?,
-        Format::Postgres => unreachable!("no name of a file says it is a server"),
+        Format::Postgres | Format::Mysql => {
+            unreachable!("no name of a file says it is a server")
+        }
     };
     if guess.fields.is_empty() {
         return Err(Error(format!("{shown} has no column that can be declared")));

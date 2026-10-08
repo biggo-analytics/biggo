@@ -46,8 +46,8 @@ read_csv<Sale>("docs/data/sales.csv")
   `decimal` for money, `datetime` and `duration` for time, regular expressions, and program
   arguments.
 - **Reads and writes several formats.** CSV (any delimiter, encodings such as TIS-620, files
-  with titles or without a header), Excel, Parquet, JSON, SQLite and PostgreSQL, and many files
-  at once by a pattern.
+  with titles or without a header), Excel, Parquet, JSON, SQLite, PostgreSQL and MySQL, and many
+  files at once by a pattern.
   `biggo infer` writes the row type of a file for you.
 - **All the tools in one executable.** A runner, a REPL, a formatter, a test runner, a language
   server, and a builder of standalone executables. A VS Code extension is in this repository.
@@ -252,7 +252,7 @@ spots are in [Performance](docs/09-performance.md).
 | [The language](docs/02-language.md) | Syntax, variables, functions, lambdas, `if`, `match`, lists, records, maps, `import` |
 | [The type system](docs/03-types.md) | Every type, nullable types, conversions, type inference |
 | [Working with tables](docs/04-tables.md) | `where` `select` `group` `agg` `join` `window` `pivot`, statistics and more |
-| [Data sources](docs/05-data-sources.md) | CSV, Excel, Parquet, JSON, SQLite, PostgreSQL, many files at once |
+| [Data sources](docs/05-data-sources.md) | CSV, Excel, Parquet, JSON, SQLite, PostgreSQL, MySQL, many files at once |
 | [Built-in reference](docs/06-builtins.md) | Every built-in function |
 | [Tools](docs/07-tools.md) | Every command, `biggo test`, the formatter, editors |
 | [Architecture](docs/08-architecture.md) | How the compiler and the engine work, and how to add a feature |
@@ -296,8 +296,8 @@ python3 bench/run.py           # benchmarks (build with --release and generate t
 
 - The data of a query that sorts a whole table, uses `window`, is the right side of a `join`, or
   groups into many groups has to fit in RAM (nothing spills to disk yet).
-- Of the database servers, only PostgreSQL can be read and written. A `where` in biggo is not
-  made part of the SQL that a database runs.
+- A `where` in biggo is not made part of the SQL that a database runs: filter a large table in
+  the query. Of the database servers, PostgreSQL, MySQL and MariaDB can be read and written.
 - There are no `for` or `while` loops (use `map`, `filter`, `fold`, `each`, or recursion), and a
   variable cannot be assigned a new value.
 - A function cannot pass through columns of a table that it does not name, and there are no

@@ -1167,9 +1167,76 @@ plan:
         ],
         "",
     );
+    // The same for a MySQL server.
+    let program = "let db = \"mysql://u:hunter2@127.0.0.1:1/db?ssl-mode=DISABLED\"\n\
+                   print(read_sql<{ a: int }>(db, \"select 1 as a\"))";
+    let (_, mysql, _) = biggo(&["run", "-e", program], "");
+    let complaint = "error: cannot connect to mysql://u:***@127.0.0.1:1/db?ssl-mode=DISABLED: ";
+    assert!(mysql.starts_with(complaint), "{mysql}");
     assert!(!stderr.contains("hunter2"), "{stderr}");
     assert!(
         stderr.starts_with("error: cannot connect to postgres://u:***@local host/db"),
         "{stderr}"
     );
+}
+
+/// Needs a MySQL or MariaDB server: set `BIGGO_TEST_MYSQL` to the address of a database
+/// that can be written to, such as `mysql://app:password@127.0.0.1:3306/shop`. Without it
+/// the test passes without having tried anything.
+#[test]
+fn a_mysql_server_is_read_and_written() {
+    let Ok(address) = std::env::var("BIGGO_TEST_MYSQL") else {
+        return;
+    };
+    let program = r#"
+let db = env("BIGGO_TEST_MYSQL") ?? ""
+let people = from_rows([
+  { id: 1, name: "Ann, \"A\" 'q'", score: 9.5, joined: @2026-01-05, at: @2026-01-05T09:30:00, ok: true, paid: 12.50d, took: minutes(2), note: "" },
+  { id: 2, name: "สมหญิง", score: -0.25, joined: @2026-02-28, at: @2026-02-28T23:59:59, ok: false, paid: 0.000001d, took: seconds(1), note: "two\nlines\\ and a backslash" },
+]) |> derive(maybe = if id > 1 { id * 10 } else { null })
+write_sql(people, db, "biggo_test_people")
+
+type Person = { id: int, name: string, score: float, joined: date, at: datetime, ok: bool, paid: decimal, took: duration, note: string?, maybe: int? }
+let back = read_sql<Person>(db, "select * from biggo_test_people order by id")
+assert_eq(back, people)
+print(back |> where(ok) |> select(id, name, paid, note, maybe))
+
+// A query that ends in a semicolon, and the server stopping after a row.
+print(read_sql<Person>(db, "select * from biggo_test_people order by id desc;") |> select(id, at) |> take(1))
+type Made = { n: int, label: string, big: decimal, flag: bool? }
+print(read_sql<Made>(db, "select count(*) as n, concat('x', 'y') as label, cast(1234567890123.123456 as decimal(38, 6)) as big, null as flag from biggo_test_people"))
+
+// A table is replaced whole, and one that is read can be the one that is written.
+write_sql(back |> where(id > 1), db, "biggo_test_people")
+print(read_sql<{ id: int }>(db, "select id from biggo_test_people") |> count())
+print(read_sql<{ nope: int }>(db, "select id from biggo_test_people"))
+"#;
+    let output = Command::new(env!("CARGO_BIN_EXE_biggo"))
+        .args(["run", "-e", program])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let expected = "\
++----+--------------+------+------+-------+
+| id | name         | paid | note | maybe |
++----+--------------+------+------+-------+
+| 1  | Ann, \"A\" 'q' | 12.5 |      | null  |
++----+--------------+------+------+-------+
++----+---------------------+
+| id | at                  |
++----+---------------------+
+| 2  | 2026-02-28T23:59:59 |
++----+---------------------+
++---+-------+----------------------+------+
+| n | label | big                  | flag |
++---+-------+----------------------+------+
+| 2 | xy    | 1234567890123.123456 | null |
++---+-------+----------------------+------+
+1
+";
+    assert_eq!(stdout, expected, "{stderr}");
+    let (_, shown) = biggo_plan::source::server(&address).unwrap();
+    let complaint = format!("error: {shown} has no column `nope`; its columns are id\n");
+    assert!(stderr.starts_with(&complaint), "{stderr}");
 }

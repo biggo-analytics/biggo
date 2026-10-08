@@ -1040,7 +1040,7 @@ impl Cx<'_> {
             Format::Csv => &READ_CSV_OPTIONS,
             Format::Excel => &READ_EXCEL_OPTIONS,
             Format::Json | Format::Parquet => &[FILE_NAME],
-            Format::Sqlite | Format::Postgres => &[],
+            Format::Sqlite | Format::Postgres | Format::Mysql => &[],
         };
         let Some((positional, mut options)) = self.file_args(call, takes, false) else {
             return Expr::error(call.span);

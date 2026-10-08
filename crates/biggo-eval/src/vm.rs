@@ -819,7 +819,7 @@ impl<W: Write> Vm<W> {
                     Builtin::WriteExcel => biggo_exec::write_excel(&plan, &path, &text(2)),
                     Builtin::WriteMarkdown => biggo_exec::write_markdown(&plan, &path),
                     Builtin::WriteHtml => biggo_exec::write_html(&plan, &path),
-                    _ if server => biggo_exec::write_postgres(&plan, &text(1), &text(2)),
+                    _ if server => biggo_exec::write_server(&plan, &text(1), &text(2)),
                     _ => biggo_exec::write_sqlite(&plan, &path, &text(2)),
                 };
                 match written {

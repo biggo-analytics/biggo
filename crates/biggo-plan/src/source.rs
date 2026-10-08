@@ -8,6 +8,7 @@ pub fn server(source: &str) -> Option<(Format, String)> {
     let (scheme, rest) = source.split_once("://")?;
     let format = match scheme.to_ascii_lowercase().as_str() {
         "postgres" | "postgresql" => Format::Postgres,
+        "mysql" | "mariadb" => Format::Mysql,
         _ => return None,
     };
     Some((format, format!("{scheme}://{}", hidden(rest))))
@@ -57,6 +58,12 @@ mod tests {
             (Format::Postgres, "postgres://db.example.com/shop")
         );
         assert_eq!(server("PostgreSQL://h/d").unwrap().0, Format::Postgres);
+        assert_eq!(server("mysql://h/d").unwrap().0, Format::Mysql);
+        let (format, shown) = server("mariadb://app:pw@h:3306/d").unwrap();
+        assert_eq!(
+            (format, shown.as_str()),
+            (Format::Mysql, "mariadb://app:***@h:3306/d")
+        );
     }
 
     #[test]

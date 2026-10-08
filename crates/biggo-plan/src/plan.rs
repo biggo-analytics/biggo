@@ -89,6 +89,8 @@ pub enum Format {
     Excel,
     /// The rows of a query on a PostgreSQL server.
     Postgres,
+    /// The rows of a query on a MySQL or MariaDB server.
+    Mysql,
 }
 
 impl Format {
@@ -100,6 +102,7 @@ impl Format {
             Format::Sqlite => "sqlite",
             Format::Excel => "excel",
             Format::Postgres => "postgres",
+            Format::Mysql => "mysql",
         }
     }
 }
@@ -363,7 +366,7 @@ impl TableOp {
                             }
                         }
                     }
-                    Format::Parquet | Format::Json | Format::Postgres => {}
+                    Format::Parquet | Format::Json | Format::Postgres | Format::Mysql => {}
                 }
                 // `read_sql` reads a file, or a server when its source is the address of one.
                 // The address is shown without its password.

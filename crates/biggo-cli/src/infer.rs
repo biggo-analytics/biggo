@@ -153,14 +153,14 @@ fn render(file: &str, known: &Known, guess: &Guess) -> String {
                 call.push_str(&format!(", skip = {}", known.skip));
             }
         }
-        Format::Json | Format::Parquet | Format::Postgres => {}
+        Format::Json | Format::Parquet | Format::Postgres | Format::Mysql => {}
     }
     let read = match guess.format {
         Format::Excel => "read_excel",
         Format::Csv => "read_csv",
         Format::Json => "read_json",
         Format::Parquet => "read_parquet",
-        Format::Sqlite | Format::Postgres => "read_sql",
+        Format::Sqlite | Format::Postgres | Format::Mysql => "read_sql",
     };
     text.push_str(&format!("let {table} = {read}<{ty}>({call})\n"));
     text

@@ -1,7 +1,7 @@
-# Data sources: CSV, Parquet, JSON, Excel, SQLite, PostgreSQL
+# Data sources: CSV, Parquet, JSON, Excel, SQLite, PostgreSQL, MySQL
 
-biggo reads and writes files in 5 formats, and tables of a PostgreSQL server. All of them follow
-the same principles:
+biggo reads and writes files in 5 formats, and tables of a PostgreSQL or a MySQL server. All of
+them follow the same principles:
 
 - **Read**: `read_xxx<row type>(path)` returns a table. The program says which columns it wants and
   what their types are, and the engine checks them against the file at run time.
@@ -23,6 +23,7 @@ the same principles:
 | Excel | `read_excel` | `write_excel` | | ✓ (cells are not converted) |
 | SQLite | `read_sql` | `write_sql` | | (you write it in the query yourself) |
 | PostgreSQL | `read_sql` | `write_sql` | | ✓ (the server sends only those columns) |
+| MySQL, MariaDB | `read_sql` | `write_sql` | | ✓ (the server sends only those columns) |
 
 ## The row type
 
@@ -670,6 +671,45 @@ after a `?` at the end of the address:
 As with PostgreSQL's tools, `prefer` and `require` encrypt the connection without checking who
 the server is. Use `verify-full` across a network that is not your own:
 `postgres://report:...@db.example.com/shop?sslmode=verify-full`.
+
+## MySQL and MariaDB
+
+An address that starts with `mysql://` (or `mariadb://`) names a database on a MySQL or MariaDB
+server, and works with `read_sql` and `write_sql` the way a PostgreSQL address does:
+
+```biggo check
+let password = env("SHOP_PASSWORD") ?? ""
+let shop = "mysql://report:" + password + "@db.example.com:3306/shop"
+
+type Order = { id: int, customer: string, total: decimal, placed: datetime, paid: bool }
+let orders = read_sql<Order>(shop, "select id, customer, total, placed, paid from orders")
+print(orders |> where(paid) |> group(customer) |> agg(spent = sum(total)) |> sort(desc(spent)) |> take(10))
+
+write_sql(orders |> where(not paid), shop, "unpaid_orders")
+```
+
+- The query is MySQL's SQL. Values are read as the declared type, as for PostgreSQL: a
+  `TINYINT(1)` or `BOOLEAN` column holds 1 and 0, which a `bool` reads.
+- Only the columns the program uses are sent, and `take(n)` right after `read_sql` stops the
+  server after `n` rows.
+- `write_sql` **replaces** the table of that name. MySQL cannot undo the making of a table, so
+  the rows are written to a new table that takes the name, in one step, when every row is in it;
+  a query that fails leaves the old table as it was. Columns are made as `BIGINT`, `DOUBLE`,
+  `BOOLEAN`, `LONGTEXT`, `DATE`, `DATETIME(6)` and `DECIMAL(38, 6)`.
+- A MySQL table cannot hold a `float` that is not a number (`NaN`) or is infinite: writing one
+  is an error that names the column.
+- The password is hidden in messages, and percent signs write the characters that an address
+  cannot hold, as for PostgreSQL.
+
+How the connection is protected is said with `ssl-mode`, in MySQL's own words (in upper or lower
+case), after a `?` at the end of the address:
+
+| `ssl-mode` | Meaning |
+| --- | --- |
+| (not given), `PREFERRED` | Encrypted if the server can, and plain if it cannot |
+| `REQUIRED` | Encrypted, or the connection fails |
+| `VERIFY_CA`, `VERIFY_IDENTITY` | Encrypted, and the certificate of the server must be signed by a public authority; with `VERIFY_IDENTITY` it must also be made out for the host in the address |
+| `DISABLED` | Not encrypted |
 
 ## Common errors
 
