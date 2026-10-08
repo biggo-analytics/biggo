@@ -1,0 +1,19 @@
+(import "../run/lib/units.bgo")
+(fn square(n: int) -> int (block (* n n)))
+(fn test_square()
+  (block
+    (call assert_eq (call square 3) 9)
+    (call assert_eq (call map (list 1 2) square) (list 1 4))))
+(fn test_units() (block (call assert_eq (call with_unit 1.5) "1.5 cm")))
+(fn test_tables()
+  (block
+    (let rows
+      (call from_rows
+        (list
+          (record (k: "a") (v: 1))
+          (record (k: "a") (v: 2))
+          (record (k: "b") (v: 5)))))
+    (let totals (|> rows (call group k) (call agg (total: (call sum v)))))
+    (call assert_eq totals
+      (call from_rows
+        (list (record (k: "a") (total: 3)) (record (k: "b") (total: 5)))))))

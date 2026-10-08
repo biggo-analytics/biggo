@@ -1,0 +1,9 @@
+let total = (1 + 2
+let name = "unterminated
+let chained = 1 < 2 < 3
+let when = @2026-02-30
+let big = sales |> count() > 100
+print(total) print(name)
+let ok = 42
+fn broken(a: int, b) -> int { a }
+let x = 5 $ 3

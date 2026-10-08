@@ -1,0 +1,49 @@
+(let ann (record (name: "Ann") (age: 31) (tags: (list "a" "b"))))
+(call print ann (. ann name) (+ (. ann age) 1) (index (. ann tags) 0))
+(type Point {x: float, y: float})
+(fn norm(p: Point) -> float
+  (block (call sqrt (+ (* (. p x) (. p x)) (* (. p y) (. p y))))))
+(call print (call norm (record (x: 3) (y: 4))))
+(let points: list<Point> (list (record (x: 1) (y: 2)) (record (x: 0.5) (y: 0))))
+(call print points (call map points (lambda (p) (block (. p x)))))
+(let stock (map ("tea" 4) ("cake" 0)))
+(call print stock
+  (index stock "tea")
+  (index stock "milk")
+  (?? (index stock "milk") 0))
+(let more (call put (call put stock "milk" 9) "tea" 5))
+(call print more
+  (call keys more)
+  (call values more)
+  (call len more)
+  (call has_key more "milk")
+  (call has_key stock "milk"))
+(let none: map<string, int> (block))
+(call print none (call len none) (call put none "a" 1))
+(let by_id (map (1 "one") (2 "two")))
+(call print (index by_id 2) (index by_id 3))
+(let counts
+  (call fold
+    (list "a" "b" "a")
+    none
+    (lambda (seen, word)
+      (block (call put seen word (+ (?? (index seen word) 0) 1))))))
+(call print counts)
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(let rows
+  (call to_rows (|> sales (call select product qty price) (call take 3))))
+(call print rows)
+(call print
+  (. (index rows 0) product)
+  (call map rows (lambda (row) (block (* (. row qty) 2)))))
+(let table
+  (call from_rows
+    (list
+      (record (city: "Bangkok") (people: 10.5) (capital: true))
+      (record (city: "Chiang Mai") (people: null) (capital: false)))))
+(call print table)
+(call print (|> table (call where capital) (call select city)))
+(call print (call from_rows <{id: int, note: string?}> (list)))
+(let found (map ("a" (record (score: 1)))))
+(call print (. (index found "a") score) (. (index found "b") score))

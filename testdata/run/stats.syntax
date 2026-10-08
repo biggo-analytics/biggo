@@ -1,0 +1,34 @@
+(let points
+  (call from_rows
+    (list
+      (record (x: 1) (y: 2.1) (group: "a"))
+      (record (x: 2) (y: 3.9) (group: "a"))
+      (record (x: 3) (y: 6.2) (group: "a"))
+      (record (x: 4) (y: 7.8) (group: "b"))
+      (record (x: 5) (y: 10.1) (group: "b"))
+      (record (x: 6) (y: null) (group: "b")))))
+(call print
+  (|> points
+    (call agg
+      (r: (call round (call corr y x) 4))
+      (covariance: (call round (call cov y x) 4))
+      (slope: (call round (call slope y x) 4))
+      (intercept: (call round (call intercept y x) 4)))))
+(call print
+  (|> points
+    (call group group)
+    (call agg
+      (n: (call count y))
+      (slope: (call round (call slope y x) 3))
+      (r: (call round (call corr x y) 3)))))
+(let line (call linreg points y x))
+(call print
+  (call round (?? (. line slope) 0.0) 4)
+  (call round (?? (. line intercept) 0.0) 4)
+  (call round (?? (. line r2) 0.0) 4))
+(call print (call linreg (|> points (call take 1)) y x))
+(call print (call describe points))
+(call print (call histogram points y))
+(call print (call histogram points x (bins: 3)))
+(call print (call histogram (|> points (call where (== x 2))) x 4))
+(call print (call histogram points x (bins: 0)))

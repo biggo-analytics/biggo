@@ -1,0 +1,28 @@
+plan:
+  Limit: take 10
+    Sort: total desc
+      Aggregate: by region, month = month(date); total = sum(revenue), orders = count(), avg = mean(revenue)
+        Project: date, region, product, qty, price, revenue = float(qty) * (price ?? 0.0)
+          Filter: qty > 0 and date >= 2026-01-01
+            Scan csv "run/data/sales.csv": date, region, product, qty, price
+optimized plan:
+  Limit: take 10
+    Sort: total desc (first 10)
+      Aggregate: by region, month = month(date); total = sum(revenue), orders = count(), avg = mean(revenue)
+        Project: date, region, revenue = float(qty) * (price ?? 0.0)
+          Scan csv "run/data/sales.csv": date, region, qty, price where qty > 0, date >= 2026-01-01
+
+plan:
+  Limit: take 10
+    Sort: total desc
+      Aggregate: by region, month = month(date); total = sum(revenue), orders = count(), avg = mean(revenue)
+        Project: date, region, product, qty, price, revenue = float(qty) * (price ?? 0.0)
+          Filter: qty > 0 and date >= 2026-01-01
+            Scan csv "run/data/sales.csv": date, region, product, qty, price
+optimized plan:
+  Limit: take 10
+    Sort: total desc (first 10)
+      Aggregate: by region, month = month(date); total = sum(revenue), orders = count(), avg = mean(revenue)
+        Project: date, region, revenue = float(qty) * (price ?? 0.0)
+          Scan csv "run/data/sales.csv": date, region, qty, price where qty > 0, date >= 2026-01-01
+

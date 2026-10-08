@@ -1,0 +1,2 @@
+// A test file without test functions passes if it runs to its end.
+assert(len(range(3)) == 3)

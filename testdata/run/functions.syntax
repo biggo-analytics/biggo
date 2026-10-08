@@ -1,0 +1,31 @@
+(let rate 0.25)
+(fn fib(n: int) -> int
+  (block
+    (if (< n 2) (block n) (block (+ (call fib (- n 1)) (call fib (- n 2)))))))
+(fn clamp(value: int, low: int, high: int) -> int
+  (block
+    (if
+      (< value low)
+      (block low)
+      (if (> value high) (block high) (block value)))))
+(fn with_tax(amount: float) -> float (block (* amount (+ 1 rate))))
+(fn is_even(n: int) -> bool
+  (block (if (== n 0) (block true) (block (call is_odd (- n 1))))))
+(fn is_odd(n: int) -> bool
+  (block (if (== n 0) (block false) (block (call is_even (- n 1))))))
+(fn sum_to(n: int) -> int
+  (block
+    (fn go(i: int, acc: int) -> int
+      (block (if (> i n) (block acc) (block (call go (+ i 1) (+ acc i))))))
+    (call go 1 0)))
+(call print (call fib 15))
+(call print
+  (call clamp 150 (low: 0) (high: 100))
+  (call clamp (high: 100) (low: 0) (value: (- 5))))
+(call print (call with_tax 100))
+(call print (call is_even 10) (call is_odd 7) (call is_even 7))
+(call print (call sum_to 100))
+(call print (|> 42 (call clamp 0 10)))
+(|> 150 (call clamp (low: 0) (high: 100)) (call print))
+(let label (if (> (call fib 10) 50) (block "big") (block "small")))
+(call print label)

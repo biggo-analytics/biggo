@@ -1,0 +1,48 @@
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(|> sales
+  (call group region)
+  (call agg
+    (orders: (call count))
+    (priced: (call count price))
+    (units: (call sum qty))
+    (avg_qty: (call mean qty))
+    (low: (call min price))
+    (high: (call max price))
+    (first_product: (call first product))
+    (last_day: (call max date))
+    (products: (call count_distinct product))
+    (mid: (call median qty))
+    (spread: (call stddev qty)))
+  (call sort region)
+  (call print))
+(|> sales
+  (call group (month: (call month date)) (large: (>= qty 5)))
+  (call agg
+    (per_order: (/ (call sum qty) (call count)))
+    (revenue: (call round (call sum (* qty (?? price 0.0))) 1)))
+  (call sort month large)
+  (call print))
+(|> sales
+  (call agg
+    (rows: (call count))
+    (total: (call sum qty))
+    (best: (call max price)))
+  (call print))
+(|> sales
+  (call where (> qty 1000))
+  (call agg
+    (rows: (call count))
+    (total: (call sum qty))
+    (best: (call max price)))
+  (call print))
+(let by_product (|> sales (call group product)))
+(|> by_product
+  (call agg (n: (call count)))
+  (call sort (call desc n) product)
+  (call print))
+(|> by_product
+  (call agg (units: (call sum qty)))
+  (call where (> units 5))
+  (call sort product)
+  (call print))

@@ -1,0 +1,16 @@
+// The largest rows by a computed value.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: float?,
+}
+
+read_csv<Sale>("data/sales.csv")
+  |> derive(revenue = qty * (price ?? 0.0))
+  |> sort(desc(revenue), date, customer_id)
+  |> select(date, region, customer_id, revenue)
+  |> take(5)
+  |> print()

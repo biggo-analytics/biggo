@@ -1,0 +1,5 @@
+error: column `price` of data/sales.csv has missing values, but is declared `float`; declare it `float?`
+ --> run/bad_null.bgo:4:1
+  |
+4 | read_csv<Sale>("data/sales.csv") |> print()
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

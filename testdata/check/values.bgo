@@ -1,0 +1,93 @@
+// The type errors of functions as values, `match`, records, maps, and the exact types.
+
+let untyped = fn(x) { x + 1 }
+let two: fn(int) -> int = fn(a, b) { a }
+let text: fn(int) -> int = fn(x) { "no" }
+fn apply(f: fn(int) -> int, x: int) -> int { f(x) }
+apply(fn(x: string) { 1 }, 2)
+apply(1, 2)
+let inc: fn(int) -> int = fn(x) { x + 1 }
+inc(1, 2)
+inc("a")
+map([1, 2], 3)
+map(1, fn(x) { x })
+map([1], fn(x) { print(x) })
+filter([1, 2], fn(x) { x + 1 })
+fold([1, 2], 0, fn(total, x) { total + 0.5 })
+fold([1], null, fn(a, b) { a })
+each([1], fn(a, b) { a })
+len("abc")
+range("a")
+let fns = [fn(x: int) { x }]
+
+match 1 { 1 => "a" }
+match 1 { _ => 1, 2 => 2 }
+match 1 { 1 => "a", _ => 2 }
+match 1 { "a" => 1, _ => 2 }
+match 1 { null => 1, _ => 2 }
+match [1] { _ => 1 }
+match true { true => 1 }
+
+let twice = { a: 1, a: 2 }
+let point = { a: 1 }
+point.b
+point[0]
+[1, 2]["a"]
+let mixed = { "a": 1, 2: 2 }
+let again = { "a": 1, "a": 2 }
+let floats = { 1.5: 1 }
+let stock = { "a": 1 }
+stock[1]
+put(stock, "b", "c")
+keys([1])
+let other: { a: int } = { b: 1 }
+let nested: map<list<int>, int> = {}
+let holder = { f: inc }
+from_rows([1, 2])
+from_rows([])
+from_rows([{ a: [1] }])
+from_rows<{ a: int }>([{ a: "x" }])
+
+1.5d + "a"
+@2026-01-01 + 1
+days(1) * 2
+hours("1")
+hour(1)
+@2026-01-01T10:00:00 + @2026-01-01T10:00:00
+let exact: decimal = 1.5
+-days(1)
+total_seconds(1)
+to_date(1)
+
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+let sales = read_csv<Sale>("data/sales.csv")
+sales |> pivot(region, ["north"], qty)
+sales |> pivot(region, "north", sum(qty))
+sales |> pivot(region, [1], sum(qty))
+sales |> pivot(region, ["a"], sum(qty), count())
+sales |> pivot(region, ["a", "a"], sum(qty))
+sales |> pivot(region, ["a"], first(qty))
+sales |> unpivot(qty, price)
+sales |> unpivot(qty, names = "region")
+sales |> unpivot()
+sales |> explode(qty)
+sales |> explode(region, 1)
+sales |> agg(c = corr(qty))
+sales |> agg(c = corr(region, qty))
+sales |> window(by = region, c = corr(qty, price))
+histogram(sales, region)
+histogram(sales, qty, size = 2)
+linreg(sales, qty)
+linreg(sales, region, qty)
+describe(1)
+read_sql<Sale>("x.db")
+read_json<int>("x.json")
+write_sql(sales, "x.db")
+assert(1)
+assert(is_null(null))
+assert_eq(1, "a")
+assert_eq(sales, sales |> select(qty))
+to_rows(1)
+fn late() {
+  import "x.bgo"
+}

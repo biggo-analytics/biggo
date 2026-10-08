@@ -1,0 +1,26 @@
+{name: "Ann", age: 31, tags: ["a", "b"]} Ann 32 a
+5.0
+[{x: 1.0, y: 2.0}, {x: 0.5, y: 0.0}] [1.0, 0.5]
+{"tea": 4, "cake": 0} 4 null 0
+{"tea": 5, "cake": 0, "milk": 9} ["tea", "cake", "milk"] [5, 0, 9] 3 true false
+{} 0 {"a": 1}
+two null
+{"a": 2, "b": 1}
+[{product: "widget", qty: 10, price: 2.5}, {product: "gadget", qty: 3, price: 10.0}, {product: "widget", qty: 0, price: 2.5}]
+widget [20, 6, 0]
++------------+--------+---------+
+| city       | people | capital |
++------------+--------+---------+
+| Bangkok    | 10.5   | true    |
+| Chiang Mai | null   | false   |
++------------+--------+---------+
++---------+
+| city    |
++---------+
+| Bangkok |
++---------+
++----+------+
+| id | note |
++----+------+
++----+------+
+1 null

@@ -1,0 +1,29 @@
+(type Event {id: int, kind: string, at: datetime, cost: decimal?, ok: bool})
+(let events (call read_json <Event> "data/events.json"))
+(call print events)
+(call print
+  (|> events
+    (call where ok)
+    (call group kind)
+    (call agg (n: (call count)) (cost: (call sum cost)))
+    (call sort kind)))
+(call write_json
+  (|> events (call derive (day: (call to_date at))) (call select id day cost))
+  "out/events.json")
+(call print
+  (call read_json <{id: int, day: date, cost: decimal?}> "out/events.json"))
+(call write_sql events "out/events.db" "events")
+(call write_sql
+  (|> events (call group kind) (call agg (n: (call count))))
+  "out/events.db"
+  "kinds")
+(type Count {kind: string, n: int})
+(call print
+  (call read_sql <Count> "out/events.db" "select kind, n from kinds order by kind"))
+(call print
+  (call read_sql <{id: int, at: datetime, cost: decimal?, ok: bool}> "out/events.db" "select id, at, cost, ok from events where cost is not null order by id desc"))
+(call write_sql (|> events (call take 1)) "out/events.db" "events")
+(call print
+  (call read_sql <{rows: int}> "out/events.db" "select count(*) as rows from events"))
+(call print
+  (call read_sql <Count> "out/events.db" "select kind, n from nowhere"))

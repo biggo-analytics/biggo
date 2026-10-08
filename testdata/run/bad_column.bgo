@@ -1,0 +1,4 @@
+// A declared column that the file does not have.
+type Sale = { region: string, amount: int }
+
+read_csv<Sale>("data/sales.csv") |> take(1) |> print()

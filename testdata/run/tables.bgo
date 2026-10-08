@@ -1,0 +1,43 @@
+// Row-wise table operations.
+
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+
+let sales = read_csv<Sale>("data/sales.csv")
+
+print(sales |> take(3))
+print(sales |> count())
+
+// A column can use one defined earlier in the same `derive`, and values of the program.
+let min_qty = 4
+sales
+  |> where(qty >= min_qty and region != "east")
+  |> derive(revenue = qty * (price ?? 0.0), label = upper(region) + "-" + product)
+  |> derive(taxed = round(revenue * 1.07, 2), size = if revenue > 20 { "big" } else { "small" })
+  |> select(date, label, revenue, taxed, size)
+  |> sort(desc(revenue), label)
+  |> print()
+
+sales
+  |> select(product, year = year(date), month = month(date))
+  |> distinct()
+  |> sort(product, year, month)
+  |> print()
+sales |> distinct(region) |> sort(region) |> print()
+sales
+  |> drop(date, product)
+  |> rename(quantity = qty)
+  |> sort(desc(quantity))
+  |> skip(1)
+  |> take(2)
+  |> print()
+
+// Null: a comparison with a missing price is null, and `where` drops the row.
+sales |> where(is_null(price)) |> print()
+sales |> where(price > 50) |> select(product, price) |> print()
+sales |> where(not (price > 50)) |> count() |> print()
+
+// Columns whose names need quoting.
+sales
+  |> select(`order date` = date, `type` = product)
+  |> where(`type` == "gizmo")
+  |> print()

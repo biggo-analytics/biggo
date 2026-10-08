@@ -1,0 +1,20 @@
+["none", "few", "few", "many", "owed"]
+1 0
+missing zero some
+0.5 two new year
+computing 3
+three
++---------+-----+-------+--------+
+| product | qty | size  | priced |
++---------+-----+-------+--------+
+| widget  | 10  | large | yes    |
+| gadget  | 3   | small | yes    |
+| widget  | 0   | none  | yes    |
+| gadget  | 5   | large | no     |
++---------+-----+-------+--------+
++------+-------+
+| tier | units |
++------+-------+
+| 1    | 21    |
+| 2    | 24    |
++------+-------+

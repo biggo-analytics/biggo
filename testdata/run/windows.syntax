@@ -1,0 +1,27 @@
+(type Visit {day: date, site: string, visits: int?})
+(let log (call read_csv <Visit> "data/visits.csv"))
+(|> log
+  (call window
+    (by: site)
+    (order: day)
+    (n: (call row_number))
+    (prev: (call lag visits))
+    (after_next: (call lead visits 2))
+    (running: (call cumsum visits))
+    (avg2: (call moving_avg visits 2))
+    (site_total: (call sum visits)))
+  (call print))
+(|> log
+  (call window
+    (by: site)
+    (order: (call desc visits))
+    (place: (call rank))
+    (share: (call round (/ visits (call sum visits)) 2)))
+  (call sort site place day)
+  (call print))
+(|> log
+  (call window
+    (order: (list (call desc visits) day))
+    (overall: (call row_number)))
+  (call where (<= overall 3))
+  (call print))

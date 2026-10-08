@@ -1,0 +1,12 @@
+fn test_passes() {
+  assert(true)
+}
+
+fn test_fails() {
+  print("checking the sum")
+  assert_eq(1 + 1, 3)
+}
+
+fn test_needs_argument(n: int) {
+  assert(n > 0)
+}

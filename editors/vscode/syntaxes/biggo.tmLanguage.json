@@ -1,0 +1,218 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "biggo",
+  "scopeName": "source.biggo",
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#string"
+    },
+    {
+      "include": "#quoted-name"
+    },
+    {
+      "include": "#moment"
+    },
+    {
+      "include": "#number"
+    },
+    {
+      "include": "#declaration"
+    },
+    {
+      "include": "#keyword"
+    },
+    {
+      "include": "#type"
+    },
+    {
+      "include": "#call"
+    },
+    {
+      "include": "#argument-name"
+    },
+    {
+      "include": "#operator"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-slash.biggo",
+      "match": "//.*$"
+    },
+    "string": {
+      "name": "string.quoted.double.biggo",
+      "begin": "\"",
+      "end": "\"|$",
+      "patterns": [
+        {
+          "name": "constant.character.escape.biggo",
+          "match": "\\\\[ntr0\\\\\\\"]"
+        },
+        {
+          "name": "invalid.illegal.escape.biggo",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "quoted-name": {
+      "name": "variable.other.quoted.biggo",
+      "match": "`[^`\\n]*`"
+    },
+    "moment": {
+      "name": "constant.other.date.biggo",
+      "match": "@\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,6})?)?)?"
+    },
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric.decimal.biggo",
+          "match": "\\b\\d[\\d_]*(\\.\\d[\\d_]*)?d\\b"
+        },
+        {
+          "name": "constant.numeric.float.biggo",
+          "match": "\\b\\d[\\d_]*(\\.\\d[\\d_]*([eE][+-]?\\d+)?|[eE][+-]?\\d+)\\b"
+        },
+        {
+          "name": "constant.numeric.integer.biggo",
+          "match": "\\b\\d[\\d_]*\\b"
+        }
+      ]
+    },
+    "declaration": {
+      "patterns": [
+        {
+          "match": "\\b(fn)\\s+([\\p{L}_][\\p{L}\\p{M}\\p{N}_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.biggo"
+            },
+            "2": {
+              "name": "entity.name.function.biggo"
+            }
+          }
+        },
+        {
+          "match": "\\b(type)\\s+([\\p{L}_][\\p{L}\\p{M}\\p{N}_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.biggo"
+            },
+            "2": {
+              "name": "entity.name.type.biggo"
+            }
+          }
+        },
+        {
+          "match": "\\b(let)\\s+([\\p{L}_][\\p{L}\\p{M}\\p{N}_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.biggo"
+            },
+            "2": {
+              "name": "variable.other.definition.biggo"
+            }
+          }
+        }
+      ]
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "name": "keyword.control.biggo",
+          "match": "\\b(if|else|match)\\b"
+        },
+        {
+          "name": "keyword.control.import.biggo",
+          "match": "\\bimport\\b"
+        },
+        {
+          "name": "storage.type.biggo",
+          "match": "\\b(let|fn|type)\\b"
+        },
+        {
+          "name": "keyword.operator.word.biggo",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "name": "constant.language.biggo",
+          "match": "\\b(true|false|null)\\b"
+        }
+      ]
+    },
+    "type": {
+      "patterns": [
+        {
+          "name": "support.type.biggo",
+          "match": "\\b(list|map|table)\\b(?=\\s*<)"
+        },
+        {
+          "match": "(?<=:|->|<)(\\s*)\\b(int|float|bool|string|date|datetime|duration|decimal)\\b",
+          "captures": {
+            "2": {
+              "name": "support.type.biggo"
+            }
+          }
+        }
+      ]
+    },
+    "call": {
+      "patterns": [
+        {
+          "name": "support.function.biggo",
+          "match": "\\b(abs|agg|assert|assert_eq|ceil|collect|contains|corr|count|count_distinct|cov|cumsum|day|days|derive|describe|distinct|drop|each|ends_with|explain|explode|filter|first|floor|fold|from_rows|group|has_key|histogram|hour|hours|intercept|is_null|join|keys|lag|last|lead|len|length|linreg|lower|map|max|mean|median|min|minute|minutes|month|moving_avg|pivot|print|put|range|rank|read_csv|read_json|read_parquet|read_sql|rename|round|row_number|second|seconds|select|skip|slope|sort|sqrt|starts_with|stddev|sum|take|to_date|to_datetime|to_decimal|to_float|to_int|to_rows|to_string|total_seconds|trim|union|unpivot|upper|values|where|window|write_csv|write_json|write_parquet|write_sql|year)\\b(?=\\s*[(<])"
+        },
+        {
+          "name": "keyword.other.sort-order.biggo",
+          "match": "\\b(asc|desc)\\b(?=\\s*\\()"
+        },
+        {
+          "name": "entity.name.function.call.biggo",
+          "match": "[\\p{L}_][\\p{L}\\p{M}\\p{N}_]*(?=\\s*\\()"
+        }
+      ]
+    },
+    "argument-name": {
+      "name": "variable.parameter.biggo",
+      "match": "[\\p{L}_][\\p{L}\\p{M}\\p{N}_]*(?=\\s*=(?![=>]))"
+    },
+    "operator": {
+      "patterns": [
+        {
+          "name": "keyword.operator.pipe.biggo",
+          "match": "\\|>"
+        },
+        {
+          "name": "keyword.operator.arrow.biggo",
+          "match": "=>|->"
+        },
+        {
+          "name": "keyword.operator.coalesce.biggo",
+          "match": "\\?\\?"
+        },
+        {
+          "name": "keyword.operator.comparison.biggo",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.biggo",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.biggo",
+          "match": "[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.alternative.biggo",
+          "match": "\\|"
+        },
+        {
+          "name": "keyword.operator.nullable.biggo",
+          "match": "\\?"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,16 @@
+(call assert (== (+ 1 1) 2))
+(call assert (== (call len (list 1 2)) 2) "two items")
+(call assert_eq (call map (list 1 2) (lambda (n) (block (* n 2)))) (list 2 4))
+(call assert_eq
+  (record (name: "a") (score: 1.0))
+  (record (name: "a") (score: 1)))
+(call assert_eq (call put (map ("a" 1)) "b" 2) (map ("b" 2) ("a" 1)))
+(call assert_eq (+ 0.1d 0.2d) 0.3d)
+(let table
+  (call from_rows
+    (list (record (id: 1) (name: "a")) (record (id: 2) (name: "b")))))
+(call assert_eq
+  (|> table (call where (> id 1)))
+  (call from_rows (list (record (id: 2) (name: "b")))))
+(call print "so far so good")
+(call assert_eq (|> table (call sort (call desc id))) table)

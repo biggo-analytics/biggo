@@ -1,0 +1,7 @@
+[package]
+name = "biggo-syntax"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+unicode-ident.workspace = true

@@ -1,0 +1,5 @@
+error: data/sales.csv has no column `amount`; its columns are date, region, product, qty, price
+ --> run/bad_column.bgo:4:1
+  |
+4 | read_csv<Sale>("data/sales.csv") |> take(1) |> print()
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

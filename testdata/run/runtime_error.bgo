@@ -1,0 +1,9 @@
+// A runtime error stops the program and points at the expression that failed.
+
+fn bucket(id: int, buckets: int) -> int {
+  id % buckets
+}
+
+print("before")
+print(bucket(42, 0))
+print("after")

@@ -1,0 +1,8 @@
+(fn check_total(total: int)
+  (block
+    (call assert
+      (> total 0)
+      (+ "the total must be positive, but is " (call to_string total)))))
+(call check_total 3)
+(call print (call fold (list 1 2) 0 (lambda (total, n) (block (+ total n)))))
+(call assert_eq (list 1 2 3) (list 1 2 4))

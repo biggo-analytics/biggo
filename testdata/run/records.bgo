@@ -1,0 +1,41 @@
+// Records, maps, and tables made of them.
+
+let ann = { name: "Ann", age: 31, tags: ["a", "b"] }
+print(ann, ann.name, ann.age + 1, ann.tags[0])
+
+type Point = { x: float, y: float }
+fn norm(p: Point) -> float { sqrt(p.x * p.x + p.y * p.y) }
+// A record that is written out converts field by field: these ints become floats.
+print(norm({ x: 3, y: 4 }))
+let points: list<Point> = [{ x: 1, y: 2 }, { x: 0.5, y: 0 }]
+print(points, map(points, fn(p) { p.x }))
+
+// Maps keep the order their keys were put in. A key that is missing gives null.
+let stock = { "tea": 4, "cake": 0 }
+print(stock, stock["tea"], stock["milk"], stock["milk"] ?? 0)
+let more = put(put(stock, "milk", 9), "tea", 5)
+print(more, keys(more), values(more), len(more), has_key(more, "milk"), has_key(stock, "milk"))
+let none: map<string, int> = {}
+print(none, len(none), put(none, "a", 1))
+let by_id = { 1: "one", 2: "two" }
+print(by_id[2], by_id[3])
+let counts = fold(["a", "b", "a"], none, fn(seen, word) { put(seen, word, (seen[word] ?? 0) + 1) })
+print(counts)
+
+// The rows of a table are records, and a list of records makes a table.
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+let sales = read_csv<Sale>("data/sales.csv")
+let rows = to_rows(sales |> select(product, qty, price) |> take(3))
+print(rows)
+print(rows[0].product, map(rows, fn(row) { row.qty * 2 }))
+let table = from_rows([
+  { city: "Bangkok", people: 10.5, capital: true },
+  { city: "Chiang Mai", people: null, capital: false },
+])
+print(table)
+print(table |> where(capital) |> select(city))
+print(from_rows<{ id: int, note: string? }>([]))
+
+// A field of a record that may be null is null when the record is.
+let found = { "a": { score: 1 } }
+print(found["a"].score, found["b"].score)

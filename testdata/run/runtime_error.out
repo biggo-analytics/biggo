@@ -1,0 +1,6 @@
+before
+error: division by zero
+ --> run/runtime_error.bgo:4:3
+  |
+4 |   id % buckets
+  |   ^^^^^^^^^^^^

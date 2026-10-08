@@ -1,0 +1,38 @@
+// Grouping and aggregation.
+
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+
+let sales = read_csv<Sale>("data/sales.csv")
+
+sales
+  |> group(region)
+  |> agg(
+    orders = count(),
+    priced = count(price),
+    units = sum(qty),
+    avg_qty = mean(qty),
+    low = min(price),
+    high = max(price),
+    first_product = first(product),
+    last_day = max(date),
+    products = count_distinct(product),
+    mid = median(qty),
+    spread = stddev(qty),
+  )
+  |> sort(region)
+  |> print()
+
+// Expressions over aggregates, and group columns that are computed.
+sales
+  |> group(month = month(date), large = qty >= 5)
+  |> agg(per_order = sum(qty) / count(), revenue = round(sum(qty * (price ?? 0.0)), 1))
+  |> sort(month, large)
+  |> print()
+
+// Aggregating a whole table gives one row, even when the table is empty.
+sales |> agg(rows = count(), total = sum(qty), best = max(price)) |> print()
+sales |> where(qty > 1000) |> agg(rows = count(), total = sum(qty), best = max(price)) |> print()
+
+let by_product = sales |> group(product)
+by_product |> agg(n = count()) |> sort(desc(n), product) |> print()
+by_product |> agg(units = sum(qty)) |> where(units > 5) |> sort(product) |> print()

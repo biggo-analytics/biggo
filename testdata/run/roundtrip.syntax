@@ -1,0 +1,42 @@
+(type Row {id: int, ratio: float?, ok: bool, name: string, day: date, at: datetime, took: duration?, cost: decimal})
+(let rows
+  (call from_rows <Row>
+    (list
+      (record
+        (id: 1)
+        (ratio: 0.5)
+        (ok: true)
+        (name: "ก ไก\u{e48}, \"quoted\"")
+        (day: @2026-01-02)
+        (at: @2026-01-02T03:04:05.5)
+        (took: (call hours 1.5))
+        (cost: 2.5d))
+      (record
+        (id: (- 2))
+        (ratio: null)
+        (ok: false)
+        (name: "")
+        (day: @1999-12-31)
+        (at: @2026-01-02)
+        (took: null)
+        (cost: (/ 1d 3))))))
+(call print rows)
+(call write_csv rows "out/roundtrip.csv")
+(call write_json rows "out/roundtrip.json")
+(call write_parquet rows "out/roundtrip.parquet")
+(call write_sql rows "out/roundtrip.db" "rows")
+(call assert_eq (call read_csv <Row> "out/roundtrip.csv") rows)
+(call assert_eq (call read_json <Row> "out/roundtrip.json") rows)
+(call assert_eq (call read_parquet <Row> "out/roundtrip.parquet") rows)
+(call assert_eq
+  (call read_sql <Row> "out/roundtrip.db" "select * from rows")
+  rows)
+(call print
+  (call read_csv <{id: int, took: float?, cost: string}> "out/roundtrip.csv"))
+(call print
+  (call read_sql <{id: int, took: float?, cost: string, ok: int}> "out/roundtrip.db" "select * from rows"))
+(call print
+  (|>
+    (call read_json <{id: int, at: string}> "out/roundtrip.json")
+    (call where (== id 1))))
+(call print (call read_csv <{id: int, name: datetime}> "out/roundtrip.csv"))

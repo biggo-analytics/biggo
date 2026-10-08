@@ -1,0 +1,10 @@
+(type Sale {product: string, qty: int})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(|> sales
+  (call derive
+    (per_unit: (if (!= qty 0) (block (% 100 qty)) (block (- 1))))
+    (divides: (and (!= qty 0) (== (% 100 qty) 0)))
+    (fallback: (?? (if (> qty 4) (block qty) (block null)) (% 100 (+ qty 1)))))
+  (call take 4)
+  (call print))
+(|> sales (call derive (per_unit: (% 100 qty))) (call print))

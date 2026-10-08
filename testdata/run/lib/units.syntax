@@ -1,0 +1,3 @@
+(let unit "cm")
+(fn with_unit(amount: float) -> string
+  (block (+ (+ (call to_string amount) " ") unit)))

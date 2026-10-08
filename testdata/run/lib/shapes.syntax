@@ -1,0 +1,5 @@
+(import "units.bgo")
+(type Rect {width: float, height: float})
+(fn area(rect: Rect) -> float (block (* (. rect width) (. rect height))))
+(let unit_square: Rect (record (width: 1) (height: 1)))
+(call print "shapes loaded, in" unit)

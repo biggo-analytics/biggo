@@ -1,0 +1,91 @@
+(let price 19.99d)
+(call print price
+  (* price 3)
+  (+ price 1)
+  (- price 0.99d)
+  (/ price 3)
+  (% price 5)
+  (- price))
+(call print (+ 0.1 0.2) (+ 0.1d 0.2d) (== (+ 0.1d 0.2d) 0.3d))
+(call print
+  (call round price)
+  (call round price 1)
+  (call round 2.5d)
+  (call abs (- 1.5d))
+  (* (call to_float price) 2)
+  (* price 2.0))
+(call print
+  (+ (call to_decimal "12.50") 1)
+  (call to_decimal 3)
+  (call to_decimal 0.1)
+  (call to_int 19.99d)
+  (call to_string 1.5d))
+(call print (> price 19) (< price 20.5) (list 1.5d 2 3))
+(let start @2026-01-31T22:30:00)
+(let stop @2026-02-01T01:15:30.5)
+(let took (- stop start))
+(call print start stop took (call total_seconds took))
+(call print
+  (call year start)
+  (call month start)
+  (call day start)
+  (call hour start)
+  (call minute start)
+  (call second stop))
+(call print
+  (+ start (call hours 2))
+  (- start (call days 31))
+  (+ (+ start (call minutes 90)) (call seconds 0.25)))
+(call print
+  (+ (call days 1) (call hours 12))
+  (- (call days 1) (call hours 36))
+  (== (call hours 1) (call minutes 60))
+  (> took (call hours 2)))
+(call print
+  (- @2026-03-01 @2026-02-01)
+  (+ @2026-02-01 (call days 1))
+  (> start @2026-01-31)
+  (call to_date start))
+(call print
+  (call to_datetime "2026-05-05 01:02:03")
+  (call to_datetime @2026-05-05)
+  (call to_date "2026-05-05"))
+(type Order {id: int, placed: datetime, shipped: datetime?, amount: decimal})
+(let orders
+  (call from_rows <Order>
+    (list
+      (record
+        (id: 1)
+        (placed: @2026-01-05T09:00:00)
+        (shipped: @2026-01-06T15:30:00)
+        (amount: 120.5d))
+      (record
+        (id: 2)
+        (placed: @2026-01-05T18:45:00)
+        (shipped: null)
+        (amount: 80))
+      (record
+        (id: 3)
+        (placed: @2026-01-07T07:10:00)
+        (shipped: @2026-01-07T19:10:00)
+        (amount: 0.75d)))))
+(call print
+  (|> orders
+    (call derive
+      (wait: (- shipped placed))
+      (tax: (call round (* amount 0.07d) 2))
+      (day: (call to_date placed)))))
+(call print
+  (|> orders
+    (call agg
+      (total: (call sum amount))
+      (largest: (call max amount))
+      (first: (call min placed))
+      (longest: (call max (- shipped placed)))
+      (waited: (call sum (- shipped placed))))))
+(call print
+  (|> orders
+    (call where (and (>= (call hour placed) 9) (> amount 1)))
+    (call select id amount)
+    (call sort (call desc amount))))
+(call print (/ 1d 0d))

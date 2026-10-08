@@ -1,0 +1,41 @@
+// Decimals, datetimes, and durations.
+
+let price = 19.99d
+print(price, price * 3, price + 1, price - 0.99d, price / 3, price % 5, -price)
+// Floats cannot hold these sums exactly; decimals can.
+print(0.1 + 0.2, 0.1d + 0.2d, 0.1d + 0.2d == 0.3d)
+print(round(price), round(price, 1), round(2.5d), abs(-1.5d), to_float(price) * 2, price * 2.0)
+print(to_decimal("12.50") + 1, to_decimal(3), to_decimal(0.1), to_int(19.99d), to_string(1.50d))
+print(price > 19, price < 20.5, [1.5d, 2, 3])
+
+let start = @2026-01-31T22:30:00
+let stop = @2026-02-01T01:15:30.5
+let took = stop - start
+print(start, stop, took, total_seconds(took))
+print(year(start), month(start), day(start), hour(start), minute(start), second(stop))
+print(start + hours(2), start - days(31), start + minutes(90) + seconds(0.25))
+print(days(1) + hours(12), days(1) - hours(36), hours(1) == minutes(60), took > hours(2))
+// A date counts as the start of its day.
+print(@2026-03-01 - @2026-02-01, @2026-02-01 + days(1), start > @2026-01-31, to_date(start))
+print(to_datetime("2026-05-05 01:02:03"), to_datetime(@2026-05-05), to_date("2026-05-05"))
+
+// The same types are column types.
+type Order = { id: int, placed: datetime, shipped: datetime?, amount: decimal }
+let orders = from_rows<Order>([
+  { id: 1, placed: @2026-01-05T09:00:00, shipped: @2026-01-06T15:30:00, amount: 120.50d },
+  { id: 2, placed: @2026-01-05T18:45:00, shipped: null, amount: 80 },
+  { id: 3, placed: @2026-01-07T07:10:00, shipped: @2026-01-07T19:10:00, amount: 0.75d },
+])
+print(orders |> derive(wait = shipped - placed, tax = round(amount * 0.07d, 2), day = to_date(placed)))
+print(
+  orders
+    |> agg(
+      total = sum(amount),
+      largest = max(amount),
+      first = min(placed),
+      longest = max(shipped - placed),
+      waited = sum(shipped - placed),
+    ),
+)
+print(orders |> where(hour(placed) >= 9 and amount > 1) |> select(id, amount) |> sort(desc(amount)))
+print(1d / 0d)

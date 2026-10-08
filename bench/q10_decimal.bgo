@@ -1,0 +1,17 @@
+// Exact arithmetic: the price is read as a decimal, and revenue is summed without rounding
+// error.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: decimal?,
+}
+
+read_csv<Sale>("data/sales.csv")
+  |> group(region)
+  |> agg(total = sum(qty * (price ?? 0d)), dearest = max(price))
+  |> sort(desc(total))
+  |> take(5)
+  |> print()

@@ -1,0 +1,16 @@
+// Scalar expressions: arithmetic, comparison, logic, nulls, strings, dates, and lists.
+
+print(1 + 2 * 3, 10 - 4 - 3, -7 % 3, 2 * (3 + 4))
+print(7 / 2, 6 / 3, 1 / 0, 1.5 + 1, 2e3 * 2)
+print(1 < 2, 2 <= 2, 1 == 1.0, "a" < "b", "ab" != "ab")
+print(@2026-01-01 < @2026-03-15, @2024-02-29 == @2024-02-29)
+print("data" + " " + "analytics")
+
+// A null operand makes the result null; `??` supplies a default.
+print(null + 1, null > 1, null == null, null ?? 0, 5 ?? 0)
+print(null and false, null and true, null or true, null or false, not null)
+print(true and not false, false or false)
+
+let prices = [10.5, 20, null]
+print(prices, ["a", "b"], [])
+print("ราคา", [@2026-10-08, "วันนี้"])

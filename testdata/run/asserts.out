@@ -1,0 +1,8 @@
+so far so good
+error: assertion failed: row 1 differs
+  left:  {id: 2, name: "b"}
+  right: {id: 1, name: "a"}
+  --> run/asserts.bgo:14:1
+   |
+14 | assert_eq(table |> sort(desc(id)), table)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

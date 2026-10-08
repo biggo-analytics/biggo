@@ -1,0 +1,19 @@
+// Tests are the functions named `test_...`; `biggo test` runs each of them.
+import "../run/lib/units.bgo"
+
+fn square(n: int) -> int { n * n }
+
+fn test_square() {
+  assert_eq(square(3), 9)
+  assert_eq(map([1, 2], square), [1, 4])
+}
+
+fn test_units() {
+  assert_eq(with_unit(1.5), "1.5 cm")
+}
+
+fn test_tables() {
+  let rows = from_rows([{ k: "a", v: 1 }, { k: "a", v: 2 }, { k: "b", v: 5 }])
+  let totals = rows |> group(k) |> agg(total = sum(v))
+  assert_eq(totals, from_rows([{ k: "a", total: 3 }, { k: "b", total: 5 }]))
+}

@@ -1,0 +1,22 @@
+// Writing files and reading them back.
+
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+type Summary = { region: string, units: int, best: float?, latest: date }
+
+let sales = read_csv<Sale>("data/sales.csv")
+let summary = sales
+  |> group(region)
+  |> agg(units = sum(qty), best = max(price), latest = max(date))
+  |> sort(region)
+
+write_csv(summary, "out/summary.csv")
+write_parquet(summary, "out/summary.parquet")
+print(read_csv<Summary>("out/summary.csv"))
+print(read_parquet<Summary>("out/summary.parquet") |> where(units > 20) |> select(region, latest))
+
+// A file may have more columns than the program declares, in any order.
+print(read_csv<{ units: int, region: string }>("out/summary.csv") |> sort(desc(units)) |> take(1))
+
+// A collected table is computed once and can be used again.
+let large = collect(sales |> where(qty > 5))
+print(large |> count(), large |> agg(units = sum(qty)))

@@ -1,0 +1,30 @@
+// Mistakes in table operations that the type checker catches before anything runs.
+
+type Sale = { date: date, region: string, qty: int, price: float? }
+
+let sales = read_csv<Sale>("data/sales.csv")
+
+sales |> where(quantity > 1)
+sales |> where(region)
+sales |> select(region, nope)
+sales |> derive(x = region + 1)
+sales |> group(region) |> where(price > 1)
+sales |> agg(total = sum(region))
+sales |> group(region) |> agg(total = price)
+sales |> take("3")
+sales |> sort()
+read_csv("x.csv")
+sales |> join(sales, on = region)
+sales |> derive(p = price + 1) |> where(p == null)
+sales |> window(order = date, n = row_number(), date = rank())
+
+fn double(n: int) -> int { n * 2 }
+sales |> derive(d = double(qty))
+let n: int = sales |> count() |> to_string()
+sum(1)
+sales |> derive(d = [region])
+sales |> where(price > 1) |> missing()
+
+// A variable may not share its name with a column that an expression uses.
+let qty = 5
+sales |> where(qty > 1)

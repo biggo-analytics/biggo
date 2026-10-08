@@ -1,0 +1,6 @@
+fn check_total(total: int) {
+  assert(total > 0, "the total must be positive, but is " + to_string(total))
+}
+check_total(3)
+print(fold([1, 2], 0, fn(total, n) { total + n }))
+assert_eq([1, 2, 3], [1, 2, 4])

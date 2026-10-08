@@ -1,0 +1,2 @@
+(call print "loading")
+(call assert (> 1 2) "checked at the top level")

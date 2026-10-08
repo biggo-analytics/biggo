@@ -1,0 +1,14 @@
+// Assertions pass in silence and stop the program when they fail.
+
+assert(1 + 1 == 2)
+assert(len([1, 2]) == 2, "two items")
+assert_eq(map([1, 2], fn(n) { n * 2 }), [2, 4])
+assert_eq({ name: "a", score: 1.0 }, { name: "a", score: 1 })
+assert_eq(put({ "a": 1 }, "b", 2), { "b": 2, "a": 1 })
+assert_eq(0.1d + 0.2d, 0.3d)
+
+// Two tables are equal when they hold the same rows in the same order.
+let table = from_rows([{ id: 1, name: "a" }, { id: 2, name: "b" }])
+assert_eq(table |> where(id > 1), from_rows([{ id: 2, name: "b" }]))
+print("so far so good")
+assert_eq(table |> sort(desc(id)), table)

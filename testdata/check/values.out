@@ -1,0 +1,473 @@
+error: cannot tell the type of `x` here; write it, as in `x: int`
+ --> check/values.bgo:3:18
+  |
+3 | let untyped = fn(x) { x + 1 }
+  |                  ^
+
+error: this function has 2 parameters, but one with 1 parameter is needed here
+ --> check/values.bgo:4:27
+  |
+4 | let two: fn(int) -> int = fn(a, b) { a }
+  |                           ^^^^^^^^^^^^^^
+
+error: this function must return int, but its body has type string
+ --> check/values.bgo:5:34
+  |
+5 | let text: fn(int) -> int = fn(x) { "no" }
+  |                                  ^^^^^^^^
+
+error: `apply` expects fn(int) -> int for `f`, found fn(x: string) -> int
+ --> check/values.bgo:7:7
+  |
+7 | apply(fn(x: string) { 1 }, 2)
+  |       ^^^^^^^^^^^^^^^^^^^
+
+error: `apply` expects fn(int) -> int for `f`, found int
+ --> check/values.bgo:8:7
+  |
+8 | apply(1, 2)
+  |       ^
+
+error: too many arguments: `inc` takes 1
+  --> check/values.bgo:10:8
+   |
+10 | inc(1, 2)
+   |        ^
+
+error: `inc` expects int for `x`, found string
+  --> check/values.bgo:11:5
+   |
+11 | inc("a")
+   |     ^^^
+
+error: `map` needs a function here, found int
+  --> check/values.bgo:12:13
+   |
+12 | map([1, 2], 3)
+   |             ^
+
+error: `map` works on a list, found int
+  --> check/values.bgo:13:5
+   |
+13 | map(1, fn(x) { x })
+   |     ^
+
+error: this function gives no value to put in the new list; `each` calls a function for what it does
+  --> check/values.bgo:14:10
+   |
+14 | map([1], fn(x) { print(x) })
+   |          ^^^^^^^^^^^^^^^^^^
+
+error: this function must return bool, but its body has type int
+  --> check/values.bgo:15:22
+   |
+15 | filter([1, 2], fn(x) { x + 1 })
+   |                      ^^^^^^^^^
+
+error: this function must return int, but its body has type float
+  --> check/values.bgo:16:30
+   |
+16 | fold([1, 2], 0, fn(total, x) { total + 0.5 })
+   |                              ^^^^^^^^^^^^^^^
+
+error: cannot tell which type this `null` has; put the starting value in a variable with a type first
+  --> check/values.bgo:17:11
+   |
+17 | fold([1], null, fn(a, b) { a })
+   |           ^^^^
+
+error: this function has 2 parameters, but one with 1 parameter is needed here
+  --> check/values.bgo:18:11
+   |
+18 | each([1], fn(a, b) { a })
+   |           ^^^^^^^^^^^^^^
+
+error: `len` works on a list or a map; `length` gives the length of a string
+  --> check/values.bgo:19:5
+   |
+19 | len("abc")
+   |     ^^^^^
+
+error: the end of a range must be int, found string
+  --> check/values.bgo:20:7
+   |
+20 | range("a")
+   |       ^^^
+
+error: a list cannot hold values of type fn(x: int) -> int
+  --> check/values.bgo:21:11
+   |
+21 | let fns = [fn(x: int) { x }]
+   |           ^^^^^^^^^^^^^^^^^^
+
+error: this `match` does not cover every value; add a `_ => ...` arm
+  --> check/values.bgo:23:7
+   |
+23 | match 1 { 1 => "a" }
+   |       ^
+
+error: this arm is never reached; the `_` arm above takes everything
+  --> check/values.bgo:24:19
+   |
+24 | match 1 { _ => 1, 2 => 2 }
+   |                   ^
+
+error: the arms of a `match` must have one type, found string and int
+  --> check/values.bgo:25:26
+   |
+25 | match 1 { 1 => "a", _ => 2 }
+   |                          ^
+
+error: cannot apply `==` to int and string
+  --> check/values.bgo:26:11
+   |
+26 | match 1 { "a" => 1, _ => 2 }
+   |           ^^^
+
+error: a value of type int is never null
+  --> check/values.bgo:27:11
+   |
+27 | match 1 { null => 1, _ => 2 }
+   |           ^^^^
+
+error: cannot match on a value of type list<int>
+  --> check/values.bgo:28:7
+   |
+28 | match [1] { _ => 1 }
+   |       ^^^
+
+error: this `match` does not cover every value; add a `_ => ...` arm
+  --> check/values.bgo:29:7
+   |
+29 | match true { true => 1 }
+   |       ^^^^
+
+error: field `a` is given twice
+  --> check/values.bgo:31:21
+   |
+31 | let twice = { a: 1, a: 2 }
+   |                     ^
+
+error: this record has no field `b`; its fields are a
+  --> check/values.bgo:33:7
+   |
+33 | point.b
+   |       ^
+
+error: a value of type {a: int} cannot be indexed
+  --> check/values.bgo:34:1
+   |
+34 | point[0]
+   | ^^^^^^^^
+
+error: a list index must be an int, found string
+  --> check/values.bgo:35:8
+   |
+35 | [1, 2]["a"]
+   |        ^^^
+
+error: the keys of a map must have one type, found string and int
+  --> check/values.bgo:36:23
+   |
+36 | let mixed = { "a": 1, 2: 2 }
+   |                       ^
+
+error: this key is given twice
+  --> check/values.bgo:37:23
+   |
+37 | let again = { "a": 1, "a": 2 }
+   |                       ^^^
+
+error: the keys of a map are strings, ints, bools, or dates, not float
+  --> check/values.bgo:38:16
+   |
+38 | let floats = { 1.5: 1 }
+   |                ^^^
+
+error: the keys of this map are string, found int
+  --> check/values.bgo:40:7
+   |
+40 | stock[1]
+   |       ^
+
+error: the values of this map are int, but `put` got string
+  --> check/values.bgo:41:17
+   |
+41 | put(stock, "b", "c")
+   |                 ^^^
+
+error: `keys` works on a map, found list<int>
+  --> check/values.bgo:42:6
+   |
+42 | keys([1])
+   |      ^^^
+
+error: expected {a: int}, found {b: int}
+  --> check/values.bgo:43:25
+   |
+43 | let other: { a: int } = { b: 1 }
+   |                         ^^^^^^^^
+
+error: the keys of a map are strings, ints, bools, or dates, not list<int>
+  --> check/values.bgo:44:17
+   |
+44 | let nested: map<list<int>, int> = {}
+   |                 ^^^^^^^^^
+
+error: a record cannot hold a value of type fn(x: int) -> int
+  --> check/values.bgo:45:19
+   |
+45 | let holder = { f: inc }
+   |                   ^^^
+
+error: `from_rows` works on a list of records, found list<int>
+  --> check/values.bgo:46:11
+   |
+46 | from_rows([1, 2])
+   |           ^^^^^^
+
+error: cannot tell the columns of an empty list; give the row type, as in `from_rows<{id: int}>([])`
+  --> check/values.bgo:47:11
+   |
+47 | from_rows([])
+   |           ^^
+
+error: column `a` cannot have type list<int>
+  --> check/values.bgo:48:11
+   |
+48 | from_rows([{ a: [1] }])
+   |           ^^^^^^^^^^^^
+
+error: expected list<{a: int}>, found list<{a: string}>
+  --> check/values.bgo:49:23
+   |
+49 | from_rows<{ a: int }>([{ a: "x" }])
+   |                       ^^^^^^^^^^^^
+
+error: cannot apply `+` to decimal and string
+  --> check/values.bgo:51:1
+   |
+51 | 1.5d + "a"
+   | ^^^^^^^^^^
+
+error: cannot apply `+` to date and int
+  --> check/values.bgo:52:1
+   |
+52 | @2026-01-01 + 1
+   | ^^^^^^^^^^^^^^^
+
+error: cannot apply `*` to duration and int
+  --> check/values.bgo:53:1
+   |
+53 | days(1) * 2
+   | ^^^^^^^^^^^
+
+error: `hours` expects a number, found string
+  --> check/values.bgo:54:7
+   |
+54 | hours("1")
+   |       ^^^
+
+error: `hour` expects a datetime, found int
+  --> check/values.bgo:55:6
+   |
+55 | hour(1)
+   |      ^
+
+error: cannot apply `+` to datetime and datetime
+  --> check/values.bgo:56:1
+   |
+56 | @2026-01-01T10:00:00 + @2026-01-01T10:00:00
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: expected decimal, found float
+  --> check/values.bgo:57:22
+   |
+57 | let exact: decimal = 1.5
+   |                      ^^^
+
+error: cannot negate duration
+  --> check/values.bgo:58:1
+   |
+58 | -days(1)
+   | ^^^^^^^^
+
+error: `total_seconds` expects a duration, found int
+  --> check/values.bgo:59:15
+   |
+59 | total_seconds(1)
+   |               ^
+
+error: `to_date` cannot convert a value of type int
+  --> check/values.bgo:60:9
+   |
+60 | to_date(1)
+   |         ^
+
+error: `pivot` takes aggregates such as `sum(amount)`
+  --> check/values.bgo:64:35
+   |
+64 | sales |> pivot(region, ["north"], qty)
+   |                                   ^^^
+
+error: the values of `pivot` must be written out as a list
+  --> check/values.bgo:65:24
+   |
+65 | sales |> pivot(region, "north", sum(qty))
+   |                        ^^^^^^^
+
+error: cannot apply `==` to string and int
+  --> check/values.bgo:66:25
+   |
+66 | sales |> pivot(region, [1], sum(qty))
+   |                         ^
+
+error: with several aggregates, `pivot` needs a name for each, as in `total = sum(amount)`
+  --> check/values.bgo:67:1
+   |
+67 | sales |> pivot(region, ["a"], sum(qty), count())
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the result would have two columns called `a`
+  --> check/values.bgo:68:1
+   |
+68 | sales |> pivot(region, ["a", "a"], sum(qty))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `first` cannot be used in `pivot`
+  --> check/values.bgo:69:31
+   |
+69 | sales |> pivot(region, ["a"], first(qty))
+   |                               ^^^^^^^^^^
+
+error: the columns of `unpivot` need one type, but `qty` is int and `price` is float; convert one first
+  --> check/values.bgo:70:1
+   |
+70 | sales |> unpivot(qty, price)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the table already has a column `region`; choose other names with `names = "..."` and `values = "..."`
+  --> check/values.bgo:71:1
+   |
+71 | sales |> unpivot(qty, names = "region")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `unpivot` needs the columns to turn into rows, as in `unpivot(a, b)`
+  --> check/values.bgo:72:1
+   |
+72 | sales |> unpivot()
+   | ^^^^^^^^^^^^^^^^^^
+
+error: `explode` splits a column of strings, but `qty` is int
+  --> check/values.bgo:73:18
+   |
+73 | sales |> explode(qty)
+   |                  ^^^
+
+error: the separator must be written as a string, not empty
+  --> check/values.bgo:74:26
+   |
+74 | sales |> explode(region, 1)
+   |                          ^
+
+error: `corr` takes two columns, as in `corr(y, x)`
+  --> check/values.bgo:75:18
+   |
+75 | sales |> agg(c = corr(qty))
+   |                  ^^^^^^^^^
+
+error: `corr` needs numbers, found string and int
+  --> check/values.bgo:76:18
+   |
+76 | sales |> agg(c = corr(region, qty))
+   |                  ^^^^^^^^^^^^^^^^^
+
+error: `corr` works in `agg`, not in `window`
+  --> check/values.bgo:77:34
+   |
+77 | sales |> window(by = region, c = corr(qty, price))
+   |                                  ^^^^^^^^^^^^^^^^
+
+error: `histogram` needs a column of numbers, but `region` is string
+  --> check/values.bgo:78:18
+   |
+78 | histogram(sales, region)
+   |                  ^^^^^^
+
+error: `histogram` has no such argument; it takes `bins = n`
+  --> check/values.bgo:79:23
+   |
+79 | histogram(sales, qty, size = 2)
+   |                       ^^^^
+
+error: `linreg` takes a table and two columns, as in `linreg(t, y, x)`
+  --> check/values.bgo:80:1
+   |
+80 | linreg(sales, qty)
+   | ^^^^^^^^^^^^^^^^^^
+
+error: `linreg` needs numbers, found string
+  --> check/values.bgo:81:15
+   |
+81 | linreg(sales, region, qty)
+   |               ^^^^^^
+
+error: `describe` works on a table, found int
+  --> check/values.bgo:82:10
+   |
+82 | describe(1)
+   |          ^
+
+error: `read_sql` takes the path of a SQLite database and a query
+  --> check/values.bgo:83:1
+   |
+83 | read_sql<Sale>("x.db")
+   | ^^^^^^^^^^^^^^^^^^^^^^
+
+error: expected a row type such as `{id: int}`, found int
+  --> check/values.bgo:84:11
+   |
+84 | read_json<int>("x.json")
+   |           ^^^
+
+error: `write_sql` takes a table, the path of a SQLite database, and the name to store the table under
+  --> check/values.bgo:85:1
+   |
+85 | write_sql(sales, "x.db")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `assert` checks a bool, found int
+  --> check/values.bgo:86:8
+   |
+86 | assert(1)
+   |        ^
+
+error: cannot tell which type this `null` has for `is_null`
+  --> check/values.bgo:87:16
+   |
+87 | assert(is_null(null))
+   |                ^^^^
+
+error: `assert_eq` compares two values of one type, found int and string
+  --> check/values.bgo:88:1
+   |
+88 | assert_eq(1, "a")
+   | ^^^^^^^^^^^^^^^^^
+
+error: `assert_eq` compares tables with the same columns, found {date: date, region: string, product: string, qty: int, price: float?} and {qty: int}
+  --> check/values.bgo:89:1
+   |
+89 | assert_eq(sales, sales |> select(qty))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `to_rows` works on a table, found int
+  --> check/values.bgo:90:9
+   |
+90 | to_rows(1)
+   |         ^
+
+error: a file can only be imported at the top level
+  --> check/values.bgo:92:3
+   |
+92 |   import "x.bgo"
+   |   ^^^^^^^^^^^^^^

@@ -1,0 +1,16 @@
+// Group by a column with many distinct values.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: float?,
+}
+
+read_csv<Sale>("data/sales.csv")
+  |> group(customer_id)
+  |> agg(orders = count(), units = sum(qty), best = max(price))
+  |> sort(desc(units), customer_id)
+  |> take(5)
+  |> print()

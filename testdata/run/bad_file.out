@@ -1,0 +1,6 @@
+so far so good
+error: cannot open data/nope.csv: No such file or directory (os error 2)
+ --> run/bad_file.bgo:4:1
+  |
+4 | print(nothing)
+  | ^^^^^^^^^^^^^^

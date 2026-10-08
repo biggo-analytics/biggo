@@ -1,0 +1,29 @@
+// Turning rows into columns and back.
+
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+let sales = read_csv<Sale>("data/sales.csv")
+
+let wide = sales |> group(product) |> pivot(region, ["north", "south"], sum(qty)) |> sort(product)
+print(wide)
+print(wide |> unpivot(north, south, names = "region", values = "qty"))
+
+// Several aggregates are named, and so are their columns.
+print(
+  sales
+    |> group(month = month(date))
+    |> pivot(product, ["widget", "gadget"], rows = count(), best = max(price))
+    |> sort(month),
+)
+// Without groups the whole table is one row.
+print(sales |> pivot(region, ["north", "south", "west"], count()))
+print(sales |> pivot(qty, [0, 5], mean(price)))
+
+// A column that lists several values in one string becomes one row for each.
+let people = from_rows([
+  { name: "Ann", langs: "en, th,ja" },
+  { name: "Bo", langs: "th" },
+  { name: "Cy", langs: null },
+])
+print(people |> explode(langs))
+print(people |> explode(langs) |> group(langs) |> agg(speakers = count()) |> sort(langs))
+print(from_rows([{ path: "a/b/c" }]) |> explode(path, "/"))

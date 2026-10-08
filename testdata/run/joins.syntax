@@ -1,0 +1,40 @@
+(type Order {order_id: int, customer_id: int?, amount: float})
+(type Customer {customer_id: int, name: string, city: string})
+(let orders (call read_csv <Order> "data/orders.csv"))
+(let customers (call read_csv <Customer> "data/customers.csv"))
+(|> orders
+  (call join customers (on: customer_id))
+  (call sort order_id)
+  (call print))
+(|> orders
+  (call join customers (on: customer_id) (how: "left"))
+  (call sort order_id)
+  (call print))
+(|> orders
+  (call join customers (on: customer_id) (how: "right"))
+  (call sort name order_id)
+  (call print))
+(|> orders
+  (call join customers (on: customer_id) (how: "full"))
+  (call sort order_id name)
+  (call print))
+(|> customers (call join orders (on: customer_id) (how: "semi")) (call print))
+(|> customers (call join orders (on: customer_id) (how: "anti")) (call print))
+(let people (|> customers (call rename (id: customer_id))))
+(|> orders
+  (call join people (left_on: customer_id) (right_on: id))
+  (call select order_id id name)
+  (call sort order_id)
+  (call print))
+(|> customers
+  (call join orders (on: customer_id) (how: "left"))
+  (call group city)
+  (call agg (orders: (call count order_id)) (total: (call sum amount)))
+  (call sort city)
+  (call print))
+(|>
+  (call union
+    (|> orders (call where (> amount 20)))
+    (|> orders (call where (< amount 5))))
+  (call sort order_id)
+  (call print))

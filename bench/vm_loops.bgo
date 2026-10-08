@@ -1,0 +1,5 @@
+// Loops over a list of three million numbers, calling a closure for each.
+let numbers = range(3000000)
+let squares = map(numbers, fn(n) { n * n % 1000 })
+let odd = filter(squares, fn(n) { n % 2 == 1 })
+print(len(odd), fold(odd, 0, fn(sum, n) { sum + n }))

@@ -1,0 +1,14 @@
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+
+let sales = read_csv<Sale>("run/data/sales.csv")
+
+let top = sales
+  |> where(qty > 0 and date >= @2026-01-01)
+  |> derive(revenue = qty * (price ?? 0.0))
+  |> group(region, month = month(date))
+  |> agg(total = sum(revenue), orders = count(), avg = mean(revenue))
+  |> sort(desc(total))
+  |> take(10)
+
+print(top)
+write_parquet(top, "out/top.parquet")

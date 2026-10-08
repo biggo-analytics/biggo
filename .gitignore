@@ -1,0 +1,7 @@
+/target
+out/
+/bench/data/
+node_modules/
+*.vsix
+__pycache__/
+.DS_Store

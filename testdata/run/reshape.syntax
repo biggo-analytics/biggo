@@ -1,0 +1,36 @@
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(let wide
+  (|> sales
+    (call group product)
+    (call pivot region (list "north" "south") (call sum qty))
+    (call sort product)))
+(call print wide)
+(call print
+  (|> wide (call unpivot north south (names: "region") (values: "qty"))))
+(call print
+  (|> sales
+    (call group (month: (call month date)))
+    (call pivot product
+      (list "widget" "gadget")
+      (rows: (call count))
+      (best: (call max price)))
+    (call sort month)))
+(call print
+  (|> sales (call pivot region (list "north" "south" "west") (call count))))
+(call print (|> sales (call pivot qty (list 0 5) (call mean price))))
+(let people
+  (call from_rows
+    (list
+      (record (name: "Ann") (langs: "en, th,ja"))
+      (record (name: "Bo") (langs: "th"))
+      (record (name: "Cy") (langs: null)))))
+(call print (|> people (call explode langs)))
+(call print
+  (|> people
+    (call explode langs)
+    (call group langs)
+    (call agg (speakers: (call count)))
+    (call sort langs)))
+(call print
+  (|> (call from_rows (list (record (path: "a/b/c")))) (call explode path "/")))

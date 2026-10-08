@@ -1,0 +1,3 @@
+(let nothing (call read_csv <{a: int}> "data/nope.csv"))
+(call print "so far so good")
+(call print nothing)

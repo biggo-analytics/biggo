@@ -1,0 +1,113 @@
+error: undefined name `quantity`; the table has columns date, region, qty, price
+ --> check/tables.bgo:7:16
+  |
+7 | sales |> where(quantity > 1)
+  |                ^^^^^^^^
+
+error: the condition of `where` must be a bool, found string
+ --> check/tables.bgo:8:16
+  |
+8 | sales |> where(region)
+  |                ^^^^^^
+
+error: the table has no column `nope`; its columns are date, region, qty, price
+ --> check/tables.bgo:9:25
+  |
+9 | sales |> select(region, nope)
+  |                         ^^^^
+
+error: cannot apply `+` to string and int
+  --> check/tables.bgo:10:21
+   |
+10 | sales |> derive(x = region + 1)
+   |                     ^^^^^^^^^^
+
+error: this table is grouped; call `agg` before `where`
+  --> check/tables.bgo:11:1
+   |
+11 | sales |> group(region) |> where(price > 1)
+   | ^^^^^^^^^^^^^^^^^^^^^^
+
+error: `sum` needs numbers, found string
+  --> check/tables.bgo:12:22
+   |
+12 | sales |> agg(total = sum(region))
+   |                      ^^^^^^^^^^^
+
+error: a column must be aggregated, as in `sum(x)`, unless it is a group column
+  --> check/tables.bgo:13:39
+   |
+13 | sales |> group(region) |> agg(total = price)
+   |                                       ^^^^^
+
+error: the number of rows must be int, found string
+  --> check/tables.bgo:14:15
+   |
+14 | sales |> take("3")
+   |               ^^^
+
+error: `sort` needs at least one key
+  --> check/tables.bgo:15:1
+   |
+15 | sales |> sort()
+   | ^^^^^^^^^^^^^^^
+
+error: `read_csv` needs the row type of the data, as in `read_csv<{id: int}>("file")`
+  --> check/tables.bgo:16:1
+   |
+16 | read_csv("x.csv")
+   | ^^^^^^^^^^^^^^^^^
+
+error: both tables have a column `date`; rename or drop one before the join
+  --> check/tables.bgo:17:1
+   |
+17 | sales |> join(sales, on = region)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: comparing with `null` always gives null; use `is_null(...)` to test for null
+  --> check/tables.bgo:18:41
+   |
+18 | sales |> derive(p = price + 1) |> where(p == null)
+   |                                         ^^^^^^^^^
+
+error: the table already has a column `date`
+  --> check/tables.bgo:19:49
+   |
+19 | sales |> window(order = date, n = row_number(), date = rank())
+   |                                                 ^^^^
+
+error: a user-defined function cannot take a column; only operators and built-in functions work on columns
+  --> check/tables.bgo:22:28
+   |
+22 | sales |> derive(d = double(qty))
+   |                            ^^^
+
+error: expected int, found string
+  --> check/tables.bgo:23:14
+   |
+23 | let n: int = sales |> count() |> to_string()
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `sum` can only be used inside `agg` or `window`
+  --> check/tables.bgo:24:1
+   |
+24 | sum(1)
+   | ^^^^^^
+
+error: a list cannot be built from columns
+  --> check/tables.bgo:25:22
+   |
+25 | sales |> derive(d = [region])
+   |                      ^^^^^^
+
+error: undefined function `missing`
+  --> check/tables.bgo:26:30
+   |
+26 | sales |> where(price > 1) |> missing()
+   |                              ^^^^^^^
+
+error: `qty` is both a column of this table and a variable; rename the variable
+  --> check/tables.bgo:30:16
+   |
+30 | sales |> where(qty > 1)
+   |                ^^^

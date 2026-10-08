@@ -1,0 +1,21 @@
+// A window over many small partitions: each customer's third purchase, with the units the
+// customer had bought by then.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: float?,
+}
+
+read_csv<Sale>("data/sales.csv")
+  |> window(
+    by = customer_id,
+    order = [date, product_id, qty],
+    n = row_number(),
+    running = cumsum(qty),
+  )
+  |> where(n == 3)
+  |> agg(customers = count(), units = sum(running))
+  |> print()

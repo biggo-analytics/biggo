@@ -1,0 +1,4 @@
+(fn bucket(id: int, buckets: int) -> int (block (% id buckets)))
+(call print "before")
+(call print (call bucket 42 0))
+(call print "after")

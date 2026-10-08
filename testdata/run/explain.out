@@ -1,0 +1,30 @@
+plan:
+  Limit: take 3
+    Sort: revenue desc
+      Project: date, region, revenue
+        Filter: qty > 4 and region == "north"
+          Project: date, region, product, qty, price, revenue = float(qty) * (price ?? 0.0)
+            Scan csv "data/sales.csv": date, region, product, qty, price
+optimized plan:
+  Limit: take 3
+    Sort: revenue desc (first 3)
+      Project: date, region, revenue = float(qty) * (price ?? 0.0)
+        Scan csv "data/sales.csv": date, region, qty, price where qty > 4, region == "north"
+
+plan:
+  Filter: region != "east" and units > 10
+    Aggregate: by region; units = sum(qty), orders = count()
+      Scan csv "data/sales.csv": date, region, product, qty, price
+optimized plan:
+  Filter: units > 10
+    Aggregate: by region; units = sum(qty), orders = count()
+      Scan csv "data/sales.csv": region, qty where region != "east"
+
+plan:
+  Limit: take 5
+    Project: product, qty
+      Scan csv "data/sales.csv": date, region, product, qty, price
+optimized plan:
+  Limit: take 5
+    Scan csv "data/sales.csv": product, qty limit 5
+

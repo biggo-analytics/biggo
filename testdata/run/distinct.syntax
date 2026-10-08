@@ -1,0 +1,97 @@
+(let rows
+  (call from_rows
+    (list
+      (record
+        (g: "a")
+        (i: 1)
+        (f: 0.0)
+        (d: @2026-01-01)
+        (b: true)
+        (at: @2026-01-01T10:00:00)
+        (s: "x")
+        (m: 1.5d))
+      (record
+        (g: "a")
+        (i: 1)
+        (f: (- 0.0))
+        (d: @2026-01-02)
+        (b: true)
+        (at: @2026-01-01T10:00:00)
+        (s: "y")
+        (m: 1.5d))
+      (record
+        (g: "a")
+        (i: 2)
+        (f: (/ 0.0 0.0))
+        (d: @2026-01-01)
+        (b: false)
+        (at: @2026-01-01T10:00:01)
+        (s: "x")
+        (m: 2d))
+      (record
+        (g: "a")
+        (i: 3)
+        (f: (/ 0.0 0.0))
+        (d: @2026-01-01)
+        (b: false)
+        (at: @2026-01-01T10:00:01)
+        (s: "x")
+        (m: 2d))
+      (record
+        (g: "b")
+        (i: null)
+        (f: null)
+        (d: null)
+        (b: null)
+        (at: null)
+        (s: null)
+        (m: null))
+      (record
+        (g: "b")
+        (i: 7)
+        (f: 0.5)
+        (d: @2026-01-01)
+        (b: true)
+        (at: @2026-01-02)
+        (s: "")
+        (m: 0d)))))
+(call print rows)
+(call print
+  (|> rows
+    (call group g)
+    (call agg
+      (ints: (call count_distinct i))
+      (floats: (call count_distinct f))
+      (days: (call count_distinct d))
+      (bools: (call count_distinct b))
+      (times: (call count_distinct at))
+      (texts: (call count_distinct s))
+      (exact: (call count_distinct m))
+      (gaps: (call count_distinct (- at d))))))
+(call print
+  (|> rows
+    (call agg
+      (ints: (call count_distinct i))
+      (floats: (call count_distinct f))
+      (groups: (call count_distinct g)))))
+(call print
+  (|> rows (call where (> i 100)) (call agg (ints: (call count_distinct i)))))
+(call print
+  (|> rows
+    (call window (by: g) (seen: (call count_distinct i)))
+    (call select g i seen)))
+(let many
+  (call from_rows
+    (call map
+      (call range 1000)
+      (lambda (n) (block (record (k: (% n 7)) (v: (% n 13))))))))
+(call print
+  (|> many
+    (call group k)
+    (call agg (values: (call count_distinct v)) (rows: (call count)))
+    (call sort k)))
+(call print
+  (|> many
+    (call agg
+      (pairs: (call count_distinct (+ (* k 100) v)))
+      (keys: (call count_distinct k)))))

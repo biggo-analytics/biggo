@@ -1,0 +1,1 @@
+(call assert (== (call len (call range 3)) 3))

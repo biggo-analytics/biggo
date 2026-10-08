@@ -1,0 +1,13 @@
++---------+-----+----------+---------+----------+
+| product | qty | per_unit | divides | fallback |
++---------+-----+----------+---------+----------+
+| widget  | 10  | 0        | true    | 10       |
+| gadget  | 3   | 1        | false   | 0        |
+| widget  | 0   | -1       | false   | 0        |
+| gadget  | 5   | 0        | true    | 5        |
++---------+-----+----------+---------+----------+
+error: division by zero
+  --> run/lazy_errors.bgo:18:1
+   |
+18 | sales |> derive(per_unit = 100 % qty) |> print()
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

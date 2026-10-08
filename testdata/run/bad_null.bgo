@@ -1,0 +1,4 @@
+// The file has a missing price, so a column declared without `?` is an error.
+type Sale = { region: string, price: float }
+
+read_csv<Sale>("data/sales.csv") |> print()

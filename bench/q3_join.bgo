@@ -1,0 +1,19 @@
+// Join with a small table, then aggregate.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: float?,
+}
+type Product = { product_id: int, category: string, cost: float }
+
+read_csv<Sale>("data/sales.csv")
+  |> join(read_csv<Product>("data/products.csv"), on = product_id)
+  |> derive(margin = qty * ((price ?? cost) - cost))
+  |> group(category)
+  |> agg(margin = sum(margin), units = sum(qty))
+  |> sort(desc(margin))
+  |> take(5)
+  |> print()

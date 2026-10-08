@@ -1,0 +1,47 @@
+error: expected `)`, found end of line
+ --> errors/syntax.bgo:1:19
+  |
+1 | let total = (1 + 2
+  |                   ^
+
+error: unterminated string literal
+ --> errors/syntax.bgo:2:12
+  |
+2 | let name = "unterminated
+  |            ^^^^^^^^^^^^^
+
+error: comparison operators cannot be chained; use `and` to combine them
+ --> errors/syntax.bgo:3:21
+  |
+3 | let chained = 1 < 2 < 3
+  |                     ^
+
+error: invalid date literal `@2026-02-30`; expected a calendar date written as `@YYYY-MM-DD`
+ --> errors/syntax.bgo:4:12
+  |
+4 | let when = @2026-02-30
+  |            ^^^^^^^^^^^
+
+error: the right side of `|>` must be a function call; put the pipeline in parentheses to use its result in a larger expression
+ --> errors/syntax.bgo:5:20
+  |
+5 | let big = sales |> count() > 100
+  |                    ^^^^^^^^^^^^^
+
+error: expected end of line, found `print`
+ --> errors/syntax.bgo:6:14
+  |
+6 | print(total) print(name)
+  |              ^^^^^
+
+error: expected `:`, found `)`
+ --> errors/syntax.bgo:8:20
+  |
+8 | fn broken(a: int, b) -> int { a }
+  |                    ^
+
+error: unexpected character '$'
+ --> errors/syntax.bgo:9:11
+  |
+9 | let x = 5 $ 3
+  |           ^

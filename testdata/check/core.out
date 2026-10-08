@@ -1,0 +1,119 @@
+error: expected int, found string
+ --> check/core.bgo:3:18
+  |
+3 | let total: int = "ten"
+  |                  ^^^^^
+
+error: cannot apply `+` to int and string
+ --> check/core.bgo:4:13
+  |
+4 | let ratio = 1 + "2"
+  |             ^^^^^^^
+
+error: a condition must be a bool, found int
+ --> check/core.bgo:5:15
+  |
+5 | let flag = if 1 { 2 } else { 3 }
+  |               ^
+
+error: the branches of an `if` must have one type, found int and string
+ --> check/core.bgo:6:12
+  |
+6 | let pick = if true { 1 } else { "one" }
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the elements of a list must have one type, found int and string
+ --> check/core.bgo:7:16
+  |
+7 | let list = [1, "two"]
+  |                ^^^^^
+
+error: undefined name `nowhere`
+ --> check/core.bgo:8:15
+  |
+8 | let missing = nowhere + 1
+  |               ^^^^^^^
+
+error: too many arguments: `area` takes 2
+  --> check/core.bgo:11:20
+   |
+11 | let a = area(1, 2, 3)
+   |                    ^
+
+error: missing argument `height` in call to `area`
+  --> check/core.bgo:12:9
+   |
+12 | let b = area(1)
+   |         ^^^^^^^
+
+error: `area` has no parameter named `depth`
+  --> check/core.bgo:13:17
+   |
+13 | let c = area(1, depth = 2)
+   |                 ^^^^^
+
+error: `area` expects float for `width`, found string
+  --> check/core.bgo:14:14
+   |
+14 | let d = area("wide", 2)
+   |              ^^^^^^
+
+error: `size` is not a function; it has type int
+  --> check/core.bgo:16:9
+   |
+16 | let e = size(1)
+   |         ^^^^
+
+error: `bad` is declared to return int, but its body has type string
+  --> check/core.bgo:18:17
+   |
+18 | fn bad() -> int { "text" }
+   |                 ^^^^^^^^^^
+
+error: the return type of `loop_forever` is not known here; declare it with `-> type`
+  --> check/core.bgo:19:27
+   |
+19 | fn loop_forever(n: int) { loop_forever(n + 1) }
+   |                           ^^^^^^^^^^^^
+
+error: `print` is a built-in function; choose another name
+  --> check/core.bgo:20:4
+   |
+20 | fn print(x: int) -> int { x }
+   |    ^^^^^
+
+error: `int` is a built-in type
+  --> check/core.bgo:21:6
+   |
+21 | type int = { a: int }
+   |      ^^^
+
+error: `list` takes one type argument, as in `list<...>`
+  --> check/core.bgo:22:8
+   |
+22 | let f: list<int, int> = []
+   |        ^^^^^^^^^^^^^^
+
+error: expected a row type such as `{id: int}`, found int
+  --> check/core.bgo:23:14
+   |
+23 | let g: table<int> = 1
+   |              ^^^
+
+error: unknown type `unknown`
+  --> check/core.bgo:24:8
+   |
+24 | let h: unknown = 1
+   |        ^^^^^^^
+
+error: cannot tell which type this `null` has; annotate the variable, as in `let x: int? = null`
+  --> check/core.bgo:25:9
+   |
+25 | let i = null
+   |         ^^^^
+
+error: comparing with `null` always gives null; use `is_null(...)` to test for null
+  --> check/core.bgo:26:9
+   |
+26 | let j = 1 < null
+   |         ^^^^^^^^

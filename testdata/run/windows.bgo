@@ -1,0 +1,30 @@
+// Window functions.
+
+type Visit = { day: date, site: string, visits: int? }
+
+let log = read_csv<Visit>("data/visits.csv")
+
+log
+  |> window(
+    by = site,
+    order = day,
+    n = row_number(),
+    prev = lag(visits),
+    after_next = lead(visits, 2),
+    running = cumsum(visits),
+    avg2 = moving_avg(visits, 2),
+    site_total = sum(visits),
+  )
+  |> print()
+
+// Ranking, and arithmetic on window results.
+log
+  |> window(by = site, order = desc(visits), place = rank(), share = round(visits / sum(visits), 2))
+  |> sort(site, place, day)
+  |> print()
+
+// Without `by`, the whole table is one partition.
+log
+  |> window(order = [desc(visits), day], overall = row_number())
+  |> where(overall <= 3)
+  |> print()

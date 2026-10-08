@@ -1,0 +1,50 @@
+// `match` picks the first arm whose pattern equals the value.
+
+fn size(n: int) -> string {
+  match n {
+    0 => "none"
+    1 | 2 => "few"
+    -1 => "owed"
+    _ => "many"
+  }
+}
+print(map([0, 1, 2, 3, -1], size))
+
+// A bool is covered by its two values; a nullable value has `null` as a pattern.
+fn answer(yes: bool) -> int { match yes { true => 1, false => 0 } }
+print(answer(true), answer(false))
+
+fn label(n: int?) -> string {
+  match n {
+    null => "missing"
+    0 => "zero"
+    _ => "some"
+  }
+}
+let missing: int? = null
+print(label(missing), label(0), label(7))
+
+// Arms convert to one type, like the branches of an `if`.
+let ratio = match "half" { "half" => 0.5, "all" => 1, _ => null }
+print(ratio, match 2.0 { 2 => "two", _ => "other" }, match @2026-01-01 { @2026-01-01 => "new year", _ => "day" })
+
+// The value is computed once, however many arms test it.
+fn loud(n: int) -> int {
+  print("computing", n)
+  n
+}
+print(match loud(3) { 1 => "one", 2 => "two", 3 => "three", _ => "more" })
+
+// Over the columns of a table a `match` is a column expression.
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+let sales = read_csv<Sale>("data/sales.csv")
+print(
+  sales
+    |> derive(
+      size = match qty { 0 => "none", 1 | 2 | 3 => "small", _ => "large" },
+      priced = match price { null => "no", _ => "yes" },
+    )
+    |> select(product, qty, size, priced)
+    |> take(4),
+)
+print(sales |> group(tier = match region { "north" => 1, _ => 2 }) |> agg(units = sum(qty)) |> sort(tier))

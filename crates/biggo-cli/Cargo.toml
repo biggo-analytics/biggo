@@ -1,0 +1,14 @@
+[package]
+name = "biggo-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "biggo"
+path = "src/main.rs"
+
+[dependencies]
+biggo-syntax.workspace = true
+biggo-eval.workspace = true
+biggo-fmt.workspace = true
+biggo-lsp.workspace = true

@@ -1,0 +1,33 @@
+// Statistics over tables.
+
+let points = from_rows([
+  { x: 1, y: 2.1, group: "a" },
+  { x: 2, y: 3.9, group: "a" },
+  { x: 3, y: 6.2, group: "a" },
+  { x: 4, y: 7.8, group: "b" },
+  { x: 5, y: 10.1, group: "b" },
+  { x: 6, y: null, group: "b" },
+])
+
+// Rows that lack either value are left out.
+print(
+  points
+    |> agg(
+      r = round(corr(y, x), 4),
+      covariance = round(cov(y, x), 4),
+      slope = round(slope(y, x), 4),
+      intercept = round(intercept(y, x), 4),
+    ),
+)
+print(points |> group(group) |> agg(n = count(y), slope = round(slope(y, x), 3), r = round(corr(x, y), 3)))
+
+let line = linreg(points, y, x)
+print(round(line.slope ?? 0.0, 4), round(line.intercept ?? 0.0, 4), round(line.r2 ?? 0.0, 4))
+// One point has no line through it.
+print(linreg(points |> take(1), y, x))
+
+print(describe(points))
+print(histogram(points, y))
+print(histogram(points, x, bins = 3))
+print(histogram(points |> where(x == 2), x, 4))
+print(histogram(points, x, bins = 0))

@@ -1,0 +1,15 @@
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "run/data/sales.csv"))
+(let top
+  (|> sales
+    (call where (and (> qty 0) (>= date @2026-01-01)))
+    (call derive (revenue: (* qty (?? price 0.0))))
+    (call group region (month: (call month date)))
+    (call agg
+      (total: (call sum revenue))
+      (orders: (call count))
+      (avg: (call mean revenue)))
+    (call sort (call desc total))
+    (call take 10)))
+(call print top)
+(call write_parquet top "out/top.parquet")

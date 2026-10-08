@@ -1,0 +1,12 @@
+//! Name resolution, type checking, and table schema inference. A module that passes is
+//! lowered to HIR, the form the bytecode compiler works from.
+
+mod builtins;
+mod check;
+pub mod hir;
+mod ty;
+mod verbs;
+
+pub use check::{Checked, Checker};
+pub use ty::{FnType, Grouped, Param, Type};
+pub use verbs::builtin_names;

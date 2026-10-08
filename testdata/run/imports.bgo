@@ -1,0 +1,8 @@
+// The definitions of another file, by a path from this one.
+import "lib/shapes.bgo"
+// A file is loaded once, however many imports lead to it.
+import "lib/units.bgo"
+
+let door: Rect = { width: 0.9, height: 2.1 }
+print(with_unit(area(door)), area(unit_square))
+print(map([door, unit_square], area))

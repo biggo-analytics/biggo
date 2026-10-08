@@ -1,0 +1,5 @@
+error: data/sales.csv, line 2: cannot read 'north' as an int for column `region`
+ --> run/bad_value.bgo:5:7
+  |
+5 | print(sales |> count())
+  |       ^^^^^^^^^^^^^^^^

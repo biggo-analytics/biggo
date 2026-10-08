@@ -1,0 +1,36 @@
+(fn size(n: int) -> string
+  (block
+    (match n (arm 0 "none") (arm 1 2 "few") (arm (- 1) "owed") (arm _ "many"))))
+(call print (call map (list 0 1 2 3 (- 1)) size))
+(fn answer(yes: bool) -> int (block (match yes (arm true 1) (arm false 0))))
+(call print (call answer true) (call answer false))
+(fn label(n: int?) -> string
+  (block (match n (arm null "missing") (arm 0 "zero") (arm _ "some"))))
+(let missing: int? null)
+(call print (call label missing) (call label 0) (call label 7))
+(let ratio (match "half" (arm "half" 0.5) (arm "all" 1) (arm _ null)))
+(call print ratio
+  (match 2.0 (arm 2 "two") (arm _ "other"))
+  (match @2026-01-01 (arm @2026-01-01 "new year") (arm _ "day")))
+(fn loud(n: int) -> int (block (call print "computing" n) n))
+(call print
+  (match
+    (call loud 3)
+    (arm 1 "one")
+    (arm 2 "two")
+    (arm 3 "three")
+    (arm _ "more")))
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(call print
+  (|> sales
+    (call derive
+      (size: (match qty (arm 0 "none") (arm 1 2 3 "small") (arm _ "large")))
+      (priced: (match price (arm null "no") (arm _ "yes"))))
+    (call select product qty size priced)
+    (call take 4)))
+(call print
+  (|> sales
+    (call group (tier: (match region (arm "north" 1) (arm _ 2))))
+    (call agg (units: (call sum qty)))
+    (call sort tier)))

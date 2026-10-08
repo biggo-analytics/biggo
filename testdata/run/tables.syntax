@@ -1,0 +1,36 @@
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(call print (|> sales (call take 3)))
+(call print (|> sales (call count)))
+(let min_qty 4)
+(|> sales
+  (call where (and (>= qty min_qty) (!= region "east")))
+  (call derive
+    (revenue: (* qty (?? price 0.0)))
+    (label: (+ (+ (call upper region) "-") product)))
+  (call derive
+    (taxed: (call round (* revenue 1.07) 2))
+    (size: (if (> revenue 20) (block "big") (block "small"))))
+  (call select date label revenue taxed size)
+  (call sort (call desc revenue) label)
+  (call print))
+(|> sales
+  (call select product (year: (call year date)) (month: (call month date)))
+  (call distinct)
+  (call sort product year month)
+  (call print))
+(|> sales (call distinct region) (call sort region) (call print))
+(|> sales
+  (call drop date product)
+  (call rename (quantity: qty))
+  (call sort (call desc quantity))
+  (call skip 1)
+  (call take 2)
+  (call print))
+(|> sales (call where (call is_null price)) (call print))
+(|> sales (call where (> price 50)) (call select product price) (call print))
+(|> sales (call where (not (> price 50))) (call count) (call print))
+(|> sales
+  (call select (order date: date) (type: product))
+  (call where (== type "gizmo"))
+  (call print))

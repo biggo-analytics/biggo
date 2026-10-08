@@ -1,0 +1,9 @@
+// Shared by the programs that import it.
+import "units.bgo"
+
+type Rect = { width: float, height: float }
+
+fn area(rect: Rect) -> float { rect.width * rect.height }
+
+let unit_square: Rect = { width: 1, height: 1 }
+print("shapes loaded, in", unit)

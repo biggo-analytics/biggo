@@ -1,0 +1,16 @@
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(let min_qty 2)
+(|> sales
+  (call derive (revenue: (* qty (?? price 0.0))))
+  (call where (and (> qty (* min_qty 2)) (== region "north")))
+  (call select date region revenue)
+  (call sort (call desc revenue))
+  (call take 3)
+  (call explain))
+(|> sales
+  (call group region)
+  (call agg (units: (call sum qty)) (orders: (call count)))
+  (call where (and (!= region "east") (> units 10)))
+  (call explain))
+(|> sales (call select product qty) (call take 5) (call explain))

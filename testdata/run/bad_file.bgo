@@ -1,0 +1,4 @@
+// A file that does not exist is only noticed when the query runs.
+let nothing = read_csv<{ a: int }>("data/nope.csv")
+print("so far so good")
+print(nothing)

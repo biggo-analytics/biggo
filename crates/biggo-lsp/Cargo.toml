@@ -1,0 +1,11 @@
+[package]
+name = "biggo-lsp"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+biggo-syntax.workspace = true
+biggo-types.workspace = true
+biggo-eval.workspace = true
+biggo-fmt.workspace = true
+serde_json = "1.0.151"

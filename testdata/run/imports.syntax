@@ -1,0 +1,5 @@
+(import "lib/shapes.bgo")
+(import "lib/units.bgo")
+(let door: Rect (record (width: 0.9) (height: 2.1)))
+(call print (call with_unit (call area door)) (call area unit_square))
+(call print (call map (list door unit_square) area))

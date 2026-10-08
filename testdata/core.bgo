@@ -1,0 +1,28 @@
+// Core language: functions, conditionals, literals, and operator precedence.
+
+type Point = { x: float, y: float, label: string? }
+
+fn clamp(value: int, low: int, high: int) -> int {
+  if value < low {
+    low
+  } else if value > high {
+    high
+  } else {
+    value
+  }
+}
+
+fn area(width: float, height: float) -> float { width * height }
+
+let limit: int = 1_000_000
+let ratio = 1.5e-3
+let total = 1 + 2 * 3 - 4 / 2 % 3
+let negative = -total * 2
+let ok = not total > 10 and limit != 0 or ratio >= 0.5
+let fallback = missing ?? other ?? 0
+let greeting = "hello,\n\"biggo\""
+let primes: list<int> = [2, 3, 5, 7]
+let nested: table<{ id: int, tags: list<string>? }> = load("nested.parquet")
+let label = origin.label ?? "none"
+let n = clamp(total, low = 0, high = 100)
+let ยอดรวม = ราคา * จำนวน

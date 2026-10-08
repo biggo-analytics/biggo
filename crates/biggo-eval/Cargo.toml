@@ -1,0 +1,10 @@
+[package]
+name = "biggo-eval"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+biggo-syntax.workspace = true
+biggo-types.workspace = true
+biggo-plan.workspace = true
+biggo-exec.workspace = true

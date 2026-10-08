@@ -1,0 +1,28 @@
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(type Summary {region: string, units: int, best: float?, latest: date})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(let summary
+  (|> sales
+    (call group region)
+    (call agg
+      (units: (call sum qty))
+      (best: (call max price))
+      (latest: (call max date)))
+    (call sort region)))
+(call write_csv summary "out/summary.csv")
+(call write_parquet summary "out/summary.parquet")
+(call print (call read_csv <Summary> "out/summary.csv"))
+(call print
+  (|>
+    (call read_parquet <Summary> "out/summary.parquet")
+    (call where (> units 20))
+    (call select region latest)))
+(call print
+  (|>
+    (call read_csv <{units: int, region: string}> "out/summary.csv")
+    (call sort (call desc units))
+    (call take 1)))
+(let large (call collect (|> sales (call where (> qty 5)))))
+(call print
+  (|> large (call count))
+  (|> large (call agg (units: (call sum qty)))))

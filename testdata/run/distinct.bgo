@@ -1,0 +1,35 @@
+// Counting the distinct values of every kind of column.
+
+let rows = from_rows([
+  { g: "a", i: 1, f: 0.0, d: @2026-01-01, b: true, at: @2026-01-01T10:00:00, s: "x", m: 1.50d },
+  { g: "a", i: 1, f: -0.0, d: @2026-01-02, b: true, at: @2026-01-01T10:00:00, s: "y", m: 1.5d },
+  { g: "a", i: 2, f: 0.0 / 0.0, d: @2026-01-01, b: false, at: @2026-01-01T10:00:01, s: "x", m: 2d },
+  { g: "a", i: 3, f: 0.0 / 0.0, d: @2026-01-01, b: false, at: @2026-01-01T10:00:01, s: "x", m: 2d },
+  { g: "b", i: null, f: null, d: null, b: null, at: null, s: null, m: null },
+  { g: "b", i: 7, f: 0.5, d: @2026-01-01, b: true, at: @2026-01-02, s: "", m: 0d },
+])
+print(rows)
+
+// Zero is one value whatever its sign, and so is "not a number"; a null is no value.
+print(
+  rows
+    |> group(g)
+    |> agg(
+      ints = count_distinct(i),
+      floats = count_distinct(f),
+      days = count_distinct(d),
+      bools = count_distinct(b),
+      times = count_distinct(at),
+      texts = count_distinct(s),
+      exact = count_distinct(m),
+      gaps = count_distinct(at - d),
+    ),
+)
+print(rows |> agg(ints = count_distinct(i), floats = count_distinct(f), groups = count_distinct(g)))
+print(rows |> where(i > 100) |> agg(ints = count_distinct(i)))
+print(rows |> window(by = g, seen = count_distinct(i)) |> select(g, i, seen))
+
+// Many values in many groups, where the answer is known: 7 and 13 share no factor.
+let many = from_rows(map(range(1000), fn(n) { { k: n % 7, v: n % 13 } }))
+print(many |> group(k) |> agg(values = count_distinct(v), rows = count()) |> sort(k))
+print(many |> agg(pairs = count_distinct(k * 100 + v), keys = count_distinct(k)))

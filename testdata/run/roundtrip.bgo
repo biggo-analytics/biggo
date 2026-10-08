@@ -1,0 +1,52 @@
+// Every column type survives a trip through every file format.
+
+type Row = {
+  id: int,
+  ratio: float?,
+  ok: bool,
+  name: string,
+  day: date,
+  at: datetime,
+  took: duration?,
+  cost: decimal,
+}
+let rows = from_rows<Row>([
+  {
+    id: 1,
+    ratio: 0.5,
+    ok: true,
+    name: "ก ไก่, \"quoted\"",
+    day: @2026-01-02,
+    at: @2026-01-02T03:04:05.5,
+    took: hours(1.5),
+    cost: 2.50d,
+  },
+  {
+    id: -2,
+    ratio: null,
+    ok: false,
+    name: "",
+    day: @1999-12-31,
+    at: @2026-01-02,
+    took: null,
+    cost: 1d / 3,
+  },
+])
+print(rows)
+
+write_csv(rows, "out/roundtrip.csv")
+write_json(rows, "out/roundtrip.json")
+write_parquet(rows, "out/roundtrip.parquet")
+write_sql(rows, "out/roundtrip.db", "rows")
+
+assert_eq(read_csv<Row>("out/roundtrip.csv"), rows)
+assert_eq(read_json<Row>("out/roundtrip.json"), rows)
+assert_eq(read_parquet<Row>("out/roundtrip.parquet"), rows)
+assert_eq(read_sql<Row>("out/roundtrip.db", "select * from rows"), rows)
+
+// In a text file a duration is a number of seconds and a decimal is its digits.
+print(read_csv<{ id: int, took: float?, cost: string }>("out/roundtrip.csv"))
+print(read_sql<{ id: int, took: float?, cost: string, ok: int }>("out/roundtrip.db", "select * from rows"))
+print(read_json<{ id: int, at: string }>("out/roundtrip.json") |> where(id == 1))
+// A value that does not fit its column says where it is.
+print(read_csv<{ id: int, name: datetime }>("out/roundtrip.csv"))

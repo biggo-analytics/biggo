@@ -1,0 +1,13 @@
+[package]
+name = "biggo-exec"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+arrow = { version = "60.0.0", default-features = false, features = ["csv", "json", "prettyprint"] }
+biggo-plan.workspace = true
+hashbrown = "0.17.1"
+memmap2 = "0.9.11"
+parquet = { version = "60.0.0", default-features = false, features = ["arrow", "snap", "zstd"] }
+rayon = "1.12.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }

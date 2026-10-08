@@ -1,0 +1,11 @@
+// Converts the CSV data to JSON, one object per line.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: float?,
+}
+
+write_json(read_csv<Sale>("data/sales.csv"), "data/sales.json")

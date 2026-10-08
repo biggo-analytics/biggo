@@ -1,0 +1,42 @@
+(let double (lambda (x: int) -> int (block (* x 2))))
+(call print (call double 21))
+(fn twice(f: fn(int) -> int, x: int) -> int (block (call f (call f x))))
+(call print (call twice double 3) (call twice (lambda (n) (block (+ n 1))) 3))
+(let numbers (call range 1 6))
+(call print numbers (call range 3) (call len numbers))
+(call print (call map numbers (lambda (n) (block (* n n)))))
+(call print (call filter numbers (lambda (n) (block (== (% n 2) 1)))))
+(call print (call fold numbers 0 (lambda (total, n) (block (+ total n)))))
+(call each
+  (|> numbers (call filter (lambda (n) (block (> n 3)))))
+  (lambda (n) (block (call print "big:" n))))
+(let step 10)
+(fn scaled(factor: int) -> list<int>
+  (block (call map numbers (lambda (n) (block (+ (* n factor) step))))))
+(call print (call scaled 2))
+(fn adder(amount: int) -> fn(int) -> int
+  (block (lambda (n) (block (+ n amount)))))
+(let add5 (call adder 5))
+(call print (call add5 1) (call map numbers add5) (call map numbers double))
+(call print (index numbers 0) (index numbers (- 1)) (+ numbers (list 6 7)))
+(let words (call map (list "b" "a") (lambda (word) (block (call upper word)))))
+(call print words
+  (call fold words "" (lambda (text, word) (block (+ text word)))))
+(call print
+  (call map
+    (call range 1 4)
+    (lambda (row)
+      (block
+        (call map (call range 1 4) (lambda (column) (block (* row column))))))))
+(fn depth(n: int) -> int
+  (block
+    (if
+      (== n 0)
+      (block 0)
+      (block
+        (call fold
+          (call range 1)
+          1
+          (lambda (total, i) (block (+ (+ total (call depth (- n 1))) i))))))))
+(call print (call depth 500))
+(call print (index numbers 9))

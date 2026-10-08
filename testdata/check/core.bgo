@@ -1,0 +1,26 @@
+// Mistakes in ordinary code that the type checker catches.
+
+let total: int = "ten"
+let ratio = 1 + "2"
+let flag = if 1 { 2 } else { 3 }
+let pick = if true { 1 } else { "one" }
+let list = [1, "two"]
+let missing = nowhere + 1
+
+fn area(width: float, height: float) -> float { width * height }
+let a = area(1, 2, 3)
+let b = area(1)
+let c = area(1, depth = 2)
+let d = area("wide", 2)
+let size = 3
+let e = size(1)
+
+fn bad() -> int { "text" }
+fn loop_forever(n: int) { loop_forever(n + 1) }
+fn print(x: int) -> int { x }
+type int = { a: int }
+let f: list<int, int> = []
+let g: table<int> = 1
+let h: unknown = 1
+let i = null
+let j = 1 < null

@@ -1,0 +1,11 @@
+// Converts the CSV data to Parquet.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: float?,
+}
+
+write_parquet(read_csv<Sale>("data/sales.csv"), "data/sales.parquet")

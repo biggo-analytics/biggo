@@ -1,0 +1,3 @@
+(type Sale {region: int, qty: int})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(call print (|> sales (call count)))

@@ -1,0 +1,16 @@
+// Turn the values of a column into columns: units per month, one column per region.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: float?,
+}
+
+read_csv<Sale>("data/sales.csv")
+  |> group(year = year(date), month = month(date))
+  |> pivot(region, ["north", "south", "east", "west"], sum(qty))
+  |> sort(year, month)
+  |> take(5)
+  |> print()

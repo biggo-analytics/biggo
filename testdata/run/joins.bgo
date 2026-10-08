@@ -1,0 +1,32 @@
+// Joins and unions.
+
+type Order = { order_id: int, customer_id: int?, amount: float }
+type Customer = { customer_id: int, name: string, city: string }
+
+let orders = read_csv<Order>("data/orders.csv")
+let customers = read_csv<Customer>("data/customers.csv")
+
+orders |> join(customers, on = customer_id) |> sort(order_id) |> print()
+orders |> join(customers, on = customer_id, how = "left") |> sort(order_id) |> print()
+orders |> join(customers, on = customer_id, how = "right") |> sort(name, order_id) |> print()
+orders |> join(customers, on = customer_id, how = "full") |> sort(order_id, name) |> print()
+customers |> join(orders, on = customer_id, how = "semi") |> print()
+customers |> join(orders, on = customer_id, how = "anti") |> print()
+
+// Keys with different names stay separate columns.
+let people = customers |> rename(id = customer_id)
+orders
+  |> join(people, left_on = customer_id, right_on = id)
+  |> select(order_id, id, name)
+  |> sort(order_id)
+  |> print()
+
+// Totals per city, including the customers without orders.
+customers
+  |> join(orders, on = customer_id, how = "left")
+  |> group(city)
+  |> agg(orders = count(order_id), total = sum(amount))
+  |> sort(city)
+  |> print()
+
+union(orders |> where(amount > 20), orders |> where(amount < 5)) |> sort(order_id) |> print()

@@ -1,0 +1,16 @@
+// Records, maps, strings, and `match` in ordinary code.
+fn tier(score: int) -> string {
+  match score % 4 {
+    0 => "gold"
+    1 => "silver"
+    _ => "bronze"
+  }
+}
+
+let people = map(range(300000), fn(id) { { id: id, name: "user" + to_string(id), score: id * 7 % 100 } })
+let empty: map<string, int> = {}
+let tiers = fold(people, empty, fn(seen, person) {
+  let name = tier(person.score)
+  put(seen, name, (seen[name] ?? 0) + person.score)
+})
+print(tiers, length(people[299999].name))

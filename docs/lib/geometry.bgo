@@ -1,0 +1,5 @@
+type Rect = { width: float, height: float }
+
+fn area(rect: Rect) -> float { rect.width * rect.height }
+
+let unit_square: Rect = { width: 1, height: 1 }

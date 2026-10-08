@@ -1,0 +1,43 @@
+// Functions: recursion, named arguments, pipes, hoisting, and nested functions.
+
+let rate = 0.25
+
+fn fib(n: int) -> int {
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+fn clamp(value: int, low: int, high: int) -> int {
+  if value < low {
+    low
+  } else if value > high {
+    high
+  } else {
+    value
+  }
+}
+
+// `with_tax` reads the global `rate`; `is_even` and `is_odd` call each other.
+fn with_tax(amount: float) -> float { amount * (1 + rate) }
+fn is_even(n: int) -> bool { if n == 0 { true } else { is_odd(n - 1) } }
+fn is_odd(n: int) -> bool { if n == 0 { false } else { is_even(n - 1) } }
+
+// `go` is local to `sum_to` and uses its parameter `n`.
+fn sum_to(n: int) -> int {
+  fn go(i: int, acc: int) -> int {
+    if i > n { acc } else { go(i + 1, acc + i) }
+  }
+  go(1, 0)
+}
+
+print(fib(15))
+print(clamp(150, low = 0, high = 100), clamp(high = 100, low = 0, value = -5))
+print(with_tax(100))
+print(is_even(10), is_odd(7), is_even(7))
+print(sum_to(100))
+
+// `x |> f(a)` is `f(x, a)`.
+print(42 |> clamp(0, 10))
+150 |> clamp(low = 0, high = 100) |> print()
+
+let label = if fib(10) > 50 { "big" } else { "small" }
+print(label)

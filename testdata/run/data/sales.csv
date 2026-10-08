@@ -1,0 +1,11 @@
+date,region,product,qty,price
+2026-01-05,north,widget,10,2.5
+2026-01-17,north,gadget,3,10.0
+2026-01-20,south,widget,0,2.5
+2026-02-02,south,gadget,5,
+2026-02-14,north,widget,7,2.5
+2026-02-20,east,gizmo,2,99.9
+2025-12-30,east,widget,4,2.5
+2026-03-01,south,widget,12,2.5
+2026-03-09,east,gadget,1,10.0
+2026-03-15,north,gizmo,1,100.0

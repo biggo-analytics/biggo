@@ -1,0 +1,5 @@
+// A value that does not fit the declared type.
+type Sale = { region: int, qty: int }
+
+let sales = read_csv<Sale>("data/sales.csv")
+print(sales |> count())

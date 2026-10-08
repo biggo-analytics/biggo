@@ -1,0 +1,42 @@
+// Functions as values, and the loops that take them.
+
+let double = fn(x: int) -> int { x * 2 }
+print(double(21))
+
+// A lambda passed to a function takes its parameter types from there.
+fn twice(f: fn(int) -> int, x: int) -> int { f(f(x)) }
+print(twice(double, 3), twice(fn(n) { n + 1 }, 3))
+
+let numbers = range(1, 6)
+print(numbers, range(3), len(numbers))
+print(map(numbers, fn(n) { n * n }))
+print(filter(numbers, fn(n) { n % 2 == 1 }))
+print(fold(numbers, 0, fn(total, n) { total + n }))
+each(numbers |> filter(fn(n) { n > 3 }), fn(n) { print("big:", n) })
+
+// A lambda sees the variables around it.
+let step = 10
+fn scaled(factor: int) -> list<int> {
+  map(numbers, fn(n) { n * factor + step })
+}
+print(scaled(2))
+
+// A function can return a function, and a named function works where a lambda does.
+fn adder(amount: int) -> fn(int) -> int {
+  fn(n) { n + amount }
+}
+let add5 = adder(5)
+print(add5(1), map(numbers, add5), map(numbers, double))
+
+// Lists index from either end, and join with `+`.
+print(numbers[0], numbers[-1], numbers + [6, 7])
+let words = map(["b", "a"], fn(word) { upper(word) })
+print(words, fold(words, "", fn(text, word) { text + word }))
+
+// Loops nest, and a loop in a recursive function calls it like any other code.
+print(map(range(1, 4), fn(row) { map(range(1, 4), fn(column) { row * column }) }))
+fn depth(n: int) -> int {
+  if n == 0 { 0 } else { fold(range(1), 1, fn(total, i) { total + depth(n - 1) + i }) }
+}
+print(depth(500))
+print(numbers[9])

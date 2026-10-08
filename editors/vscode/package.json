@@ -1,0 +1,98 @@
+{
+  "name": "biggo",
+  "displayName": "biggo",
+  "description": "Syntax highlighting, errors as you type, types on hover, and formatting for the biggo data language.",
+  "version": "0.1.0",
+  "publisher": "biggo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/biggo-analytics/biggo.git",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "biggo",
+        "aliases": [
+          "biggo"
+        ],
+        "extensions": [
+          ".bgo"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "biggo",
+        "scopeName": "source.biggo",
+        "path": "./syntaxes/biggo.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "biggo.runFile",
+        "title": "biggo: Run File"
+      },
+      {
+        "command": "biggo.explainFile",
+        "title": "biggo: Explain Query Plans of File"
+      },
+      {
+        "command": "biggo.runTests",
+        "title": "biggo: Run Tests"
+      },
+      {
+        "command": "biggo.restartServer",
+        "title": "biggo: Restart Language Server"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "biggo.runFile",
+          "when": "editorLangId == biggo"
+        },
+        {
+          "command": "biggo.explainFile",
+          "when": "editorLangId == biggo"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "biggo",
+      "properties": {
+        "biggo.path": {
+          "type": "string",
+          "default": "biggo",
+          "description": "The biggo executable: a full path, or a name to look up on PATH."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[biggo]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "editor.defaultFormatter": "biggo.biggo"
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.0.0"
+  },
+  "scripts": {
+    "package": "vsce package"
+  }
+}

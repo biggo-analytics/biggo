@@ -1,0 +1,7 @@
+[package]
+name = "biggo-plan"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+biggo-syntax.workspace = true

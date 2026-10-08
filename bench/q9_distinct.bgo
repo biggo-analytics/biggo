@@ -1,0 +1,16 @@
+// Counting distinct values: a million customers and two thousand products per region.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: float?,
+}
+
+read_csv<Sale>("data/sales.csv")
+  |> group(region)
+  |> agg(customers = count_distinct(customer_id), products = count_distinct(product_id))
+  |> sort(region)
+  |> take(5)
+  |> print()

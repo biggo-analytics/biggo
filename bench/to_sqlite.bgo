@@ -1,0 +1,11 @@
+// Copies the first million rows of the CSV data into a SQLite database.
+type Sale = {
+  date: date,
+  region: string,
+  product_id: int,
+  customer_id: int,
+  qty: int,
+  price: float?,
+}
+
+write_sql(read_csv<Sale>("data/sales.csv") |> take(1000000), "data/sales.db", "sales")

@@ -1,0 +1,2 @@
+(type Sale {region: string, amount: int})
+(|> (call read_csv <Sale> "data/sales.csv") (call take 1) (call print))

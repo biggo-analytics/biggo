@@ -1,0 +1,25 @@
+// JSON files, one object per line, and SQLite databases.
+
+type Event = { id: int, kind: string, at: datetime, cost: decimal?, ok: bool }
+let events = read_json<Event>("data/events.json")
+print(events)
+print(events |> where(ok) |> group(kind) |> agg(n = count(), cost = sum(cost)) |> sort(kind))
+
+write_json(events |> derive(day = to_date(at)) |> select(id, day, cost), "out/events.json")
+print(read_json<{ id: int, day: date, cost: decimal? }>("out/events.json"))
+
+// A table goes into a database under a name, and a query brings rows back.
+write_sql(events, "out/events.db", "events")
+write_sql(events |> group(kind) |> agg(n = count()), "out/events.db", "kinds")
+type Count = { kind: string, n: int }
+print(read_sql<Count>("out/events.db", "select kind, n from kinds order by kind"))
+print(
+  read_sql<{ id: int, at: datetime, cost: decimal?, ok: bool }>(
+    "out/events.db",
+    "select id, at, cost, ok from events where cost is not null order by id desc",
+  ),
+)
+// Writing again replaces the table.
+write_sql(events |> take(1), "out/events.db", "events")
+print(read_sql<{ rows: int }>("out/events.db", "select count(*) as rows from events"))
+print(read_sql<Count>("out/events.db", "select kind, n from nowhere"))

@@ -1,0 +1,26 @@
+// What the optimizer does to a query. Nothing here reads the file.
+
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+
+let sales = read_csv<Sale>("data/sales.csv")
+let min_qty = 2
+
+// `min_qty * 2` is computed by the program before the query is built. The filter moves into
+// the scan, only four columns are read, and the sort keeps just the rows `take` wants.
+sales
+  |> derive(revenue = qty * (price ?? 0.0))
+  |> where(qty > min_qty * 2 and region == "north")
+  |> select(date, region, revenue)
+  |> sort(desc(revenue))
+  |> take(3)
+  |> explain()
+
+// A condition on a group column filters before the aggregation; one on an aggregate cannot.
+sales
+  |> group(region)
+  |> agg(units = sum(qty), orders = count())
+  |> where(region != "east" and units > 10)
+  |> explain()
+
+// A limit directly over a scan stops the scan early.
+sales |> select(product, qty) |> take(5) |> explain()
