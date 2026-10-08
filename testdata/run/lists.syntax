@@ -1,0 +1,154 @@
+(let xs (list 3 1 2 3 1))
+(let words (list "pear" "Apple" "fig" "apple"))
+(let holes: list<int?> (list 4 null 2))
+(let empty: list<int> (list))
+(call print
+  (call sort xs)
+  (call sort xs (desc: true))
+  (call sort words)
+  (call sort holes)
+  (call sort holes (desc: true)))
+(call print
+  (call sort (list 2.5 (/ 0.0 0.0) (- 1.0)))
+  (call sort (list @2026-03-01 @2026-01-15))
+  (call sort (list true false))
+  (call sort (list 1.5d 0.5d)))
+(call print
+  (call sort_by words (lambda (w) (block (call length w))))
+  (call sort_by words (lambda (w) (block (call lower w)))))
+(call print
+  (call sort_by
+    (list (record (n: 2) (s: "b")) (record (n: 1) (s: "a")))
+    (lambda (r) (block (. r n)))))
+(call print
+  (call sum xs)
+  (call sum (list 1.5 2.5))
+  (call sum (list 1.5d 2d))
+  (call sum holes)
+  (call sum (list (call hours 1) (call minutes 30))))
+(call print
+  (call min xs)
+  (call max xs)
+  (call min words)
+  (call max words)
+  (call mean xs)
+  (call mean holes)
+  (call min holes)
+  (call max holes))
+(call print
+  (call sum empty)
+  (call min empty)
+  (call max empty)
+  (call mean empty)
+  (call first empty)
+  (call last empty)
+  (call sort empty)
+  (call reverse empty))
+(call print
+  (call contains xs 2)
+  (call contains xs 9)
+  (call index_of xs 3)
+  (call index_of xs 9)
+  (call contains words "fig"))
+(call print
+  (call contains holes null)
+  (call index_of holes null)
+  (call contains (list 1.5 0.0) (- 0.0))
+  (call index_of (list @2026-01-01) @2026-01-01))
+(call print
+  (call join words ", ")
+  (call join (list "a") "-")
+  (call join (call split "a b c" " ") "+")
+  (call join (list "a" (?? null "b")) ""))
+(call print
+  (call reverse xs)
+  (call distinct xs)
+  (call distinct (+ holes holes))
+  (call distinct words)
+  (call distinct (list 0.0 (- 0.0) 1.0)))
+(call print
+  (call take xs 2)
+  (call skip xs 2)
+  (call take xs 99)
+  (call skip xs 99)
+  (call take xs (- 1))
+  (call slice xs 1 2)
+  (call slice xs (- 2) 9)
+  (call slice xs 9 1))
+(call print
+  (call first xs)
+  (call last xs)
+  (call first words)
+  (call last holes)
+  (call flatten (list (list 1 2) (list) (list 3)))
+  (call flatten (list (list "a") (list "b" "c"))))
+(call print
+  (call any xs (lambda (x) (block (> x 2))))
+  (call all xs (lambda (x) (block (> x 2))))
+  (call any empty (lambda (x) (block (> x 0))))
+  (call all empty (lambda (x) (block (> x 0)))))
+(call print
+  (call find xs (lambda (x) (block (> x 1))))
+  (call find xs (lambda (x) (block (> x 9))))
+  (call find words (lambda (w) (block (call starts_with w "a")))))
+(call print
+  (call count xs (lambda (x) (block (> x 1))))
+  (call count empty (lambda (x) (block (> x 1))))
+  (call count holes (lambda (x) (block (call is_null x)))))
+(let prices (map ("tea" 1.5) ("milk" 2.0)))
+(call print
+  (call remove prices "tea")
+  (call remove prices "water")
+  (call merge prices (map ("milk" 2.5) ("rice" 9.0))))
+(call print
+  (call entries prices)
+  (call map
+    (call entries prices)
+    (lambda (entry)
+      (block (+ (+ (. entry key) "=") (call to_string (. entry value)))))))
+(call print
+  (call sum (call values prices))
+  (call sort (call keys prices))
+  (call join (call sort (call keys (call merge prices (map ("ale" 4.0))))) "/"))
+(let scores (list 72 95 58 95 81))
+(call print
+  (|> scores (call sort (desc: true)) (call distinct) (call take 3))
+  (|> scores (call filter (lambda (s) (block (>= s 70)))) (call mean)))
+(call print
+  (|> (call split "b,c,a,b" ",") (call distinct) (call sort) (call join "|")))
+(let table
+  (call from_rows
+    (list
+      (record (g: "x") (v: 2))
+      (record (g: "y") (v: 1))
+      (record (g: "x") (v: 3)))))
+(call print
+  (|> table (call sort (call desc v)) (call take 2) (call distinct g)))
+(call print
+  (|> table
+    (call agg
+      (total: (call sum v))
+      (low: (call min v))
+      (start: (call first g))
+      (some: (call any (> v 2)))
+      (every: (call all (> v 2))))))
+(call print
+  (call contains "abc" "b")
+  (call reverse "abc")
+  (call index_of "abc" "c")
+  (|> table (call skip 1) (call count)))
+(call print
+  (|> table
+    (call group g)
+    (call agg (n: (call count)) (big: (call count_if (> v 2))))
+    (call sort g)))
+(call print
+  (|> table
+    (call join (|> table (call select g (w: v)) (call distinct g)) (on: g))
+    (call count)))
+(call print
+  (call sort
+    (call map (call to_rows table) (lambda (row) (block (. row v))))
+    (desc: true))
+  (call sum (call map (call to_rows table) (lambda (row) (block (. row v))))))
+(call print (call sum (list 9223372036854775807 1)))

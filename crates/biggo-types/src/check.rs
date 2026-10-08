@@ -81,6 +81,7 @@ impl Checker {
             frames: vec![Frame::default()],
             columns: Vec::new(),
             types: vec![None; ast.expr_count()],
+            peeked: None,
         };
         let (main, result) = cx.module();
         let Cx {
@@ -151,6 +152,9 @@ pub(crate) struct Cx<'a> {
     /// The tables whose columns are in scope: one entry per enclosing table operation.
     pub(crate) columns: Vec<ColumnScope>,
     types: Vec<Option<Type>>,
+    /// An argument that was checked to see which function a call means, kept for the
+    /// function that then checks the call, so that it is not checked twice.
+    pub(crate) peeked: Option<(ExprId, Expr)>,
 }
 
 const MICROS_PER_DAY: i64 = 86_400_000_000;
@@ -1000,6 +1004,11 @@ impl<'a> Cx<'a> {
     }
 
     pub(crate) fn expr_hinted(&mut self, id: ExprId, hint: Option<FnHint>) -> Expr {
+        if let Some((peeked, expr)) = self.peeked.take()
+            && peeked == id
+        {
+            return expr;
+        }
         let ast = self.ast;
         let expr = match ast.expr(id) {
             ast::Expr::Lambda { params, ret, body } => {

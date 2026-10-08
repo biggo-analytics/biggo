@@ -707,11 +707,30 @@ Details: [Working with tables](04-tables.md)
 | `filter(xs, f)` | `list<T>` | The elements for which `f(x)` is `true` |
 | `fold(xs, start, f)` | type of `start` | Accumulates a value with `f(acc, x)` |
 | `each(xs, f)` | — | Calls `f(x)` on each element in turn; returns no value |
+| `any(xs, f)`, `all(xs, f)` | `bool` | Whether `f(x)` is true for some element, and for every element |
+| `find(xs, f)` | `T?` | The first element for which `f(x)` is true, or null |
+| `count(xs, f)` | `int` | How many elements `f(x)` is true for; `len(xs)` counts them all |
+| `sort(xs)`, `sort(xs, desc = true)` | `list<T>` | A sorted copy, smallest first, or largest first; nulls go last |
+| `sort_by(xs, f)` | `list<T>` | A copy sorted by what `f(x)` gives for each element |
+| `reverse(xs)` | `list<T>` | The elements in the opposite order |
+| `distinct(xs)` | `list<T>` | Without repeats; the first of each is kept, in its place |
+| `sum(xs)`, `mean(xs)` | type of the elements, `float?` | The sum, and the mean, of the numbers; nulls are left out |
+| `min(xs)`, `max(xs)` | `T?` | The smallest and the largest element, or null for a list with none |
+| `contains(xs, x)` | `bool` | Whether an element equals `x` |
+| `index_of(xs, x)` | `int?` | The position of the first element equal to `x`, or null |
+| `first(xs)`, `last(xs)` | `T?` | The first and the last element, or null for an empty list |
+| `take(xs, n)`, `skip(xs, n)` | `list<T>` | The first `n` elements, and the rest |
+| `slice(xs, start, length)` | `list<T>` | `length` elements from position `start`; a negative `start` counts from the end |
+| `flatten(xss)` | `list<T>` | A list of lists as one list |
+| `join(xs, separator)` | `string` | A list of strings as one string, with the separator between them |
 | `split(s, separator)` | `list<string>` | The pieces of the string `s` between its separators; an empty separator splits nothing |
 | `keys(m)` | `list<K>` | The keys, in the order they were inserted |
 | `values(m)` | `list<V>` | The values, in the same order |
 | `put(m, k, v)` | `map<K, V>` | A new map in which `k` has the value `v` |
 | `has_key(m, k)` | `bool` | The map has the key `k` |
+| `remove(m, k)` | `map<K, V>` | A new map without the key `k` |
+| `merge(a, b)` | `map<K, V>` | The entries of both maps; where both have a key, the value is that of `b` |
+| `entries(m)` | `list<{key: K, value: V}>` | The entries as records, in the order they were inserted |
 | `xs[i]`, `m[k]`, `xs + ys` | | (operators) Indexing and list concatenation |
 | `to_rows(t)` | `list<{...}>` | The rows of a table as a list of records |
 | `from_rows(xs)`, `from_rows<T>(xs)` | table | A table from a list of records |
@@ -732,6 +751,41 @@ ab ["a", "b"] [1, 2]
 {"a": 1, "b": 2, "c": 3} false 1 null
 [{id: 1}, {id: 2}]
 ```
+
+```biggo
+let scores = [72, 95, 58, 95, 81]
+print(sort(scores), sort(scores, desc = true), distinct(scores), reverse(scores))
+print(sum(scores), mean(scores), min(scores), max(scores), first(scores), slice(scores, 1, 3))
+print(contains(scores, 58), index_of(scores, 95), any(scores, fn(s) { s < 60 }), find(scores, fn(s) { s > 80 }))
+print(sort_by(["pear", "fig", "apple"], fn(word) { length(word) }), join(["a", "b", "c"], "-"))
+
+let prices = { "tea": 1.5, "milk": 2.0 }
+print(remove(prices, "tea"), merge(prices, { "milk": 2.5, "rice": 9.0 }), entries(prices))
+print(split("b,c,a,b", ",") |> distinct() |> sort() |> join("|"))
+```
+
+```text output
+[58, 72, 81, 95, 95] [95, 95, 81, 72, 58] [72, 95, 58, 81] [81, 95, 58, 95, 72]
+401 80.2 58 95 72 [95, 58, 95]
+true 1 true 95
+["fig", "pear", "apple"] a-b-c
+{"milk": 2.0} {"tea": 1.5, "milk": 2.5, "rice": 9.0} [{key: "tea", value: 1.5}, {key: "milk", value: 2.0}]
+a|b|c
+```
+
+- `sort`, `distinct`, `take`, `skip`, `join`, `sum`, `min`, `max`, `mean`, `count`, `first`, `last`,
+  `any`, `all`, `contains`, `index_of` and `reverse` are also names of table operations, aggregates and
+  string functions. Which one a call means shows in its first argument: on a list it is the
+  function of this table.
+- Lists are not changed: every function gives a new list.
+- Sorting, `min`, `max`, `distinct`, `contains` and `index_of` work on numbers, strings, truth
+  values, dates and times, compared as [`==` and `<` compare them](03-types.md#comparison-and-equality).
+  For a list of records, give `sort_by` a function that picks what to sort by. A sort keeps the
+  order of elements that compare equal.
+- `sum` of an empty list is 0, and it stops the program if a sum of ints does not fit. `mean`,
+  `min` and `max` of an empty list are null.
+- Positions count from 0. `take`, `skip` and `slice` give what there is when the list is shorter,
+  where `xs[i]` stops the program for a position that is not there.
 
 Details: [list](02-language.md#list), [map](02-language.md#map),
 [tables and lists of records](04-tables.md#tables-and-lists-of-records)

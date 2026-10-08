@@ -1,0 +1,49 @@
+// Functions of lists and maps in ordinary code.
+
+let xs = [3, 1, 2, 3, 1]
+let words = ["pear", "Apple", "fig", "apple"]
+let holes: list<int?> = [4, null, 2]
+let empty: list<int> = []
+
+print(sort(xs), sort(xs, desc = true), sort(words), sort(holes), sort(holes, desc = true))
+print(sort([2.5, 0.0 / 0.0, -1.0]), sort([@2026-03-01, @2026-01-15]), sort([true, false]), sort([1.5d, 0.5d]))
+print(sort_by(words, fn(w) { length(w) }), sort_by(words, fn(w) { lower(w) }))
+print(sort_by([{ n: 2, s: "b" }, { n: 1, s: "a" }], fn(r) { r.n }))
+
+print(sum(xs), sum([1.5, 2.5]), sum([1.5d, 2d]), sum(holes), sum([hours(1), minutes(30)]))
+print(min(xs), max(xs), min(words), max(words), mean(xs), mean(holes), min(holes), max(holes))
+print(sum(empty), min(empty), max(empty), mean(empty), first(empty), last(empty), sort(empty), reverse(empty))
+
+print(contains(xs, 2), contains(xs, 9), index_of(xs, 3), index_of(xs, 9), contains(words, "fig"))
+print(contains(holes, null), index_of(holes, null), contains([1.5, 0.0], -0.0), index_of([@2026-01-01], @2026-01-01))
+print(join(words, ", "), join(["a"], "-"), join(split("a b c", " "), "+"), join(["a", null ?? "b"], ""))
+print(reverse(xs), distinct(xs), distinct(holes + holes), distinct(words), distinct([0.0, -0.0, 1.0]))
+print(take(xs, 2), skip(xs, 2), take(xs, 99), skip(xs, 99), take(xs, -1), slice(xs, 1, 2), slice(xs, -2, 9), slice(xs, 9, 1))
+print(first(xs), last(xs), first(words), last(holes), flatten([[1, 2], [], [3]]), flatten([["a"], ["b", "c"]]))
+
+print(any(xs, fn(x) { x > 2 }), all(xs, fn(x) { x > 2 }), any(empty, fn(x) { x > 0 }), all(empty, fn(x) { x > 0 }))
+print(find(xs, fn(x) { x > 1 }), find(xs, fn(x) { x > 9 }), find(words, fn(w) { starts_with(w, "a") }))
+print(count(xs, fn(x) { x > 1 }), count(empty, fn(x) { x > 1 }), count(holes, fn(x) { is_null(x) }))
+
+let prices = { "tea": 1.5, "milk": 2.0 }
+print(remove(prices, "tea"), remove(prices, "water"), merge(prices, { "milk": 2.5, "rice": 9.0 }))
+print(entries(prices), map(entries(prices), fn(entry) { entry.key + "=" + to_string(entry.value) }))
+print(sum(values(prices)), sort(keys(prices)), join(sort(keys(merge(prices, { "ale": 4.0 }))), "/"))
+
+// The pieces work together, and with pipelines.
+let scores = [72, 95, 58, 95, 81]
+print(scores |> sort(desc = true) |> distinct() |> take(3), scores |> filter(fn(s) { s >= 70 }) |> mean())
+print(split("b,c,a,b", ",") |> distinct() |> sort() |> join("|"))
+
+// The same names keep their meaning for tables, strings and columns.
+let table = from_rows([{ g: "x", v: 2 }, { g: "y", v: 1 }, { g: "x", v: 3 }])
+print(table |> sort(desc(v)) |> take(2) |> distinct(g))
+print(table |> agg(total = sum(v), low = min(v), start = first(g), some = any(v > 2), every = all(v > 2)))
+print(contains("abc", "b"), reverse("abc"), index_of("abc", "c"), table |> skip(1) |> count())
+print(table |> group(g) |> agg(n = count(), big = count_if(v > 2)) |> sort(g))
+print(table |> join(table |> select(g, w = v) |> distinct(g), on = g) |> count())
+// A list made from a table.
+print(sort(map(to_rows(table), fn(row) { row.v }), desc = true), sum(map(to_rows(table), fn(row) { row.v })))
+
+// A sum that does not fit stops the program.
+print(sum([9223372036854775807, 1]))

@@ -192,6 +192,42 @@ pub enum Builtin {
     /// The day the program started, and the moment it did.
     Today,
     Now,
+    /// A function of lists or of maps that needs nothing but its arguments.
+    List(ListOp),
+}
+
+/// The functions of lists and maps that the virtual machine computes from their arguments.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ListOp {
+    /// A sorted copy; the second argument says whether the largest comes first.
+    Sort,
+    /// The list sorted by a list of keys, one for each item.
+    SortBy,
+    Sum,
+    Min,
+    Max,
+    Mean,
+    Contains,
+    IndexOf,
+    /// A list of strings as one string, with a separator between them.
+    Join,
+    Reverse,
+    Distinct,
+    Take,
+    Skip,
+    /// The items from a position on, for a count.
+    Slice,
+    First,
+    Last,
+    /// A list of lists as one list.
+    Flatten,
+    /// Whether a list has items, and whether two lists are as long as each other.
+    NotEmpty,
+    SameLength,
+    /// A map without a key, two maps as one, and the entries of a map as records.
+    Remove,
+    Merge,
+    Entries,
 }
 
 impl Expr {

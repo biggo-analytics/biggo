@@ -921,6 +921,10 @@ impl<W: Write> Vm<W> {
                 map.insert(key, args[2].clone());
                 Ok(Value::Map(Rc::new(map)))
             }
+            Builtin::List(op) => match crate::lists::list_op(op, &args) {
+                Ok(value) => Ok(value),
+                Err(message) => self.fail(frame, message),
+            },
             Builtin::Args => Ok(Value::List(self.args.clone())),
             Builtin::Today | Builtin::Now => match self.clock() {
                 Ok(now) if builtin == Builtin::Now => Ok(Value::DateTime(now)),

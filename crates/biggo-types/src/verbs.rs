@@ -32,7 +32,7 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 68] = [
+const VERBS: [&str; 75] = [
     "print",
     "read_csv",
     "read_parquet",
@@ -84,6 +84,13 @@ const VERBS: [&str; 68] = [
     "except",
     "sample",
     "tail",
+    "sort_by",
+    "slice",
+    "flatten",
+    "find",
+    "remove",
+    "merge",
+    "entries",
     "where",
     "select",
     "drop",
@@ -304,6 +311,9 @@ impl Cx<'_> {
         {
             let message = format!("`{}` does not take type arguments", call.name);
             return Some(self.error(first.span, message));
+        }
+        if let Some(result) = self.list_call(call) {
+            return Some(result);
         }
         if let Some(result) = self.value_builtin(call) {
             return Some(result);

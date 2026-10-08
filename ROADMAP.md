@@ -256,20 +256,19 @@ numbers the rows is `window(n = row_number())`.
 Exists: `len` `range` `map` `filter` `fold` `each` `split`, `xs[i]`, `xs + ys`, `keys` `values`
 `put` `has_key`, `m[k]`, `r.field`.
 
-Most of these take a name that tables or strings already use, and work the same way on a list.
+- [x] `sort(xs)`, `sort(xs, desc = true)`, `sort_by(xs, f)`
+- [x] `sum(xs)`, `min(xs)`, `max(xs)`, `mean(xs)`
+- [x] `contains(xs, x)`, `index_of(xs, x)`, `join(xs, separator)`
+- [x] `reverse(xs)`, `distinct(xs)`, `take(xs, n)`, `skip(xs, n)`, `slice(xs, start, length)`
+- [x] `first(xs)`, `last(xs)`, `find(xs, f)`, `any(xs, f)`, `all(xs, f)`, `count(xs, f)`
+- [x] `flatten(xss)`
+- [x] `remove(m, k)`, `merge(a, b)`, `entries(m)`
+
+These take the names that tables and strings already use, and which one a call means shows in
+its first argument.
 
 | Feature | Result | What it does | Priority |
 | --- | --- | --- | --- |
-| `sort(xs)`, `sort(xs, desc = true)`, `sort_by(xs, f)` | `list<T>` | A sorted copy, by the values or by what `f` gives for each | Must |
-| `sum(xs)`, `min(xs)`, `max(xs)`, `mean(xs)` | | The aggregates, on a list | Must |
-| `contains(xs, x)`, `index_of(xs, x)` | `bool`, `int?` | Whether and where a value is in a list | Must |
-| `join(xs, separator)` | `string` | A list of strings as one string, the opposite of `split` | Must |
-| `reverse(xs)`, `distinct(xs)` | `list<T>` | Backwards, and without repeats | Must |
-| `take(xs, n)`, `skip(xs, n)`, `slice(xs, start, length)` | `list<T>` | Part of a list | Should |
-| `first(xs)`, `last(xs)` | `T?` | Null for an empty list, where `xs[0]` is an error | Should |
-| `find(xs, f)`, `any(xs, f)`, `all(xs, f)`, `count(xs, f)` | `T?`, `bool`, `int` | Searching with a function | Should |
-| `flatten(xss)` | `list<T>` | A list of lists as one list | Should |
-| `remove(m, k)`, `merge(a, b)`, `entries(m)` | | A map without a key, two maps as one, and the entries as a list of records | Should |
 | record update: `{ ...r, a: 1 }` | record | A copy of a record with some fields changed | Should |
 | `zip(xs, ys)`, `group_by(xs, f)` | | Pairs of two lists, and a list split into a map | Later |
 

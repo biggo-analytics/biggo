@@ -164,7 +164,7 @@ pub fn title(text: &str) -> String {
 fn grouped(digits: &str, separator: &str) -> String {
     let mut text = String::with_capacity(digits.len() + digits.len() / 3 * separator.len());
     for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index) % 3 == 0 {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
             text.push_str(separator);
         }
         text.push(digit);

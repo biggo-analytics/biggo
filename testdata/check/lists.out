@@ -1,0 +1,263 @@
+error: `sort` works on numbers, strings, dates and the like, not on {n: int}
+ --> check/lists.bgo:7:6
+  |
+7 | sort(rows)
+  |      ^^^^
+
+error: `sort` takes a list, and `desc = true` for largest first
+ --> check/lists.bgo:8:1
+  |
+8 | sort(xs, true)
+  | ^^^^^^^^^^^^^^
+
+error: `sort` takes a list, and `desc = true` for largest first
+ --> check/lists.bgo:9:1
+  |
+9 | sort(xs, reverse = true)
+  | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `desc` of `sort` must be bool, found int
+  --> check/lists.bgo:10:17
+   |
+10 | sort(xs, desc = 1)
+   |                 ^
+
+error: `sort_by` takes a list and a function that gives the key
+  --> check/lists.bgo:11:1
+   |
+11 | sort_by(xs)
+   | ^^^^^^^^^^^
+
+error: `sort_by` needs a function here, found int
+  --> check/lists.bgo:12:13
+   |
+12 | sort_by(xs, 5)
+   |             ^
+
+error: the keys of `sort_by` are numbers, strings, dates and the like, not {n: int}
+  --> check/lists.bgo:13:15
+   |
+13 | sort_by(rows, fn(r) { r })
+   |               ^^^^^^^^^^^
+
+error: this function has 2 parameters, but one with 1 parameter is needed here
+  --> check/lists.bgo:14:13
+   |
+14 | sort_by(xs, fn(a, b) { a })
+   |             ^^^^^^^^^^^^^^
+
+error: `sum` of a list needs numbers, found list<string>
+  --> check/lists.bgo:15:5
+   |
+15 | sum(words)
+   |     ^^^^^
+
+error: `mean` of a list needs numbers, found list<string>
+  --> check/lists.bgo:16:6
+   |
+16 | mean(words)
+   |      ^^^^^
+
+error: `min` of a list needs values with an order, found list<{n: int}>
+  --> check/lists.bgo:17:5
+   |
+17 | min(rows)
+   |     ^^^^
+
+error: `sum` takes one list
+  --> check/lists.bgo:18:1
+   |
+18 | sum(xs, 1)
+   | ^^^^^^^^^^
+
+error: the value of `contains` must be int, found string
+  --> check/lists.bgo:19:14
+   |
+19 | contains(xs, "a")
+   |              ^^^
+
+error: `contains` works on numbers, strings, dates and the like, not on {n: int}
+  --> check/lists.bgo:20:10
+   |
+20 | contains(rows, { n: 1 })
+   |          ^^^^
+
+error: `index_of` takes a list and a value to look for
+  --> check/lists.bgo:21:1
+   |
+21 | index_of(xs)
+   | ^^^^^^^^^^^^
+
+error: `join` of a list needs strings, found list<int>; `map(xs, fn(x) { to_string(x) })` makes them
+  --> check/lists.bgo:22:6
+   |
+22 | join(xs, ",")
+   |      ^^
+
+error: `join` takes a list of strings and a separator
+  --> check/lists.bgo:23:1
+   |
+23 | join(words)
+   | ^^^^^^^^^^^
+
+error: the separator of `join` must be string, found int
+  --> check/lists.bgo:24:13
+   |
+24 | join(words, 1)
+   |             ^
+
+error: `reverse` takes one list
+  --> check/lists.bgo:25:1
+   |
+25 | reverse(xs, 1)
+   | ^^^^^^^^^^^^^^
+
+error: `distinct` works on numbers, strings, dates and the like, not on {n: int}
+  --> check/lists.bgo:26:10
+   |
+26 | distinct(rows)
+   |          ^^^^
+
+error: `take` takes a list and a number of items
+  --> check/lists.bgo:27:1
+   |
+27 | take(xs)
+   | ^^^^^^^^
+
+error: the number of items of `take` must be int, found string
+  --> check/lists.bgo:28:10
+   |
+28 | take(xs, "2")
+   |          ^^^
+
+error: the number of items of `skip` must be int, found float
+  --> check/lists.bgo:29:10
+   |
+29 | skip(xs, 1.5)
+   |          ^^^
+
+error: `slice` takes a list, a position and a length
+  --> check/lists.bgo:30:1
+   |
+30 | slice(xs, 1)
+   | ^^^^^^^^^^^^
+
+error: `first` takes one list
+  --> check/lists.bgo:31:1
+   |
+31 | first(xs, 1)
+   | ^^^^^^^^^^^^
+
+error: `flatten` works on a list of lists, found list<int>
+  --> check/lists.bgo:32:9
+   |
+32 | flatten(xs)
+   |         ^^
+
+error: `any` takes a list and a function that gives true or false
+  --> check/lists.bgo:33:1
+   |
+33 | any(xs)
+   | ^^^^^^^
+
+error: this function must return bool, but its body has type int
+  --> check/lists.bgo:34:15
+   |
+34 | any(xs, fn(x) { x })
+   |               ^^^^^
+
+error: `all` needs a function here, found int
+  --> check/lists.bgo:35:9
+   |
+35 | all(xs, 5)
+   |         ^
+
+error: this function must return bool, but its body has type string
+  --> check/lists.bgo:36:16
+   |
+36 | find(xs, fn(x) { "yes" })
+   |                ^^^^^^^^^
+
+error: `remove` works on a map, found list<int>
+  --> check/lists.bgo:37:8
+   |
+37 | remove(xs, 1)
+   |        ^^
+
+error: the key of `remove` must be string, found int
+  --> check/lists.bgo:38:11
+   |
+38 | remove(m, 1)
+   |           ^
+
+error: the second map of `merge` must be map<string, int>, found list<int>
+  --> check/lists.bgo:39:10
+   |
+39 | merge(m, xs)
+   |          ^^
+
+error: the second map of `merge` must be map<string, int>, found map<string, string>
+  --> check/lists.bgo:40:10
+   |
+40 | merge(m, { "a": "one" })
+   |          ^^^^^^^^^^^^^^
+
+error: `entries` works on a map, found list<int>
+  --> check/lists.bgo:41:9
+   |
+41 | entries(xs)
+   |         ^^
+
+error: `sort` works on a list, found map<string, int>
+  --> check/lists.bgo:42:6
+   |
+42 | sort(m)
+   |      ^
+
+error: `sum` works on a list, found map<string, int>
+  --> check/lists.bgo:43:5
+   |
+43 | sum(m)
+   |     ^
+
+error: `slice` works on a list, found int
+  --> check/lists.bgo:44:7
+   |
+44 | slice(5, 1, 2)
+   |       ^
+
+error: `flatten` takes one list of lists
+  --> check/lists.bgo:45:1
+   |
+45 | flatten()
+   | ^^^^^^^^^
+
+error: `entries` takes one map
+  --> check/lists.bgo:46:1
+   |
+46 | entries()
+   | ^^^^^^^^^
+
+error: `count` takes a list and a function that gives true or false; `len(xs)` is the number of all its items
+  --> check/lists.bgo:47:1
+   |
+47 | count(xs)
+   | ^^^^^^^^^
+
+error: this function must return bool, but its body has type int
+  --> check/lists.bgo:48:17
+   |
+48 | count(xs, fn(x) { x })
+   |                 ^^^^^
+
+error: `count` works on a list, found map<string, int>
+  --> check/lists.bgo:49:7
+   |
+49 | count(m, fn(x) { true })
+   |       ^
+
+error: cannot tell the type of `x` here; write it, as in `x: int`
+  --> check/lists.bgo:50:12
+   |
+50 | sort_by(fn(x) { x })
+   |            ^

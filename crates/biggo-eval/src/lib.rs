@@ -3,6 +3,7 @@
 
 mod bytecode;
 mod compile;
+mod lists;
 mod scalars;
 mod value;
 mod vm;

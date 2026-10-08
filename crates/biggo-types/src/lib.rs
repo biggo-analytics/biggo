@@ -4,6 +4,7 @@
 mod builtins;
 mod check;
 pub mod hir;
+mod lists;
 mod tables;
 mod ty;
 mod verbs;
