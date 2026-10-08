@@ -105,8 +105,10 @@ expression into one of two things:
   plan is built, and the value is passed into the plan as a parameter.
 - If it contains a column → it becomes a `plan::Expr` that the engine evaluates over the whole column.
 
-This rule is why `where(qty > threshold())` calls `threshold()` once, and why a function you write
-yourself cannot take a column (there is no `plan::Expr` form for it).
+This rule is why `where(qty > threshold())` calls `threshold()` once. A function you write
+yourself has no `plan::Expr` form, so a call of one with a column among its arguments is replaced,
+during `lower`, by the checked body of the function with the arguments in place of its
+parameters (`inline.rs`). What the engine receives is the body, written out.
 
 ### What disappears before the engine (desugaring)
 

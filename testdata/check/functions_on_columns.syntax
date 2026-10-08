@@ -1,0 +1,30 @@
+(type Sale {code: string, units: int, price: float, note: string?})
+(let sales
+  (|>
+    (call from_rows
+      (list (record (code: "a") (units: 1) (price: 2.0) (note: "x"))))
+    (call derive (note: (if (> units 1) (block note) (block null))))))
+(fn double(x: int) -> int (block (* x 2)))
+(fn shout(s: string) -> string (block (+ (call upper s) "!")))
+(fn listed(x: int) -> list<int> (block (list x x)))
+(fn first_of(x: int) -> int (block (index (list x 0) 0)))
+(fn loud(x: int) -> int (block (call print x) x))
+(fn again(n: int) -> int
+  (block (if (<= n 0) (block 0) (block (call again (- n 1))))))
+(fn each_one(x: int) -> int
+  (block (call fold (call range 0 x) 0 (lambda (a, b) (block (+ a b))))))
+(fn pattern(s: string, p: string) -> bool (block (call regex_match s p)))
+(|> sales (call derive (d: (call double price))))
+(|> sales (call derive (d: (call shout note))))
+(|> sales (call derive (d: (call double units 2))))
+(|> sales (call derive (d: (call listed units))))
+(|> sales (call derive (d: (call first_of units))))
+(|> sales (call derive (d: (call loud units))))
+(|> sales (call derive (d: (call again units))))
+(|> sales (call derive (d: (call each_one units))))
+(|> sales (call derive (d: (call pattern code code))))
+(|> sales (call derive (d: (call later units))))
+(let twice (lambda (x: int) (block (* x 2))))
+(|> sales (call derive (d: (call twice units))))
+(|> sales (call agg (d: (call double units))))
+(fn later(x: int) -> int (block (+ x 1)))

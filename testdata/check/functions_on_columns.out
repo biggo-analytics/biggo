@@ -1,0 +1,71 @@
+error: `double` expects int for `x`, found float
+  --> check/functions_on_columns.bgo:17:28
+   |
+17 | sales |> derive(d = double(price))
+   |                            ^^^^^
+
+error: `shout` expects string for `s`, found string?
+  --> check/functions_on_columns.bgo:18:27
+   |
+18 | sales |> derive(d = shout(note))
+   |                           ^^^^
+
+error: too many arguments: `double` takes 1
+  --> check/functions_on_columns.bgo:19:35
+   |
+19 | sales |> derive(d = double(units, 2))
+   |                                   ^
+
+error: `listed` cannot be used on a column: in its body, a list cannot be built from columns; on a column a function can use operators, `if` with `else`, `match` and built-in functions of values
+  --> check/functions_on_columns.bgo:20:28
+   |
+20 | sales |> derive(d = listed(units))
+   |                            ^^^^^
+
+error: `first_of` cannot be used on a column: in its body, a column cannot be used in this kind of expression; on a column a function can use operators, `if` with `else`, `match` and built-in functions of values
+  --> check/functions_on_columns.bgo:21:30
+   |
+21 | sales |> derive(d = first_of(units))
+   |                              ^^^^^
+
+error: `loud` cannot be used on a column: its body does something besides computing a value
+  --> check/functions_on_columns.bgo:22:21
+   |
+22 | sales |> derive(d = loud(units))
+   |                     ^^^^^^^^^^^
+
+error: `again` cannot be used on a column: it calls itself
+  --> check/functions_on_columns.bgo:23:21
+   |
+23 | sales |> derive(d = again(units))
+   |                     ^^^^^^^^^^^^
+
+error: `each_one` cannot be used on a column: it is, or makes, a function inside a function
+  --> check/functions_on_columns.bgo:24:21
+   |
+24 | sales |> derive(d = each_one(units))
+   |                     ^^^^^^^^^^^^^^^
+
+error: the pattern of `regex_match` cannot depend on a column
+  --> check/functions_on_columns.bgo:25:21
+   |
+25 | sales |> derive(d = pattern(code, code))
+   |                     ^^^^^^^^^^^^^^^^^^^
+
+error: `later` cannot be used on a column: it is declared below this line, and a function used on a column must be declared above
+  --> check/functions_on_columns.bgo:26:21
+   |
+26 | sales |> derive(d = later(units))
+   |                     ^^^^^^^^^^^^
+
+error: a function that is held in a variable cannot take a column; declare it with `fn` at the top of the file
+  --> check/functions_on_columns.bgo:28:27
+   |
+28 | sales |> derive(d = twice(units))
+   |                           ^^^^^
+
+error: a column must be aggregated, as in `sum(x)`, unless it is a group column
+  --> check/functions_on_columns.bgo:29:25
+   |
+29 | sales |> agg(d = double(units))
+   |                         ^^^^^

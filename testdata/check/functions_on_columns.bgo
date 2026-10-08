@@ -1,0 +1,31 @@
+// Functions that cannot be used on a column, and calls that do not fit.
+type Sale = { code: string, units: int, price: float, note: string? }
+let sales = from_rows([{ code: "a", units: 1, price: 2.0, note: "x" }]) |> derive(note = if units > 1 { note } else { null })
+
+fn double(x: int) -> int { x * 2 }
+fn shout(s: string) -> string { upper(s) + "!" }
+fn listed(x: int) -> list<int> { [x, x] }
+fn first_of(x: int) -> int { [x, 0][0] }
+fn loud(x: int) -> int {
+  print(x)
+  x
+}
+fn again(n: int) -> int { if n <= 0 { 0 } else { again(n - 1) } }
+fn each_one(x: int) -> int { fold(range(0, x), 0, fn(a, b) { a + b }) }
+fn pattern(s: string, p: string) -> bool { regex_match(s, p) }
+
+sales |> derive(d = double(price))
+sales |> derive(d = shout(note))
+sales |> derive(d = double(units, 2))
+sales |> derive(d = listed(units))
+sales |> derive(d = first_of(units))
+sales |> derive(d = loud(units))
+sales |> derive(d = again(units))
+sales |> derive(d = each_one(units))
+sales |> derive(d = pattern(code, code))
+sales |> derive(d = later(units))
+let twice = fn(x: int) { x * 2 }
+sales |> derive(d = twice(units))
+sales |> agg(d = double(units))
+
+fn later(x: int) -> int { x + 1 }

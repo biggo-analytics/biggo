@@ -1,0 +1,42 @@
++---------+---------+
+| product | revenue |
++---------+---------+
+| gadget  | 30.0    |
+| widget  | 40.0    |
++---------+---------+
++---------+---------+
+| product | revenue |
++---------+---------+
+| widget  | 0.0     |
++---------+---------+
+18 1 15
++---------+---------+
+| product | revenue |
++---------+---------+
+| gadget  | 30.0    |
+| widget  | 40.0    |
++---------+---------+
++---------+-----+
+| product | qty |
++---------+-----+
+| widget  | 10  |
+| gadget  | 3   |
+| widget  | 5   |
++---------+-----+
++---------+-----+
+| product | qty |
++---------+-----+
+| widget  | 10  |
+| widget  | 5   |
++---------+-----+
+plan:
+  Aggregate: total = sum(qty)
+    Filter: qty > 3
+      Project: qty
+        Table: 3 rows
+optimized plan:
+  Aggregate: total = sum(qty)
+    Project: qty
+      Filter: qty > 3
+        Table: 3 rows
+

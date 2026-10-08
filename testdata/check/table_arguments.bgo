@@ -1,0 +1,15 @@
+// Tables that do not have what a function asks for.
+let sales = from_rows([{ product: "a", qty: 1, price: 2.0 }]) |> derive(note = if qty > 1 { product } else { null })
+
+fn units(t: table<{ qty: int }>) -> int { 0 }
+fn named(t: table<{ product: string, note: string }>) -> int { 0 }
+fn priced(t: table<{ price: decimal }>) -> int { 0 }
+fn two(a: table<{ qty: int }>, b: table<{ sku: string }>) -> int { 0 }
+
+units(sales |> select(product))
+named(sales)
+priced(sales)
+two(sales, sales)
+units(5)
+let narrow: table<{ qty: int, cost: float }> = sales
+fn wide(t: table<{ qty: int }>) -> table<{ qty: int, price: float }> { t }

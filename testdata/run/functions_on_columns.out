@@ -1,0 +1,62 @@
++------+------+--------+--------+
+| code | m    | size   | kind   |
++------+------+--------+--------+
+| w-01 | 0.6  | large  | widget |
+| G-07 | 0.25 | small  | gadget |
+| z-99 | 0.0  | medium | other  |
++------+------+--------+--------+
++------+------+---+-------+
+| code | s    | b | gross |
++------+------+---+-------+
+| w-01 | 1.2  | 3 | 26.75 |
+| G-07 | 0.25 | 0 | 32.1  |
+| z-99 | 0.0  | 2 | 29.96 |
++------+------+---+-------+
++------+
+| code |
++------+
+| w-01 |
++------+
++------+
+| code |
++------+
+| w-01 |
+| G-07 |
+| z-99 |
++------+
++--------+---+------+
+| size   | n | best |
++--------+---+------+
+| large  | 1 | 0.6  |
+| medium | 1 | 0.0  |
+| small  | 1 | 0.25 |
++--------+---+------+
++--------------------+
+| overall            |
++--------------------+
+| 0.2710843373493976 |
++--------------------+
++------+---------+
+| code | running |
++------+---------+
+| w-01 | 3       |
+| G-07 | 0       |
+| z-99 | 5       |
++------+---------+
+0.6 large 1.2 widget 0 26.75
+plan:
+  Project: code, size = if units >= 10 { "large" } else { if units >= 5 { "medium" } else { "small" } }
+    Filter: (price - cost) / price > 0.5
+      Project: code, units, price, cost, bonus = if bonus > 1 { bonus } else { null }
+        Table: 3 rows
+optimized plan:
+  Project: code, size = if units >= 10 { "large" } else { if units >= 5 { "medium" } else { "small" } }
+    Filter: (price - cost) / price > 0.5
+      Table: 3 rows
+
++------+-------+
+| code | price |
++------+-------+
+| G-07 | 10.0  |
+| z-99 | 4.0   |
++------+-------+

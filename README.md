@@ -300,8 +300,6 @@ python3 bench/run.py           # benchmarks (build with --release and generate t
   line.
 - There are no `for` or `while` loops (use `map`, `filter`, `fold`, `each`, or recursion), and a
   variable cannot be assigned a new value.
-- A user-defined function cannot take a column: a column expression can use only operators and
-  built-in functions.
 - The language server has no go-to-definition or rename yet. The VS Code extension has been
   packaged and its grammar tested, but it has not been run inside VS Code.
 - Tested on macOS (Apple Silicon) only.

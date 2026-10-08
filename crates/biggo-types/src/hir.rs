@@ -332,6 +332,87 @@ impl Expr {
         }
     }
 
+    /// Calls `f` with each direct subexpression, which it may change.
+    pub fn for_each_child_mut(&mut self, f: &mut impl FnMut(&mut Expr)) {
+        let stmts = |stmts: &mut [Stmt], f: &mut dyn FnMut(&mut Expr)| {
+            for stmt in stmts {
+                match stmt {
+                    Stmt::Let(_, value) | Stmt::Global(_, value) | Stmt::Expr(value) => f(value),
+                }
+            }
+        };
+        match &mut self.kind {
+            ExprKind::Unit
+            | ExprKind::Null
+            | ExprKind::Bool(_)
+            | ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::Str(_)
+            | ExprKind::Date(_)
+            | ExprKind::DateTime(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::Local(_)
+            | ExprKind::Capture(_)
+            | ExprKind::SelfFn
+            | ExprKind::Global(..)
+            | ExprKind::Function(_)
+            | ExprKind::Column(_)
+            | ExprKind::Error => {}
+            ExprKind::Window(_, arg, _) => {
+                if let Some(arg) = arg {
+                    f(arg);
+                }
+            }
+            ExprKind::Convert(_, operand) | ExprKind::Field(operand, _) => f(operand),
+            ExprKind::Index(base, index) => {
+                f(base);
+                f(index);
+            }
+            ExprKind::Map(entries) => {
+                for (key, value) in entries {
+                    f(key);
+                    f(value);
+                }
+            }
+            ExprKind::List(items)
+            | ExprKind::Agg(_, items)
+            | ExprKind::Record(_, items)
+            | ExprKind::Closure(_, items)
+            | ExprKind::Builtin(_, items)
+            | ExprKind::Scalar(_, items) => items.iter_mut().for_each(f),
+            ExprKind::Neg(operand) | ExprKind::Not(operand) | ExprKind::ToFloat(operand) => {
+                f(operand)
+            }
+            ExprKind::Binary(_, left, right) => {
+                f(left);
+                f(right);
+            }
+            ExprKind::If(cond, then, otherwise) => {
+                f(cond);
+                f(then);
+                if let Some(otherwise) = otherwise {
+                    f(otherwise);
+                }
+            }
+            ExprKind::Block(block, value) => {
+                stmts(block, f);
+                if let Some(value) = value {
+                    f(value);
+                }
+            }
+            ExprKind::Call(callee, args) => {
+                if let Callee::Value(callee) = callee {
+                    f(callee);
+                }
+                args.iter_mut().for_each(|arg| f(&mut arg.value));
+            }
+            ExprKind::Table(table) => {
+                table.inputs.iter_mut().for_each(&mut *f);
+                table.params.iter_mut().for_each(f);
+            }
+        }
+    }
+
     /// The first place, if any, where the expression reads a column or aggregates.
     pub fn find_column_use(&self) -> Option<&Expr> {
         if matches!(

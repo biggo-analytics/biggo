@@ -1,0 +1,41 @@
+error: `units` cannot take this table for `t`: the table has no column `qty`
+ --> check/table_arguments.bgo:9:7
+  |
+9 | units(sales |> select(product))
+  |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `named` cannot take this table for `t`: column `note` is string?, where string is wanted
+  --> check/table_arguments.bgo:10:7
+   |
+10 | named(sales)
+   |       ^^^^^
+
+error: `priced` cannot take this table for `t`: column `price` is float, where decimal is wanted
+  --> check/table_arguments.bgo:11:8
+   |
+11 | priced(sales)
+   |        ^^^^^
+
+error: `two` cannot take this table for `b`: the table has no column `sku`
+  --> check/table_arguments.bgo:12:12
+   |
+12 | two(sales, sales)
+   |            ^^^^^
+
+error: `units` expects table<{qty: int}> for `t`, found int
+  --> check/table_arguments.bgo:13:7
+   |
+13 | units(5)
+   |       ^
+
+error: expected table<{qty: int, cost: float}>, found table<{product: string, qty: int, price: float, note: string?}>
+  --> check/table_arguments.bgo:14:48
+   |
+14 | let narrow: table<{ qty: int, cost: float }> = sales
+   |                                                ^^^^^
+
+error: `wide` is declared to return table<{qty: int, price: float}>, but its body has type table<{qty: int}>
+  --> check/table_arguments.bgo:15:70
+   |
+15 | fn wide(t: table<{ qty: int }>) -> table<{ qty: int, price: float }> { t }
+   |                                                                      ^^^^^

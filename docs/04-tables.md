@@ -131,25 +131,68 @@ A part of an expression that does not touch any column (such as `1 + tax_rate()`
 **once**, when the plan is built, and its value is embedded in the plan. It is not called again for
 every row.
 
-What you cannot do: pass a column to a user-defined function.
+### Your own functions on columns
 
-```biggo error
-fn double(n: int) -> int { n * 2 }
-print(sales |> derive(twice = double(qty)))
+A function you declare with `fn` can be called on columns, like a built-in one:
+
+```biggo
+fn revenue(qty: int, price: float?) -> float {
+  to_float(qty) * (price ?? 0.0)
+}
+
+fn size(qty: int) -> string {
+  if qty >= 10 { "large" } else if qty >= 5 { "medium" } else { "small" }
+}
+
+print(
+  sales
+    |> group(order = size(qty))
+    |> agg(orders = count(), revenue = sum(revenue(qty, price)))
+    |> sort(desc(revenue)),
+)
+print(revenue(3, 2.5), size(3))
 ```
 
 ```text output
-error: a user-defined function cannot take a column; only operators and built-in functions work on columns
- --> example.bgo:2:38
-  |
-2 | print(sales |> derive(twice = double(qty)))
-  |                                      ^^^
++--------+--------+---------+
+| order  | orders | revenue |
++--------+--------+---------+
+| small  | 6      | 349.8   |
+| large  | 2      | 55.0    |
+| medium | 2      | 17.5    |
++--------+--------+---------+
+7.5 small
 ```
 
-This is because a user-defined function works on one value at a time in the interpreter, which is
-hundreds of times slower than the engine. The language therefore does not let you write a slow
-pipeline by accident. If you want something reusable, write a function that *takes and returns a
-table* instead (see [Functions that take and return tables](#functions-that-take-and-return-tables)).
+Such a call costs nothing at run time. The engine does not call the function once per row:
+before the query runs, the call is replaced by the body of the function, with the columns in
+place of its parameters, and the result is computed a whole column at a time. `biggo explain`
+shows the query with the body written out. The same function still works on single values,
+as in the last line.
+
+For this to be possible, the function must be one whose body is a formula of its parameters:
+
+- It is declared with `fn` at the top of a file, above the query that uses it (or in a file
+  that is imported).
+- Its body uses operators, `if` with `else`, `match`, built-in functions of values, variables
+  of its own (`let`), and other functions of this kind.
+- It does not call itself, print, or build lists, records or maps from its parameters.
+
+```biggo error
+fn first_word(s: string) -> string { split(s, " ")[0] }
+print(sales |> derive(short = first_word(product)))
+```
+
+```text output
+error: `first_word` cannot be used on a column: in its body, a column cannot be used in this kind of expression; on a column a function can use operators, `if` with `else`, `match` and built-in functions of values
+ --> example.bgo:2:42
+  |
+2 | print(sales |> derive(short = first_word(product)))
+  |                                          ^^^^^^^
+```
+
+(Here `split_part(s, " ", 0)` does the same on a column.) An argument that is not a column,
+such as a threshold held in a variable, is passed as usual.
 
 Other rules worth knowing:
 
@@ -900,7 +943,6 @@ fn revenue_by_product(t: Priced, min_qty: int) -> Revenue {
 }
 
 sales
-  |> select(product, qty, price)
   |> revenue_by_product(2)
   |> sort(desc(revenue))
   |> print()
@@ -918,6 +960,31 @@ sales
 
 A function like this does not slow anything down: it is called once to *build the plan*, and then
 the whole plan is optimized together, as if you had written the steps directly one after another.
+
+The type of a table parameter names the columns that the function needs. A table with more
+columns can be passed, as `sales` is above, with its `date` and `region`: the function is given
+the columns it named, and the others are left out, before any data is read. So one function
+serves every table that has those columns.
+
+```biggo
+fn units(t: table<{ qty: int }>) -> int {
+  to_rows(t |> agg(total = sum(qty)))[0].total
+}
+
+let returns = from_rows([{ product: "widget", qty: 2, reason: "broken" }])
+print(units(sales), units(returns), sales |> where(region == "north") |> units())
+```
+
+```text output
+45 2 21
+```
+
+- The columns are matched by name, in any order. Their types must be the same, except that a
+  column that cannot be null fits where one that can is wanted.
+- The result of the function has the columns its return type says. A function cannot pass
+  through columns that it does not know of: to keep them, join its result back, or compute the
+  new column in place with [a function on columns](#your-own-functions-on-columns).
+- The same holds wherever a table type is written, as in `let slim: table<{ qty: int }> = sales`.
 
 ## Row order and reproducible results
 

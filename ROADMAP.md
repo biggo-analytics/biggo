@@ -331,8 +331,6 @@ arguments, type inference for lambdas.
 
 | Feature | What it does | Priority |
 | --- | --- | --- |
-| user-defined functions on columns | Today `derive(m = margin(price, cost))` is a compile error, because a column expression can use only operators and built-in functions. The function's body is inlined into the query plan at compile time, so it is as fast as writing the expression out | Must |
-| functions that take a table with "at least" the named columns | Today a parameter of type `table<{region: string, qty: int}>` rejects a table that has extra columns, so a pipeline cannot be written once and reused across tables | Must |
 | default values for parameters | `fn top(t: table<Sale>, n: int = 10)` | Should |
 | user-defined generic functions | `fn first<T>(xs: list<T>) -> T?` | Should |
 | named imports | `import "lib/geo.bgo" as geo`, then `geo.area(...)`. Today the names of every file share one namespace | Should |
@@ -342,6 +340,12 @@ arguments, type inference for lambdas.
 | a `decimal` with a chosen number of decimal places | Today it is fixed at 6 | Later |
 | user-defined aggregates | An aggregate written in biggo | Later |
 | a `pivot` that finds its column values at run time | For the REPL, where the result is printed at once and not passed on. In a program the values still have to be listed, by principle 1 | Later |
+
+- [x] Functions of the program on columns: `derive(m = margin(price, cost))`. The body of the
+      function is written into the query before it runs, so it is as fast as writing the
+      expression out
+- [x] A function that takes `table<{region: string, qty: int}>` accepts a table with more
+      columns than those
 
 ### 11. Tooling
 

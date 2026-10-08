@@ -12,7 +12,7 @@ use biggo_syntax::Span;
 use biggo_syntax::ast::{self, BinaryOp, Date, ExprId};
 
 use crate::check::{ArgSrc, Call, Cx, FnHint, NameKind, Named, Place, coerce};
-use crate::hir::{Builtin, Expr, ExprKind, TableExpr};
+use crate::hir::{Builtin, Callee, Expr, ExprKind, TableExpr};
 use crate::ty::{Grouped, Type};
 
 /// A table whose columns can be named by the expression being checked.
@@ -834,14 +834,27 @@ impl Cx<'_> {
                 let Some(column_use) = expr.find_column_use() else {
                     return Some(Lowered::Free(expr));
                 };
+                // A function of the program over columns is its body, written out with the
+                // columns in place of its parameters.
+                let aggregate = matches!(column_use.kind, ExprKind::Agg(..) | ExprKind::Window(..));
+                if let ExprKind::Call(Callee::Function(id), _) = &expr.kind
+                    && !aggregate
+                {
+                    let (name, _) = self.function_signature(*id);
+                    let body = self.inline(expr, 0)?;
+                    let outer = self.inlined.replace(name);
+                    let lowered = self.lower(body, params);
+                    self.inlined = outer;
+                    return lowered;
+                }
                 let message = match (&expr.kind, &column_use.kind) {
                     (_, ExprKind::Agg(..) | ExprKind::Window(..)) => {
                         "an aggregate cannot be used here"
                     }
                     (ExprKind::If(..), _) => "an `if` over columns needs an `else` branch",
                     (ExprKind::Call(..), _) => {
-                        "a user-defined function cannot take a column; \
-                         only operators and built-in functions work on columns"
+                        "a function that is held in a variable cannot take a column; \
+                         declare it with `fn` at the top of the file"
                     }
                     (ExprKind::List(_), _) => "a list cannot be built from columns",
                     (ExprKind::Record(..) | ExprKind::Map(_), _) => {
@@ -849,6 +862,16 @@ impl Cx<'_> {
                     }
                     (ExprKind::Closure(..), _) => "a function cannot use a column",
                     _ => "a column cannot be used in this kind of expression",
+                };
+                // In the body of a function that was written out, the mistake is in what
+                // the function does with its parameters.
+                let message = match &self.inlined {
+                    Some(name) => format!(
+                        "`{name}` cannot be used on a column: in its body, {message}; \
+                         on a column a function can use operators, `if` with `else`, `match` \
+                         and built-in functions of values"
+                    ),
+                    None => message.to_string(),
                 };
                 self.error(column_use.span, message);
                 return None;
@@ -931,6 +954,15 @@ impl Cx<'_> {
             }
             ExprKind::Block(stmts, Some(value)) if stmts.is_empty() => {
                 return self.extract(*value, extract);
+            }
+            // The arguments of a function of the program, which is written out later.
+            ExprKind::Call(Callee::Function(id), args) => {
+                let mut extracted = Vec::with_capacity(args.len());
+                for mut arg in args {
+                    arg.value = *recur(self, Box::new(arg.value))?;
+                    extracted.push(arg);
+                }
+                ExprKind::Call(Callee::Function(id), extracted)
             }
             other => other,
         };

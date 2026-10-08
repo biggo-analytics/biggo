@@ -1,0 +1,44 @@
+// A function that takes a table names the columns it needs. A table with more columns can
+// be given to it: the function sees the ones it named.
+
+type Priced = table<{ product: string, qty: int, price: float? }>
+
+fn revenue(t: Priced) -> table<{ product: string, revenue: float }> {
+  t |> group(product) |> agg(revenue = sum(to_float(qty) * (price ?? 0.0))) |> sort(product)
+}
+
+fn units(t: table<{ qty: int }>) -> int {
+  to_rows(t |> agg(total = sum(qty)))[0].total
+}
+
+fn large(t: table<{ qty: int }>) -> table<{ qty: int }> {
+  t |> where(qty > 3)
+}
+
+let sales = from_rows([
+  { day: @2026-01-05, region: "north", product: "widget", qty: 10, price: 2.5 },
+  { day: @2026-01-06, region: "south", product: "gadget", qty: 3, price: 10.0 },
+  { day: @2026-01-07, region: "north", product: "widget", qty: 5, price: 3.0 },
+])
+let returns = from_rows([{ product: "widget", qty: 1, reason: "broken" }])
+  |> derive(price = if qty > 5 { 1.0 } else { null })
+
+// Two tables of different shapes go through the same function.
+print(revenue(sales))
+print(returns |> revenue())
+print(units(sales), units(returns), sales |> where(region == "north") |> units())
+
+// The columns may come in another order, and a column that cannot be null fits one that can.
+print(revenue(sales |> select(price, region, qty, product)))
+
+// The same holds wherever a table type is written: a variable, a result.
+let slim: table<{ product: string, qty: int }> = sales
+print(slim)
+fn north(t: table<{ region: string, qty: int, product: string }>) -> table<{ product: string, qty: int }> {
+  t |> where(region == "north")
+}
+print(north(sales))
+
+// What the engine is given is a selection of the columns that are wanted, which reaches
+// down to the file or the table that is read.
+explain(large(sales) |> agg(total = sum(qty)))

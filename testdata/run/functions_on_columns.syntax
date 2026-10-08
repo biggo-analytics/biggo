@@ -1,0 +1,82 @@
+(fn margin(price: float, cost: float) -> float (block (/ (- price cost) price)))
+(fn band(units: int) -> string
+  (block
+    (if
+      (>= units 10)
+      (block "large")
+      (if (>= units 5) (block "medium") (block "small")))))
+(fn score(price: float, cost: float, units: int) -> float
+  (block
+    (let each (call margin price cost))
+    (let weight (if (== (call band units) "large") (block 2.0) (block 1.0)))
+    (call round (* each weight) 3)))
+(fn tier(code: string) -> string
+  (block
+    (match
+      (call upper (call substring code 0 1))
+      (arm "W" "widget")
+      (arm "G" "gadget")
+      (arm _ "other"))))
+(fn or_zero(x: int?) -> int (block (?? x 0)))
+(let rate 1.07)
+(fn with_tax(amount: float) -> float (block (* amount rate)))
+(let sales
+  (|>
+    (call from_rows
+      (list
+        (record (code: "w-01") (units: 10) (price: 2.5) (cost: 1.0) (bonus: 3))
+        (record (code: "G-07") (units: 3) (price: 10.0) (cost: 7.5) (bonus: 1))
+        (record (code: "z-99") (units: 7) (price: 4.0) (cost: 4.0) (bonus: 2))))
+    (call derive (bonus: (if (> bonus 1) (block bonus) (block null))))))
+(call print
+  (|> sales
+    (call derive
+      (m: (call margin price cost))
+      (size: (call band units))
+      (kind: (call tier code)))
+    (call select code m size kind)))
+(call print
+  (|> sales
+    (call derive
+      (s: (call score price cost units))
+      (b: (call or_zero bonus))
+      (gross: (call with_tax (* price (call to_float units)))))
+    (call select code s b gross)))
+(call print
+  (|> sales
+    (call where
+      (and (!= (call band units) "small") (> (call margin price cost) 0.1)))
+    (call select code)))
+(call print
+  (|> sales (call sort (call desc (call margin price cost))) (call select code)))
+(call print
+  (|> sales
+    (call group (size: (call band units)))
+    (call agg (n: (call count)) (best: (call max (call margin price cost))))
+    (call sort size)))
+(call print
+  (|> sales
+    (call agg
+      (overall:
+        (call margin
+          (call sum (* price (call to_float units)))
+          (call sum (* cost (call to_float units))))))))
+(call print
+  (|> sales
+    (call window (order: code) (running: (call cumsum (call or_zero bonus))))
+    (call select code running)))
+(call print
+  (call margin 2.5 1.0)
+  (call band 10)
+  (call score 2.5 1.0 10)
+  (call tier "w-01")
+  (call or_zero null)
+  (call with_tax 25.0))
+(call explain
+  (|> sales
+    (call where (> (call margin price cost) 0.5))
+    (call select code (size: (call band units)))))
+(fn above(x: float, floor: float) -> bool (block (> x floor)))
+(let floor 3.0)
+(call print
+  (|> sales (call where (call above price floor)) (call select code price)))

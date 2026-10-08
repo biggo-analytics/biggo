@@ -76,12 +76,6 @@ error: the table already has a column `date`
 19 | sales |> window(order = date, n = row_number(), date = rank())
    |                                                 ^^^^
 
-error: a user-defined function cannot take a column; only operators and built-in functions work on columns
-  --> check/tables.bgo:22:28
-   |
-22 | sales |> derive(d = double(qty))
-   |                            ^^^
-
 error: expected int, found string
   --> check/tables.bgo:23:14
    |

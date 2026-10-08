@@ -1,0 +1,15 @@
+(let sales
+  (|>
+    (call from_rows (list (record (product: "a") (qty: 1) (price: 2.0))))
+    (call derive (note: (if (> qty 1) (block product) (block null))))))
+(fn units(t: table<{qty: int}>) -> int (block 0))
+(fn named(t: table<{product: string, note: string}>) -> int (block 0))
+(fn priced(t: table<{price: decimal}>) -> int (block 0))
+(fn two(a: table<{qty: int}>, b: table<{sku: string}>) -> int (block 0))
+(call units (|> sales (call select product)))
+(call named sales)
+(call priced sales)
+(call two sales sales)
+(call units 5)
+(let narrow: table<{qty: int, cost: float}> sales)
+(fn wide(t: table<{qty: int}>) -> table<{qty: int, price: float}> (block t))

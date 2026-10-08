@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use biggo_plan::{Field, ScalarFn, scalar};
+use biggo_plan::{self as plan, Field, ScalarFn, Schema, TableOp, scalar};
 use biggo_syntax::ast::{
     self, Ast, BinaryOp, ExprId, Ident, LambdaParam, MatchArm, Pattern, StmtKind, TypeExpr,
     TypeKind, UnaryOp,
 };
 use biggo_syntax::{Diagnostic, Interner, Span, Symbol};
 
-use crate::hir::{Arg, Callee, Conversion, Expr, ExprKind, Function, Program, Stmt};
+use crate::hir::{Arg, Callee, Conversion, Expr, ExprKind, Function, Program, Stmt, TableExpr};
 use crate::ty::{FnType, Param, Type};
 use crate::verbs::{ColumnScope, Mode, is_builtin_name};
 
@@ -35,6 +35,9 @@ struct Signature {
     ret: Option<Type>,
     /// Whether this is a function written as a value, `fn(x) { ... }`.
     lambda: bool,
+    /// The body of a function declared with `fn` at the top of a file, once it has been
+    /// checked: what a call of the function on columns is replaced by.
+    body: Option<Arc<Expr>>,
 }
 
 /// What the place where a lambda is written says about its type.
@@ -227,6 +230,9 @@ pub(crate) struct Cx<'a> {
     /// An argument that was checked to see which function a call means, kept for the
     /// function that then checks the call, so that it is not checked twice.
     pub(crate) peeked: Option<(ExprId, Expr)>,
+    /// The function whose body, written out for a call on columns, is being turned into a
+    /// part of a query.
+    pub(crate) inlined: Option<Arc<str>>,
     /// The place whose names an editor asks for, as a byte offset.
     asked: Option<u32>,
     /// What can be written at that place, once the checker has come to it.
@@ -403,9 +409,37 @@ fn fits(from: &Type, to: &Type) -> bool {
     }
 }
 
+/// The columns of `wanted` as they are taken from a table with the columns of `have`, which
+/// must have every one of them, of the same type; where `wanted` allows null, `have` need
+/// not. An error says which column stands in the way.
+pub(crate) fn narrowed(
+    have: &Schema,
+    wanted: &Schema,
+) -> Result<Vec<(Arc<str>, plan::Expr)>, String> {
+    let mut columns = Vec::with_capacity(wanted.fields.len());
+    for field in &wanted.fields {
+        let Some(held) = have.field(&field.name) else {
+            return Err(format!("the table has no column `{}`", field.name));
+        };
+        let fits = held.ty.dtype == field.ty.dtype && (field.ty.nullable || !held.ty.nullable);
+        if !fits {
+            return Err(format!(
+                "column `{}` is {}, where {} is wanted",
+                field.name, held.ty, field.ty
+            ));
+        }
+        columns.push((
+            field.name.clone(),
+            plan::Expr::column(field.name.clone(), held.ty),
+        ));
+    }
+    Ok(columns)
+}
+
 /// Converts `expr` to type `to`, where a value of its type may stand in for one: an int for a
-/// float or a decimal, a date for a datetime, a `T` or `null` for a `T?`. A list, record, or
-/// map that is written out converts part by part. Gives the expression back if it may not.
+/// float or a decimal, a date for a datetime, a `T` or `null` for a `T?`, a table for one
+/// with fewer columns. A list, record, or map that is written out converts part by part.
+/// Gives the expression back if it may not.
 pub(crate) fn coerce(mut expr: Expr, to: &Type) -> Result<Expr, Expr> {
     if expr.ty == *to || expr.ty.is_error() || to.is_error() {
         return Ok(expr);
@@ -420,6 +454,26 @@ pub(crate) fn coerce(mut expr: Expr, to: &Type) -> Result<Expr, Expr> {
     if fits(&expr.ty, to) {
         retype(&mut expr, to);
         return Ok(expr);
+    }
+    // A table with more columns than are wanted stands in as a selection of those.
+    if let (Type::Table(have), Type::Table(wanted)) = (&expr.ty, to)
+        && let Ok(columns) = narrowed(have, wanted)
+    {
+        let span = expr.span;
+        let op = TableOp::Project {
+            columns,
+            schema: wanted.clone(),
+        };
+        let table = TableExpr {
+            op,
+            inputs: vec![expr],
+            params: Vec::new(),
+        };
+        return Ok(Expr::new(
+            ExprKind::Table(Box::new(table)),
+            to.clone(),
+            span,
+        ));
     }
     match (to, &expr.ty) {
         (Type::Nullable(inner), from) if !matches!(from, Type::Nullable(_)) => {
@@ -501,9 +555,16 @@ impl<'a> Cx<'a> {
             columns: Vec::new(),
             types: vec![None; ast.expr_count()],
             peeked: None,
+            inlined: None,
             asked: None,
             names: None,
         }
+    }
+
+    /// The name of a declared function, and its body if that has been checked.
+    pub(crate) fn function_signature(&self, id: u32) -> (Arc<str>, Option<Arc<Expr>>) {
+        let signature = &self.checker.functions[id as usize];
+        (signature.name.clone(), signature.body.clone())
     }
 
     /// Whether `span` is the place whose names are asked for.
@@ -867,6 +928,7 @@ impl<'a> Cx<'a> {
             params: Vec::new(),
             ret: ret.map(|ret| self.resolve_type(ret)),
             lambda: false,
+            body: None,
         };
         for param in params {
             if signature.params.iter().any(|p| p.name == param.name.name) {
@@ -937,6 +999,9 @@ impl<'a> Cx<'a> {
                 });
             }
             None => self.checker.functions[id as usize].ret = Some(body.ty.clone()),
+        }
+        if !lambda && this.is_none() {
+            self.checker.functions[id as usize].body = Some(Arc::new(body.clone()));
         }
         let function = Function {
             name,
@@ -1013,6 +1078,7 @@ impl<'a> Cx<'a> {
             params: typed,
             ret,
             lambda: true,
+            body: None,
         });
         let id = self.checker.functions.len() as u32 - 1;
         let names: Vec<Symbol> = params.iter().map(|param| param.name.name).collect();
@@ -2165,12 +2231,20 @@ impl<'a> Cx<'a> {
                     param: index as u32,
                 }),
                 Err(value) => {
-                    let message = format!(
-                        "`{name}` expects {} for {}, found {}",
-                        param.ty,
-                        label(index),
-                        value.ty
-                    );
+                    // Of two long table types, what matters is the column that differs.
+                    let message = match (&value.ty, &param.ty) {
+                        (Type::Table(have), Type::Table(wanted)) => format!(
+                            "`{name}` cannot take this table for {}: {}",
+                            label(index),
+                            narrowed(have, wanted).err().unwrap_or_default()
+                        ),
+                        _ => format!(
+                            "`{name}` expects {} for {}, found {}",
+                            param.ty,
+                            label(index),
+                            value.ty
+                        ),
+                    };
                     self.error(value.span, message);
                     failed = true;
                 }

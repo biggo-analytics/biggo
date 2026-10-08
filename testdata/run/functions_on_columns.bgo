@@ -1,0 +1,63 @@
+// Functions of the program, called on columns. The engine computes them a column at a time,
+// as if their bodies were written in the query.
+
+fn margin(price: float, cost: float) -> float {
+  (price - cost) / price
+}
+
+fn band(units: int) -> string {
+  if units >= 10 { "large" } else if units >= 5 { "medium" } else { "small" }
+}
+
+// A body with variables of its own, and one that calls other functions.
+fn score(price: float, cost: float, units: int) -> float {
+  let each = margin(price, cost)
+  let weight = if band(units) == "large" { 2.0 } else { 1.0 }
+  round(each * weight, 3)
+}
+
+fn tier(code: string) -> string {
+  match upper(substring(code, 0, 1)) {
+    "W" => "widget"
+    "G" => "gadget"
+    _ => "other"
+  }
+}
+
+fn or_zero(x: int?) -> int {
+  x ?? 0
+}
+
+let rate = 1.07
+fn with_tax(amount: float) -> float {
+  amount * rate
+}
+
+let sales = from_rows([
+  { code: "w-01", units: 10, price: 2.5, cost: 1.0, bonus: 3 },
+  { code: "G-07", units: 3, price: 10.0, cost: 7.5, bonus: 1 },
+  { code: "z-99", units: 7, price: 4.0, cost: 4.0, bonus: 2 },
+]) |> derive(bonus = if bonus > 1 { bonus } else { null })
+
+print(sales |> derive(m = margin(price, cost), size = band(units), kind = tier(code)) |> select(code, m, size, kind))
+print(sales |> derive(s = score(price, cost, units), b = or_zero(bonus), gross = with_tax(price * to_float(units))) |> select(code, s, b, gross))
+
+// In every place a column expression goes: filters, sort keys, aggregates, windows.
+print(sales |> where(band(units) != "small" and margin(price, cost) > 0.1) |> select(code))
+print(sales |> sort(desc(margin(price, cost))) |> select(code))
+print(sales |> group(size = band(units)) |> agg(n = count(), best = max(margin(price, cost))) |> sort(size))
+print(sales |> agg(overall = margin(sum(price * to_float(units)), sum(cost * to_float(units)))))
+print(sales |> window(order = code, running = cumsum(or_zero(bonus))) |> select(code, running))
+
+// The same function on plain values gives the same answers.
+print(margin(2.5, 1.0), band(10), score(2.5, 1.0, 10), tier("w-01"), or_zero(null), with_tax(25.0))
+
+// The query that the engine is given holds no call: the body is part of it.
+explain(sales |> where(margin(price, cost) > 0.5) |> select(code, size = band(units)))
+
+// A function that mixes a column and a value of the program.
+fn above(x: float, floor: float) -> bool {
+  x > floor
+}
+let floor = 3.0
+print(sales |> where(above(price, floor)) |> select(code, price))

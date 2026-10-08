@@ -201,30 +201,34 @@ fn units(t: table<{ qty: int }>) -> int {
   to_rows(t |> agg(total = sum(qty)))[0].total
 }
 
-// pass a table whose columns match what the function declares
-print(units(sales |> select(qty)))
+// the table may have more columns than the function names
+print(units(sales), units(sales |> where(region == "north")))
 ```
 
 ```text output
-45
+45 21
 ```
 
-A table that you pass to a function must have columns that match the parameter type *exactly*
-(names, types, order), not just "at least these". So you often need to `select` before passing it:
+The type of a table parameter says which columns the function needs: a table that has them,
+with the same types, can be passed, whatever other columns it has and in whatever order. The
+function is given the columns it names. A table that lacks one of them is a compile error:
 
 ```biggo error
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
-fn units(t: table<{ qty: int }>) -> int { count(t) }
-print(units(read_csv<Sale>("data/sales.csv")))
+fn revenue(t: table<{ qty: int, price: float }>) -> int { count(t) }
+print(revenue(read_csv<Sale>("data/sales.csv")))
 ```
 
 ```text output
-error: `units` expects table<{qty: int}> for `t`, found table<{date: date, region: string, product: string, qty: int, price: float?}>
- --> example.bgo:3:13
+error: `revenue` cannot take this table for `t`: column `price` is float?, where float is wanted
+ --> example.bgo:3:15
   |
-3 | print(units(read_csv<Sale>("data/sales.csv")))
-  |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | print(revenue(read_csv<Sale>("data/sales.csv")))
+  |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ```
+
+Here `price` may be null in the file, and the function asked for a column that is never null.
+More: [Functions that take and return tables](04-tables.md#functions-that-take-and-return-tables).
 
 Place the cursor on a variable in your editor to see the type of the table at that point in the
 pipeline (see [Tools](07-tools.md#language-server-and-editors)).
