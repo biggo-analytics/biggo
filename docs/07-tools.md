@@ -498,13 +498,51 @@ input/output. Any editor that supports LSP can use it. Features:
 | --- | --- |
 | diagnostics | syntax and type errors as you type, from the same checker as `biggo check` |
 | hover | the type of the expression under the cursor (for a table, the list of columns at that point in the pipeline) |
+| completion | the names that can be written at the cursor: the columns of the table at that point in the pipeline, the fields of a record, the variables, functions and types in scope, the built-in functions, and the keywords |
 | formatting | formats the whole file with the same formatter as `biggo fmt` |
 
 A file that you `import` is read first from the content that is open in the editor (even if it is
 not saved yet). If it is not open, it is read from disk.
 Errors in an imported file are shown on the `import` line of the file you are editing.
 
-Not available yet: autocomplete, go to definition, rename.
+Not available yet: go to definition, rename.
+
+### Completion
+
+What the server offers depends on where the cursor is. Take this program:
+
+```biggo check
+type Sale = { region: string, units: int, price: float }
+let sales = read_csv<Sale>("sales.csv")
+let big = sales |> where(units > 10) |> derive(amount = units * price)
+print(big |> group(region) |> agg(total = sum(amount)) |> sort(desc(total)))
+```
+
+With the cursor inside `sum(`, the server offers `region`, `units`, `price` and `amount`, each
+with its type: the columns of the table that flows into that stage, including the one that
+`derive` added. Inside `desc(` it offers `region` and `total`, the columns that `agg` gives.
+
+| Where the cursor is | What is offered |
+| --- | --- |
+| in an argument of a table operation, as in `sales \|> where(` | the columns of the table that flows into that stage, each with its type, and then everything that any expression can use |
+| where an operation takes only the name of a column, as in `select(` and `join(other, on = ` | the columns and nothing else. For `on`, they are the columns that both tables have |
+| after the `.` of a record, as in `row.` | the fields of the record, each with its type |
+| in any other expression | the variables in scope and the parameters of the enclosing functions, the nearest first, the functions and types of the file and of the files it imports, the built-in functions, and the keywords |
+| at the name of a function that is called, as after `\|>` | functions only |
+| where a type is written, as in `let total: ` and `fn top(t: table<` | the declared types and the built-in ones |
+
+The list holds every name that fits the place, and the editor narrows it to what you have typed
+so far.
+
+The text does not have to pass the checker, or even parse: a line that is still being typed is
+the usual case. The server analyzes a copy of the file in which a name stands at the cursor and
+whatever is still open there is closed: brackets, an `if` that has no block yet, a `let` that has
+no value yet. A statement elsewhere in the file that does not parse is left out, so only the
+names it would declare are missing.
+
+The server offers nothing where no name can be completed: inside a string or a comment, at the
+name of something that is being declared, and in a statement that still does not parse with the
+cursor filled in.
 
 ### VS Code
 

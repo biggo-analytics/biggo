@@ -5,6 +5,10 @@ Editor support for biggo programs (`.bgo` files):
 - syntax highlighting, bracket matching, and `//` comment toggling
 - errors as you type, from the same checker that `biggo check` runs
 - the type of the expression under the cursor on hover — for a table, its columns
+- completion as you type, also on a line that is not finished: the columns of the table at
+  that point in a pipeline (those that `derive`, `agg` and `join` gave it among them), the
+  fields of a record after `.`, the variables, functions and types in scope, the built-in
+  functions, and the keywords — columns, fields, variables and functions with their types
 - **Format Document**, with the formatter behind `biggo fmt`
 - commands: **biggo: Run File**, **biggo: Explain Query Plans of File**, **biggo: Run Tests**,
   **biggo: Restart Language Server**
@@ -46,8 +50,9 @@ biggo files use two-space indentation, which the extension sets for the language
 ## Other editors
 
 Any editor that speaks the Language Server Protocol can use `biggo lsp`; it talks over
-standard input and output. The server sends diagnostics and answers hover and formatting
-requests, and wants the whole text of a file on every change (full document sync).
+standard input and output. The server sends diagnostics and answers hover, completion
+and formatting requests, and wants the whole text of a file on every change (full document
+sync).
 
 Neovim 0.11 or later:
 

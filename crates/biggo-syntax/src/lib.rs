@@ -12,5 +12,7 @@ mod token;
 
 pub use diag::{Diagnostic, SourceFile};
 pub use intern::{Interner, Symbol};
+pub use lexer::{Lexed, lex};
 pub use parser::{Parsed, parse};
 pub use span::Span;
+pub use token::{Token, TokenKind};

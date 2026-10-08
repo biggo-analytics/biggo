@@ -19,7 +19,7 @@ use std::rc::Rc;
 use biggo_syntax::ast::StmtKind;
 use biggo_syntax::{Diagnostic, Interner, SourceFile, Span};
 use biggo_types::hir::{Builtin, Expr, ExprKind, Program};
-use biggo_types::{Checked, Checker, Type};
+use biggo_types::{Checked, Checker, Names, Type};
 
 pub use value::{Closure, Decimal, Key, Map, Record, Repr, Value};
 pub use vm::{Module, RuntimeError, Vm};
@@ -189,6 +189,28 @@ impl<W: Write> Session<W> {
         }
         let ty = self.checker.type_of(&parsed.ast, &mut self.interner);
         Ok(ty.map_err(errors)?.map(|ty| ty.to_string()))
+    }
+
+    /// The names that can be written at byte `offset` of `source`, as `Checker::names_at` gives
+    /// them, with the definitions of the files it imports in reach. `source` need not pass:
+    /// its statements with syntax errors are left out, and so is a file that cannot be
+    /// imported.
+    pub fn names_at(&mut self, source: &str, offset: u32) -> Option<Names> {
+        let dir = self.vm.base_dir().to_path_buf();
+        let from = Source {
+            name: "",
+            text: source,
+            dir: &dir,
+            import: None,
+        };
+        let parsed = biggo_syntax::parse(source, &mut self.interner);
+        for stmt in &parsed.ast.stmts {
+            if let StmtKind::Import { path } = &stmt.kind {
+                self.import(from, path, stmt.span, false).ok();
+            }
+        }
+        self.checker
+            .names_at(&parsed.ast, &mut self.interner, offset)
     }
 
     /// Checks and runs `source`, after the files it imports, and returns the value of its

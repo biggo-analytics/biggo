@@ -11,7 +11,7 @@ use biggo_plan::{
 use biggo_syntax::Span;
 use biggo_syntax::ast::{self, BinaryOp, Date, ExprId};
 
-use crate::check::{ArgSrc, Call, Cx, FnHint, coerce};
+use crate::check::{ArgSrc, Call, Cx, FnHint, NameKind, Named, Place, coerce};
 use crate::hir::{Builtin, Expr, ExprKind, TableExpr};
 use crate::ty::{Grouped, Type};
 
@@ -573,6 +573,22 @@ impl Cx<'_> {
             self.error(span, message);
             return None;
         };
+        if self.asked_at(span) {
+            match &mut self.names {
+                // The key of a join is a column of both of its tables.
+                Some(found) => found
+                    .names
+                    .retain(|named| schema.field(&named.name).is_some()),
+                None => {
+                    let columns = schema.fields.iter().map(|field| Named {
+                        name: field.name.clone(),
+                        kind: NameKind::Column,
+                        ty: Type::from_col(field.ty),
+                    });
+                    self.offer(Place::Member, columns.collect());
+                }
+            }
+        }
         let text = self.text(*name);
         let field = schema.field(&text).cloned();
         if field.is_none() {
