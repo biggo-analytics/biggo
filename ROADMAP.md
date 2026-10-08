@@ -109,24 +109,27 @@ type rule, gives the same answer on a column as on a single value, handles null,
 [docs/06-builtins.md](docs/06-builtins.md) with an example that runs, has its mistakes covered in
 `testdata/check`, and leaves the existing benchmarks no slower.
 
-| # | Package | Catalog | Why here |
-| --- | --- | --- | --- |
-| 1 | Expressions, math, safe conversion, raw strings | [1](#1-expressions-math-and-safe-conversion) | The smallest pieces, used by everything after. `try_to_int` and its family end the "one bad value stops the query" problem |
-| 2 | Dates and times | [2](#2-dates-and-times) | Almost every real data set is grouped by period, or holds dates that are not written the ISO way |
-| 3 | Aggregates | [4](#4-aggregates) | Quantiles, conditional counts and joined strings are in every report |
-| 4 | Window functions | [5](#5-window-functions) | Growth, running totals and gap filling for time series |
-| 5 | Table operations | [6](#6-table-operations) | `count_by`, sampling, set operations, checks on data quality |
-| 6 | Strings and formatting | [3](#3-strings-and-formatting) | Numbers formatted for people, and the string functions that SQL and spreadsheets have |
-| 7 | Lists, maps and records | [7](#7-lists-maps-and-records) | Ordinary code catches up with what tables can do |
-| 8 | CI, prebuilt binaries, the extension tried in VS Code | [11](#11-tooling) | Completes 0.2. It can be done at any point, since nothing else depends on it |
-| 9 | `biggo infer`, the remaining CSV and JSON layouts, many files, `env` | [8](#8-getting-data-in-and-out) | Removes the first obstacle of a new user: writing every column type by hand |
-| 10 | Excel | [8](#8-getting-data-in-and-out) | Where most analysts' data is |
-| 11 | Output: more rows, Markdown, HTML | [9](#9-output-and-reports) | Results that go into a document or a message |
-| 12 | PostgreSQL and MySQL | [8](#8-getting-data-in-and-out) | Completes 0.3 |
-| 13 | User-defined functions on columns, tables with extra columns | [10](#10-language) | The largest limit of the language today |
-| 14 | The rest of the language | [10](#10-language) | Completes 0.4 |
-| 15 | Engine speed and spilling to disk | [12](#12-engine) | Completes 0.5 |
-| 16 | Stability | [13](#13-stability) | Completes 1.0 |
+| # | Package | Catalog | Why here | Status |
+| --- | --- | --- | --- | --- |
+| 1 | Expressions, math, safe conversion, raw strings | [1](#1-expressions-math-and-safe-conversion) | The smallest pieces, used by everything after. `try_to_int` and its family end the "one bad value stops the query" problem | done |
+| 2 | Dates and times | [2](#2-dates-and-times) | Almost every real data set is grouped by period, or holds dates that are not written the ISO way | done |
+| 3 | Aggregates | [4](#4-aggregates) | Quantiles, conditional counts and joined strings are in every report | done |
+| 4 | Window functions | [5](#5-window-functions) | Growth, running totals and gap filling for time series | done |
+| 5 | Table operations | [6](#6-table-operations) | `count_by`, sampling, set operations, checks on data quality | done |
+| 6 | Strings and formatting | [3](#3-strings-and-formatting) | Numbers formatted for people, and the string functions that SQL and spreadsheets have | done |
+| 7 | Lists, maps and records | [7](#7-lists-maps-and-records) | Ordinary code catches up with what tables can do | done |
+| 8 | CI, prebuilt binaries, the extension tried in VS Code | [11](#11-tooling) | Completes 0.2. It can be done at any point, since nothing else depends on it | written; its first run on GitHub and the first release are still to come |
+| 9 | `biggo infer`, the remaining CSV and JSON layouts, many files, `env` | [8](#8-getting-data-in-and-out) | Removes the first obstacle of a new user: writing every column type by hand | done |
+| 10 | Excel | [8](#8-getting-data-in-and-out) | Where most analysts' data is | done |
+| 11 | Output: more rows, Markdown, HTML | [9](#9-output-and-reports) | Results that go into a document or a message | done |
+| 12 | PostgreSQL and MySQL | [8](#8-getting-data-in-and-out) | Completes 0.3 | done |
+| 13 | User-defined functions on columns, tables with extra columns | [10](#10-language) | The largest limit of the language today | done |
+| 14 | The rest of the language | [10](#10-language) | Completes 0.4 | begun: defaults for parameters, records made from records, `fail` |
+| 15 | Engine speed and spilling to disk | [12](#12-engine) | Completes 0.5 | not begun |
+| 16 | Stability | [13](#13-stability) | Completes 1.0 | not begun |
+
+A package marked done has everything in it that the catalog marks Must. Its section of the
+catalog may still hold rows marked Should or Later.
 
 ## Catalog
 
