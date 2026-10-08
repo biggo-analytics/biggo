@@ -168,7 +168,7 @@ read_csv<Sale>("docs/data/sales.csv")
 ```
 
 ```text output
-error: undefined name `product`; the table has columns region, units
+error: `product` is a built-in function, which can only be called; to pass it along, wrap it in a function: `fn(x) { product(x) }`
  --> example.bgo:5:12
   |
 5 |   |> where(product == "widget")

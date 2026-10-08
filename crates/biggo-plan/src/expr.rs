@@ -150,28 +150,34 @@ impl Expr {
     }
 }
 
-/// Declares the scalar functions: each variant with the name a program calls it by.
-macro_rules! scalar_fns {
-    ($($(#[$doc:meta])* $variant:ident => $name:literal,)*) => {
-        /// A function of single values that also applies to whole columns.
+/// Declares a set of functions: each variant with the name a program calls it by.
+macro_rules! functions {
+    ($(#[$about:meta])* $set:ident { $($(#[$doc:meta])* $variant:ident => $name:literal,)* }) => {
+        $(#[$about])*
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        pub enum ScalarFn {
+        pub enum $set {
             $($(#[$doc])* $variant,)*
         }
 
-        impl ScalarFn {
-            pub const ALL: &'static [ScalarFn] = &[$(ScalarFn::$variant,)*];
+        impl $set {
+            pub const ALL: &'static [$set] = &[$($set::$variant,)*];
 
             pub fn name(self) -> &'static str {
                 match self {
-                    $(ScalarFn::$variant => $name,)*
+                    $($set::$variant => $name,)*
                 }
+            }
+
+            pub fn from_name(name: &str) -> Option<Self> {
+                Self::ALL.iter().copied().find(|func| func.name() == name)
             }
         }
     };
 }
 
-scalar_fns! {
+functions! {
+    /// A function of single values that also applies to whole columns.
+    ScalarFn {
     IsNull => "is_null",
     Abs => "abs",
     Round => "round",
@@ -299,97 +305,86 @@ scalar_fns! {
     FiscalYear => "fiscal_year",
     /// The year of the Buddhist era.
     BuddhistYear => "buddhist_year",
-}
-
-impl ScalarFn {
-    pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.iter().copied().find(|func| func.name() == name)
     }
 }
 
-/// A function that reduces the rows of a group to one value.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AggFn {
-    Sum,
-    Mean,
-    Min,
-    Max,
+functions! {
+    /// A function that reduces the rows of a group to one value.
+    AggFn {
+    Sum => "sum",
+    Mean => "mean",
+    Min => "min",
+    Max => "max",
     /// The number of rows, or of non-null values when given an argument.
-    Count,
-    CountDistinct,
-    First,
-    Last,
-    Median,
+    Count => "count",
+    CountDistinct => "count_distinct",
+    First => "first",
+    Last => "last",
+    Median => "median",
     /// Sample standard deviation.
-    Stddev,
+    Stddev => "stddev",
     /// Correlation of two columns.
-    Corr,
+    Corr => "corr",
     /// Sample covariance of two columns.
-    Cov,
+    Cov => "cov",
     /// The slope of the least-squares line through `(x, y)`, called as `slope(y, x)`.
-    Slope,
+    Slope => "slope",
     /// Where that line crosses `x = 0`.
-    Intercept,
+    Intercept => "intercept",
+    /// Sample variance, and the standard deviation and variance of a whole population.
+    Variance => "variance",
+    StddevPop => "stddev_pop",
+    VariancePop => "variance_pop",
+    /// The value below which a given share of the values lie.
+    Quantile => "quantile",
+    Product => "product",
+    /// The values of a group joined into one string, with a separator between them.
+    StringAgg => "string_agg",
+    /// The value of one column in the row where another is largest, or smallest.
+    ArgMax => "arg_max",
+    ArgMin => "arg_min",
+    }
 }
 
-impl AggFn {
-    pub const ALL: [AggFn; 14] = [
-        AggFn::Sum,
-        AggFn::Mean,
-        AggFn::Min,
-        AggFn::Max,
-        AggFn::Count,
-        AggFn::CountDistinct,
-        AggFn::First,
-        AggFn::Last,
-        AggFn::Median,
-        AggFn::Stddev,
-        AggFn::Corr,
-        AggFn::Cov,
-        AggFn::Slope,
-        AggFn::Intercept,
-    ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            AggFn::Sum => "sum",
-            AggFn::Mean => "mean",
-            AggFn::Min => "min",
-            AggFn::Max => "max",
-            AggFn::Count => "count",
-            AggFn::CountDistinct => "count_distinct",
-            AggFn::First => "first",
-            AggFn::Last => "last",
-            AggFn::Median => "median",
-            AggFn::Stddev => "stddev",
-            AggFn::Corr => "corr",
-            AggFn::Cov => "cov",
-            AggFn::Slope => "slope",
-            AggFn::Intercept => "intercept",
-        }
-    }
-
-    pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|func| func.name() == name)
-    }
+/// What an aggregate takes besides the column it works on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Extra {
+    Nothing,
+    /// A second column, read for every row.
+    Column,
+    /// A value that is the same for every row, such as a separator.
+    Value,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AggCall {
     pub func: AggFn,
     pub arg: Option<Expr>,
-    /// The second column of the aggregates that relate two.
+    /// What the aggregate takes besides its column: see `AggFn::extra`.
     pub arg2: Option<Expr>,
     pub ty: ColType,
 }
 
 impl AggFn {
-    /// Whether the aggregate takes two columns.
+    /// Whether the aggregate relates two columns of numbers.
     pub fn is_pair(self) -> bool {
         matches!(
             self,
             AggFn::Corr | AggFn::Cov | AggFn::Slope | AggFn::Intercept
         )
+    }
+
+    pub fn extra(self) -> Extra {
+        match self {
+            AggFn::Corr
+            | AggFn::Cov
+            | AggFn::Slope
+            | AggFn::Intercept
+            | AggFn::ArgMax
+            | AggFn::ArgMin => Extra::Column,
+            AggFn::Quantile | AggFn::StringAgg => Extra::Value,
+            _ => Extra::Nothing,
+        }
     }
 }
 

@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use biggo_plan::{
-    self as plan, AggCall, AggFn, ColType, CsvOptions, DataType, Field, Format, JoinColumn,
+    self as plan, AggCall, AggFn, ColType, CsvOptions, DataType, Extra, Field, Format, JoinColumn,
     JoinKind, Scalar, ScalarFn, Schema, SortKey, TableOp, WindowCall, WindowFn, dates, text,
 };
 use biggo_syntax::Span;
@@ -32,7 +32,7 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 55] = [
+const VERBS: [&str; 60] = [
     "print",
     "read_csv",
     "read_parquet",
@@ -71,6 +71,11 @@ const VERBS: [&str; 55] = [
     "pi",
     "today",
     "now",
+    "count_if",
+    "any",
+    "all",
+    "count_null",
+    "weighted_mean",
     "where",
     "select",
     "drop",
@@ -94,7 +99,7 @@ const VERBS: [&str; 55] = [
 /// highlight them.
 pub fn builtin_names() -> Vec<&'static str> {
     let scalars = ScalarFn::ALL.iter().copied().map(ScalarFn::name);
-    let aggregates = AggFn::ALL.into_iter().map(AggFn::name);
+    let aggregates = AggFn::ALL.iter().copied().map(AggFn::name);
     let windows = [
         WindowFn::RowNumber,
         WindowFn::Rank,
@@ -196,6 +201,21 @@ fn agg_type(
     use DataType::*;
     let name = func.name();
     let number = |ty: ColType| matches!(ty.dtype, Int | Float | Decimal);
+    if matches!(func, AggFn::ArgMax | AggFn::ArgMin) {
+        return match (arg, second) {
+            (Some(_), Some(by)) if by.dtype == Bool => {
+                Err(format!("`{name}` cannot go by a bool column"))
+            }
+            // The row to take the value from is unknown when no row has something to go by.
+            (Some(value), Some(by)) => Ok(ColType::new(
+                value.dtype,
+                value.nullable || by.nullable || !grouped,
+            )),
+            _ => Err(format!(
+                "`{name}` takes two columns, as in `{name}(product, sales)`"
+            )),
+        };
+    }
     if func.is_pair() {
         return match (arg, second) {
             (Some(y), Some(x)) if number(y) && number(x) => Ok(ColType::nullable(Float)),
@@ -229,10 +249,18 @@ fn agg_type(
             need_numbers()?;
             ColType::new(Float, maybe_empty)
         }
-        AggFn::Stddev => {
+        AggFn::Stddev | AggFn::Variance | AggFn::StddevPop | AggFn::VariancePop => {
             need_numbers()?;
             ColType::nullable(Float)
         }
+        AggFn::Quantile | AggFn::Product => {
+            need_numbers()?;
+            ColType::new(Float, maybe_empty)
+        }
+        AggFn::StringAgg => match arg.dtype {
+            Str => ColType::new(Str, maybe_empty),
+            _ => return Err(format!("`{name}` needs strings, found {arg}")),
+        },
         AggFn::Min | AggFn::Max => {
             if arg.dtype == Bool {
                 return Err(format!("`{name}` does not work on bool"));
@@ -240,7 +268,12 @@ fn agg_type(
             ColType::new(arg.dtype, maybe_empty)
         }
         AggFn::First | AggFn::Last => ColType::new(arg.dtype, maybe_empty),
-        AggFn::Corr | AggFn::Cov | AggFn::Slope | AggFn::Intercept => {
+        AggFn::Corr
+        | AggFn::Cov
+        | AggFn::Slope
+        | AggFn::Intercept
+        | AggFn::ArgMax
+        | AggFn::ArgMin => {
             unreachable!("handled above")
         }
     })
@@ -295,6 +328,7 @@ impl Cx<'_> {
             "join" => self.verb_join(call),
             "window" => self.verb_window(call),
             "union" => self.verb_union(call),
+            "count_if" | "any" | "all" | "count_null" | "weighted_mean" => self.derived_agg(call),
             "desc" | "asc" => {
                 let message = format!(
                     "`{0}` marks a sort key, as in `sort({0}(x))`; it is not a function",
@@ -1843,20 +1877,70 @@ impl Cx<'_> {
             .expect("called in a column scope")
             .schema
             .clone();
-        let wanted = if func.is_pair() { 2 } else { 1 };
-        if call.args.len() > wanted {
-            let message = match func.is_pair() {
-                true => format!("`{0}` takes two columns, as in `{0}(y, x)`", call.name),
-                false => format!("`{}` takes one column", call.name),
-            };
-            return self.error(call.span, message);
+        let name = call.name;
+        let extra = func.extra();
+        let takes = match func {
+            AggFn::Quantile => {
+                Some("a column and a share from 0 to 1, as in `quantile(price, 0.9)`".to_string())
+            }
+            AggFn::StringAgg => {
+                Some("a column and a separator, as in `string_agg(name, \", \")`".to_string())
+            }
+            AggFn::ArgMax | AggFn::ArgMin => {
+                Some(format!("two columns, as in `{name}(product, sales)`"))
+            }
+            _ if func.is_pair() => Some(format!("two columns, as in `{name}(y, x)`")),
+            _ => None,
+        };
+        let wrong = match &takes {
+            Some(_) => call.args.len() != 2 && !(func.is_pair() && call.args.len() < 2),
+            None => call.args.len() > 1,
+        };
+        if wrong {
+            let takes = takes.unwrap_or_else(|| "one column".to_string());
+            return self.error(call.span, format!("`{name}` takes {takes}"));
         }
         let mut args = Vec::with_capacity(call.args.len());
         let mut types = Vec::with_capacity(call.args.len());
-        for arg in call.args {
+        for (index, arg) in call.args.iter().enumerate() {
             let Some(arg) = self.checked_in(&schema, Mode::Row, arg.value) else {
                 return Expr::error(call.span);
             };
+            // What is the same for every row is a value of the program, not a column.
+            if index == 1 && extra == Extra::Value {
+                let (what, wanted) = match func {
+                    AggFn::Quantile => ("the share", Type::Float),
+                    _ => ("the separator", Type::Str),
+                };
+                if let Some(column) = arg.find_column_use() {
+                    let message = format!("{what} of `{name}` cannot depend on a column");
+                    return self.error(column.span, message);
+                }
+                let arg = match coerce(arg, &wanted) {
+                    Ok(arg) => arg,
+                    Err(arg) => {
+                        let message =
+                            format!("{what} of `{name}` must be {wanted}, found {}", arg.ty);
+                        return self.error(arg.span, message);
+                    }
+                };
+                let written = match &arg.kind {
+                    ExprKind::Float(share) => Some(*share),
+                    ExprKind::Neg(inner) => match inner.kind {
+                        ExprKind::Float(share) => Some(-share),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(share) = written
+                    && !(0.0..=1.0).contains(&share)
+                {
+                    let message = format!("the share of `quantile` is from 0 to 1, not {share}");
+                    return self.error(arg.span, message);
+                }
+                args.push(arg);
+                continue;
+            }
             let Some(ty) = self.col_type(&arg.ty, arg.span) else {
                 return Expr::error(call.span);
             };
@@ -1869,13 +1953,147 @@ impl Cx<'_> {
         }
     }
 
+    /// An aggregate of an expression that is already checked, in `agg` or in `window`.
+    /// Without an expression it is the number of rows.
+    fn aggregate_of(&mut self, func: AggFn, arg: Option<Expr>, span: Span) -> Expr {
+        let ty = match &arg {
+            Some(arg) => match self.col_type(&arg.ty, arg.span) {
+                Some(ty) => Some(ty),
+                None => return Expr::error(span),
+            },
+            None => None,
+        };
+        let (kind, ty) = match self.columns.last().map(|scope| scope.mode) {
+            Some(Mode::Agg { grouped }) => {
+                let kind = ExprKind::Agg(func, arg.into_iter().collect());
+                (kind, agg_type(func, ty, None, grouped))
+            }
+            // A partition always has at least one row.
+            _ => {
+                let kind = ExprKind::Window(WindowFn::Agg(func), arg.map(Box::new), 1);
+                (kind, agg_type(func, ty, None, true))
+            }
+        };
+        match ty {
+            Ok(ty) => Expr::new(kind, Type::from_col(ty), span),
+            Err(message) => self.error(span, message),
+        }
+    }
+
+    /// The aggregates that are written in terms of other aggregates: `count_if`, `any`,
+    /// `all`, `count_null` and `weighted_mean`.
+    fn derived_agg(&mut self, call: &Call) -> Expr {
+        let (name, span) = (call.name, call.span);
+        let scope = self.columns.last().filter(|scope| scope.mode != Mode::Row);
+        let Some(schema) = scope.map(|scope| scope.schema.clone()) else {
+            let message = format!("`{name}` can only be used inside `agg` or `window`");
+            return self.error(span, message);
+        };
+        if !self.all_positional(call, call.args) {
+            return Expr::error(span);
+        }
+        let takes = match name {
+            "weighted_mean" => "a column and a column of weights",
+            "count_null" => "one column",
+            _ => "a condition",
+        };
+        let wanted = if name == "weighted_mean" { 2 } else { 1 };
+        if call.args.len() != wanted {
+            return self.error(span, format!("`{name}` takes {takes}"));
+        }
+        let mut args = Vec::with_capacity(wanted);
+        for arg in call.args {
+            match self.checked_in(&schema, Mode::Row, arg.value) {
+                Some(arg) => args.push(arg),
+                None => return Expr::error(span),
+            }
+        }
+        let mut args = args.into_iter();
+        let first = args.next().expect("the count was checked");
+        let literal = |kind, ty| Expr::new(kind, ty, span);
+        match name {
+            "count_null" => {
+                let rows = self.aggregate_of(AggFn::Count, None, span);
+                let filled = self.aggregate_of(AggFn::Count, Some(first), span);
+                self.binary(span, BinaryOp::Sub, rows, filled)
+            }
+            "weighted_mean" => {
+                let weight = args.next().expect("the count was checked");
+                let number = |expr: &Expr| {
+                    matches!(
+                        expr.ty.to_col().map(|ty| ty.dtype),
+                        Some(DataType::Int | DataType::Float | DataType::Decimal)
+                    )
+                };
+                if !number(&first) || !number(&weight) {
+                    let message = format!(
+                        "`weighted_mean` needs numbers, found {} and {}",
+                        first.ty, weight.ty
+                    );
+                    return self.error(span, message);
+                }
+                // A weight counts only where there is a value for it to weigh.
+                let missing = ExprKind::Scalar(ScalarFn::IsNull, vec![first.clone()]);
+                let present = ExprKind::Not(Box::new(literal(missing, Type::Bool)));
+                let present = ExprKind::Scalar(ScalarFn::ToInt, vec![literal(present, Type::Bool)]);
+                let counted = self.binary(
+                    span,
+                    BinaryOp::Mul,
+                    weight.clone(),
+                    literal(present, Type::Int),
+                );
+                let weighed = self.binary(span, BinaryOp::Mul, first, weight);
+                let total = self.aggregate_of(AggFn::Sum, Some(weighed), span);
+                let weights = self.aggregate_of(AggFn::Sum, Some(counted), span);
+                self.binary(span, BinaryOp::Div, total, weights)
+            }
+            _ => {
+                let (inner, nullable) = first.ty.split_null();
+                if *inner != Type::Bool {
+                    let message = format!(
+                        "`{name}` takes a condition, which is true or false, found {}",
+                        first.ty
+                    );
+                    return self.error(first.span, message);
+                }
+                if name == "count_if" {
+                    // Counted are the rows where this is not null: those where it is true.
+                    let no = literal(ExprKind::Bool(false), Type::Bool);
+                    let settled = match nullable {
+                        true => self.binary(span, BinaryOp::Coalesce, first, no.clone()),
+                        false => first,
+                    };
+                    let marked = ExprKind::Scalar(ScalarFn::NullIf, vec![settled, no]);
+                    let marked = literal(marked, Type::Bool.or_null());
+                    return self.aggregate_of(AggFn::Count, Some(marked), span);
+                }
+                // True is 1 and false 0, so some row is true when the largest is 1, and
+                // every row when the smallest is.
+                let func = if name == "any" {
+                    AggFn::Max
+                } else {
+                    AggFn::Min
+                };
+                let number = ExprKind::Scalar(ScalarFn::ToInt, vec![first]);
+                let number = literal(number, Type::Int.with_null(nullable));
+                let extreme = self.aggregate_of(func, Some(number), span);
+                self.binary(
+                    span,
+                    BinaryOp::Eq,
+                    extreme,
+                    literal(ExprKind::Int(1), Type::Int),
+                )
+            }
+        }
+    }
+
     /// Checks a call to a window function inside `window`.
     fn window_call(&mut self, func: WindowFn, call: &Call) -> Expr {
         if !self.all_positional(call, call.args) {
             return Expr::error(call.span);
         }
         let name = call.name;
-        if matches!(func, WindowFn::Agg(agg) if agg.is_pair()) {
+        if matches!(func, WindowFn::Agg(agg) if agg.extra() != Extra::Nothing) {
             let message = format!("`{name}` works in `agg`, not in `window`");
             return self.error(call.span, message);
         }

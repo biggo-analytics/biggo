@@ -1,0 +1,86 @@
+// Quantiles, spread, conditional counts, joined strings, and the row where a column is best.
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+
+let sales = read_csv<Sale>("data/sales.csv")
+
+sales
+  |> agg(
+    var = variance(qty),
+    sd = stddev(qty),
+    var_pop = variance_pop(qty),
+    sd_pop = stddev_pop(qty),
+    p90 = quantile(qty, 0.9),
+    half = quantile(qty, 0.5),
+    mid = median(qty),
+    low = quantile(price, 0),
+    high = quantile(price, 1),
+  )
+  |> print()
+
+sales
+  |> group(region)
+  |> agg(
+    rows = count(),
+    big = count_if(qty > 3),
+    some = any(qty > 10),
+    every = all(qty > 0),
+    holes = count_null(price),
+    names = string_agg(product, ", "),
+    best = arg_max(product, qty),
+    worst = arg_min(product, qty),
+    times = product(qty),
+    paid = round(weighted_mean(price, qty), 4),
+  )
+  |> sort(region)
+  |> print()
+
+// Without groups, and with other types to go by.
+sales
+  |> agg(
+    some = any(is_null(price)),
+    every = all(is_null(price)),
+    missing = count_if(is_null(price)),
+    regions = string_agg(region, "|"),
+    dearest = arg_max(date, price),
+    first_day = arg_min(product, date),
+    last_name = arg_max(qty, product),
+  )
+  |> print()
+
+// The quarter points, from a share that the program works out.
+let quarter = 1 / 4
+print(sales |> agg(q1 = quantile(qty, quarter), q3 = quantile(qty, 3 * quarter), share = count_if(qty >= 5) / count()))
+
+// A table with no rows: counts are zero and everything else is null.
+sales
+  |> where(qty > 100)
+  |> agg(
+    n = count_if(qty > 0),
+    a = any(qty > 0),
+    b = all(qty > 0),
+    q = quantile(qty, 0.5),
+    s = string_agg(product, ","),
+    m = arg_max(product, qty),
+    v = variance(qty),
+    p = product(qty),
+    w = weighted_mean(price, qty),
+    h = count_null(price),
+  )
+  |> print()
+
+// One value: a sample has no spread, a population has none to speak of.
+print(sales |> where(qty == 12) |> agg(v = variance(qty), vp = variance_pop(qty), sp = stddev_pop(qty), q = quantile(qty, 0.3)))
+
+// A condition that may be null counts only where it is true.
+print(sales |> agg(cheap = count_if(price < 5), dear = count_if(price >= 5), known = count(price), cheap_all = all(price < 200)))
+
+// Over the partitions of a window.
+sales
+  |> window(by = region, var = variance(qty), big = count_if(qty > 3), holes = count_null(price), every = all(qty > 0), share = qty / sum(qty))
+  |> select(region, qty, var, big, holes, every, share)
+  |> sort(region, qty)
+  |> print()
+
+// Used in a computation, and as a pivot.
+print(sales |> group(product) |> agg(range = quantile(qty, 1) - quantile(qty, 0), label = string_agg(region, "+") + "!") |> sort(product))
+print(sales |> group(product) |> pivot(region, ["north", "south"], count_if(qty > 2)) |> sort(product))

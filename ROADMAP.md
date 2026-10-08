@@ -203,24 +203,19 @@ Exists: `length` `lower` `upper` `trim` `contains` `starts_with` `ends_with` `in
 
 ### 4. Aggregates
 
-Exists: `sum` `mean` `min` `max` `count` `count_distinct` `first` `last` `median` `stddev` `corr`
-`cov` `slope` `intercept`.
+Exists: `sum` `mean` `min` `max` `count` `count_distinct` `first` `last` `median` `quantile`
+`stddev` `variance` `stddev_pop` `variance_pop` `product` `count_if` `any` `all` `count_null`
+`string_agg` `arg_max` `arg_min` `weighted_mean` `corr` `cov` `slope` `intercept`.
 
 | Feature | Result | What it does | Priority |
 | --- | --- | --- | --- |
-| `quantile(x, q)` | `float?` | The value below which a share `q` of the values lie: `quantile(price, 0.9)` | Must |
-| `variance(x)` | `float?` | Sample variance | Must |
-| `count_if(condition)` | `int` | The number of rows where the condition is true | Must |
-| `any(condition)`, `all(condition)` | `bool?` | Whether the condition is true in some row, or in every row | Must |
-| `string_agg(x, separator)` | `string?` | The values of the group joined into one string, in row order | Must |
-| `arg_max(x, by)`, `arg_min(x, by)` | type of `x` | The value of `x` in the row where `by` is largest or smallest: the best-selling product of each region | Should |
 | `mode(x)` | type of `x` | The most frequent value | Should |
-| `stddev_pop(x)`, `variance_pop(x)` | `float?` | The population forms | Should |
-| `weighted_mean(x, weight)` | `float?` | A mean in which rows count by a weight, as survey data needs | Should |
-| `product(x)` | type of `x` | All the values multiplied | Should |
-| `count_null(x)` | `int` | The number of nulls | Should |
 | `skewness(x)`, `kurtosis(x)` | `float?` | The shape of a distribution | Later |
 | `approx_count_distinct(x)` | `int` | A fast estimate for very many distinct values | Later |
+
+- [x] `quantile`, `variance`, `stddev_pop`, `variance_pop`, `product`
+- [x] `count_if`, `any`, `all`, `count_null`, `string_agg`
+- [x] `arg_max`, `arg_min`, `weighted_mean`
 
 ### 5. Window functions
 

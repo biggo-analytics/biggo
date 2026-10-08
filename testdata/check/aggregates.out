@@ -1,0 +1,197 @@
+error: `quantile` takes a column and a share from 0 to 1, as in `quantile(price, 0.9)`
+ --> check/aggregates.bgo:5:18
+  |
+5 | sales |> agg(a = quantile(qty))
+  |                  ^^^^^^^^^^^^^
+
+error: the share of `quantile` is from 0 to 1, not 1.5
+ --> check/aggregates.bgo:6:32
+  |
+6 | sales |> agg(a = quantile(qty, 1.5))
+  |                                ^^^
+
+error: the share of `quantile` is from 0 to 1, not -0.1
+ --> check/aggregates.bgo:7:32
+  |
+7 | sales |> agg(a = quantile(qty, -0.1))
+  |                                ^^^^
+
+error: the share of `quantile` must be float, found string
+ --> check/aggregates.bgo:8:32
+  |
+8 | sales |> agg(a = quantile(qty, "half"))
+  |                                ^^^^^^
+
+error: the share of `quantile` cannot depend on a column
+ --> check/aggregates.bgo:9:32
+  |
+9 | sales |> agg(a = quantile(qty, price))
+  |                                ^^^^^
+
+error: `quantile` needs numbers, found string
+  --> check/aggregates.bgo:10:18
+   |
+10 | sales |> agg(a = quantile(region, 0.5))
+   |                  ^^^^^^^^^^^^^^^^^^^^^
+
+error: `quantile` takes a column and a share from 0 to 1, as in `quantile(price, 0.9)`
+  --> check/aggregates.bgo:11:18
+   |
+11 | sales |> agg(a = quantile(qty, 0.5, 0.9))
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `variance` needs numbers, found string
+  --> check/aggregates.bgo:12:18
+   |
+12 | sales |> agg(a = variance(region))
+   |                  ^^^^^^^^^^^^^^^^
+
+error: `stddev_pop` needs numbers, found bool
+  --> check/aggregates.bgo:13:18
+   |
+13 | sales |> agg(a = stddev_pop(sold))
+   |                  ^^^^^^^^^^^^^^^^
+
+error: `product` needs numbers, found string
+  --> check/aggregates.bgo:14:18
+   |
+14 | sales |> agg(a = product(region))
+   |                  ^^^^^^^^^^^^^^^
+
+error: `string_agg` takes a column and a separator, as in `string_agg(name, ", ")`
+  --> check/aggregates.bgo:15:18
+   |
+15 | sales |> agg(a = string_agg(region))
+   |                  ^^^^^^^^^^^^^^^^^^
+
+error: `string_agg` needs strings, found int
+  --> check/aggregates.bgo:16:18
+   |
+16 | sales |> agg(a = string_agg(qty, ","))
+   |                  ^^^^^^^^^^^^^^^^^^^^
+
+error: the separator of `string_agg` must be string, found int
+  --> check/aggregates.bgo:17:37
+   |
+17 | sales |> agg(a = string_agg(region, 1))
+   |                                     ^
+
+error: the separator of `string_agg` cannot depend on a column
+  --> check/aggregates.bgo:18:37
+   |
+18 | sales |> agg(a = string_agg(region, region))
+   |                                     ^^^^^^
+
+error: `arg_max` takes two columns, as in `arg_max(product, sales)`
+  --> check/aggregates.bgo:19:18
+   |
+19 | sales |> agg(a = arg_max(region))
+   |                  ^^^^^^^^^^^^^^^
+
+error: `arg_max` cannot go by a bool column
+  --> check/aggregates.bgo:20:18
+   |
+20 | sales |> agg(a = arg_max(region, sold))
+   |                  ^^^^^^^^^^^^^^^^^^^^^
+
+error: `arg_min` takes two columns, as in `arg_min(product, sales)`
+  --> check/aggregates.bgo:21:18
+   |
+21 | sales |> agg(a = arg_min(region, qty, price))
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `count_if` takes a condition, which is true or false, found int
+  --> check/aggregates.bgo:22:27
+   |
+22 | sales |> agg(a = count_if(qty))
+   |                           ^^^
+
+error: `count_if` takes a condition
+  --> check/aggregates.bgo:23:18
+   |
+23 | sales |> agg(a = count_if())
+   |                  ^^^^^^^^^^
+
+error: `count_if` takes a condition
+  --> check/aggregates.bgo:24:18
+   |
+24 | sales |> agg(a = count_if(sold, sold))
+   |                  ^^^^^^^^^^^^^^^^^^^^
+
+error: `any` takes a condition, which is true or false, found string
+  --> check/aggregates.bgo:25:22
+   |
+25 | sales |> agg(a = any(region))
+   |                      ^^^^^^
+
+error: `all` takes a condition, which is true or false, found int
+  --> check/aggregates.bgo:26:22
+   |
+26 | sales |> agg(a = all(qty + 1))
+   |                      ^^^^^^^
+
+error: `count_null` takes one column
+  --> check/aggregates.bgo:27:18
+   |
+27 | sales |> agg(a = count_null())
+   |                  ^^^^^^^^^^^^
+
+error: `weighted_mean` takes a column and a column of weights
+  --> check/aggregates.bgo:28:18
+   |
+28 | sales |> agg(a = weighted_mean(price))
+   |                  ^^^^^^^^^^^^^^^^^^^^
+
+error: `weighted_mean` needs numbers, found float? and string
+  --> check/aggregates.bgo:29:18
+   |
+29 | sales |> agg(a = weighted_mean(price, region))
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `weighted_mean` needs numbers, found string and int
+  --> check/aggregates.bgo:30:18
+   |
+30 | sales |> agg(a = weighted_mean(region, qty))
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `count_if` can only be used inside `agg` or `window`
+  --> check/aggregates.bgo:31:21
+   |
+31 | sales |> derive(a = count_if(sold))
+   |                     ^^^^^^^^^^^^^^
+
+error: `any` can only be used inside `agg` or `window`
+  --> check/aggregates.bgo:32:16
+   |
+32 | sales |> where(any(sold))
+   |                ^^^^^^^^^
+
+error: `quantile` works in `agg`, not in `window`
+  --> check/aggregates.bgo:33:21
+   |
+33 | sales |> window(a = quantile(qty, 0.5))
+   |                     ^^^^^^^^^^^^^^^^^^
+
+error: `string_agg` works in `agg`, not in `window`
+  --> check/aggregates.bgo:34:21
+   |
+34 | sales |> window(a = string_agg(region, ","))
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `arg_max` works in `agg`, not in `window`
+  --> check/aggregates.bgo:35:21
+   |
+35 | sales |> window(a = arg_max(region, qty))
+   |                     ^^^^^^^^^^^^^^^^^^^^
+
+error: `count_if` can only be used inside `agg` or `window`
+  --> check/aggregates.bgo:36:1
+   |
+36 | count_if(true)
+   | ^^^^^^^^^^^^^^
+
+error: `variance` can only be used inside `agg` or `window`
+  --> check/aggregates.bgo:37:1
+   |
+37 | variance(1)
+   | ^^^^^^^^^^^

@@ -365,8 +365,9 @@ Details and more examples are in [The type system](03-types.md#conversion-functi
 
 ## Aggregate
 
-Used inside `agg(...)`, `pivot(...)` and (except the last four) inside `window(...)`.
-They reduce the values of a group to a single value, and skip nulls.
+Used inside `agg(...)` and `pivot(...)`. Those that take one column, or a condition, also work
+inside `window(...)`, where they are computed over each partition. They reduce the values of a
+group to a single value, and skip nulls.
 
 | Function | Takes | Returns |
 | --- | --- | --- |
@@ -376,7 +377,16 @@ They reduce the values of a group to a single value, and skip nulls.
 | `sum(x)` | number, `duration` | same type |
 | `mean(x)` | number | `float` |
 | `median(x)` | number | `float` |
-| `stddev(x)` | number | `float?` sample standard deviation; null if there are fewer than 2 values |
+| `stddev(x)`, `variance(x)` | number | `float?` standard deviation and variance of a sample; null if there are fewer than 2 values |
+| `stddev_pop(x)`, `variance_pop(x)` | number | `float?` the same of a whole population, which divide by the number of values instead of one less |
+| `quantile(x, share)` | number, `float` | `float` the value a share of the way from the smallest to the largest: `quantile(x, 0.5)` is the median |
+| `product(x)` | number | `float` all the values multiplied |
+| `count_if(condition)` | `bool` | `int` number of rows where the condition is true |
+| `any(condition)`, `all(condition)` | `bool` | `bool` whether the condition is true in some row, and in every row |
+| `count_null(x)` | any | `int` number of nulls |
+| `string_agg(x, separator)` | `string`, `string` | `string` the values joined, in the order of the rows, with the separator between them |
+| `arg_max(x, by)`, `arg_min(x, by)` | any, any except `bool` | type of `x`: the value of `x` in the row where `by` is largest or smallest |
+| `weighted_mean(x, weight)` | number, number | `float` the mean in which each value counts as much as its weight |
 | `min(x)` `max(x)` | any except `bool` | same type |
 | `first(x)` `last(x)` | any | same type; the value of the first / last row of the group |
 | `corr(y, x)` | number, number | `float?` Pearson correlation |
@@ -416,6 +426,45 @@ t
 | b | 1 | 0  | 5     | null              | 5.0 | null   | null | 5     | null  | null  |
 +---+---+----+-------+-------------------+-----+--------+------+-------+-------+-------+
 ```
+
+```biggo
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+read_csv<Sale>("data/sales.csv")
+  |> group(region)
+  |> agg(
+    big = count_if(qty > 3),
+    every = all(qty > 0),
+    p90 = quantile(qty, 0.9),
+    products = string_agg(product, ", "),
+    best = arg_max(product, qty),
+    paid = round(weighted_mean(price, qty), 2),
+  )
+  |> sort(region)
+  |> print()
+```
+
+```text output
++--------+-----+-------+--------------------+-------------------------------+--------+------+
+| region | big | every | p90                | products                      | best   | paid |
++--------+-----+-------+--------------------+-------------------------------+--------+------+
+| east   | 1   | true  | 3.6                | gizmo, widget, gadget         | widget | 31.4 |
+| north  | 2   | true  | 9.100000000000001  | widget, gadget, widget, gizmo | widget | 8.21 |
+| south  | 2   | false | 10.600000000000001 | widget, gadget, widget        | widget | 2.5  |
++--------+-----+-------+--------------------+-------------------------------+--------+------+
+```
+
+- `quantile` places the share between the two nearest values, in proportion: of the values 1, 2,
+  3 and 10, `quantile(x, 0.9)` is 7.9. The share is a value of the program from 0 to 1, not a
+  column.
+- `count_if`, `any` and `all` take any condition over the columns. A row where the condition is
+  null is not counted, does not make `any` true, and does not make `all` false.
+- `any` and `all` are null for a group with no row where the condition is known.
+- `string_agg` skips nulls. Its separator is a value of the program, not a column.
+- `arg_max` and `arg_min` take the first such row when several have the same largest or smallest
+  value, and skip the rows where `by` is null: `arg_max(product, qty)` is the best-selling
+  product, and `arg_min(name, date)` the name on the earliest date.
+- `weighted_mean(x, weight)` is `sum(x * weight) / sum(weight)` over the rows where neither is
+  null.
 
 Details: [group and agg](04-tables.md#summarizing-by-group-group-and-agg), [statistics](04-tables.md#statistics)
 

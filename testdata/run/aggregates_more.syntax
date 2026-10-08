@@ -1,0 +1,98 @@
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(|> sales
+  (call agg
+    (var: (call variance qty))
+    (sd: (call stddev qty))
+    (var_pop: (call variance_pop qty))
+    (sd_pop: (call stddev_pop qty))
+    (p90: (call quantile qty 0.9))
+    (half: (call quantile qty 0.5))
+    (mid: (call median qty))
+    (low: (call quantile price 0))
+    (high: (call quantile price 1)))
+  (call print))
+(|> sales
+  (call group region)
+  (call agg
+    (rows: (call count))
+    (big: (call count_if (> qty 3)))
+    (some: (call any (> qty 10)))
+    (every: (call all (> qty 0)))
+    (holes: (call count_null price))
+    (names: (call string_agg product ", "))
+    (best: (call arg_max product qty))
+    (worst: (call arg_min product qty))
+    (times: (call product qty))
+    (paid: (call round (call weighted_mean price qty) 4)))
+  (call sort region)
+  (call print))
+(|> sales
+  (call agg
+    (some: (call any (call is_null price)))
+    (every: (call all (call is_null price)))
+    (missing: (call count_if (call is_null price)))
+    (regions: (call string_agg region "|"))
+    (dearest: (call arg_max date price))
+    (first_day: (call arg_min product date))
+    (last_name: (call arg_max qty product)))
+  (call print))
+(let quarter (/ 1 4))
+(call print
+  (|> sales
+    (call agg
+      (q1: (call quantile qty quarter))
+      (q3: (call quantile qty (* 3 quarter)))
+      (share: (/ (call count_if (>= qty 5)) (call count))))))
+(|> sales
+  (call where (> qty 100))
+  (call agg
+    (n: (call count_if (> qty 0)))
+    (a: (call any (> qty 0)))
+    (b: (call all (> qty 0)))
+    (q: (call quantile qty 0.5))
+    (s: (call string_agg product ","))
+    (m: (call arg_max product qty))
+    (v: (call variance qty))
+    (p: (call product qty))
+    (w: (call weighted_mean price qty))
+    (h: (call count_null price)))
+  (call print))
+(call print
+  (|> sales
+    (call where (== qty 12))
+    (call agg
+      (v: (call variance qty))
+      (vp: (call variance_pop qty))
+      (sp: (call stddev_pop qty))
+      (q: (call quantile qty 0.3)))))
+(call print
+  (|> sales
+    (call agg
+      (cheap: (call count_if (< price 5)))
+      (dear: (call count_if (>= price 5)))
+      (known: (call count price))
+      (cheap_all: (call all (< price 200))))))
+(|> sales
+  (call window
+    (by: region)
+    (var: (call variance qty))
+    (big: (call count_if (> qty 3)))
+    (holes: (call count_null price))
+    (every: (call all (> qty 0)))
+    (share: (/ qty (call sum qty))))
+  (call select region qty var big holes every share)
+  (call sort region qty)
+  (call print))
+(call print
+  (|> sales
+    (call group product)
+    (call agg
+      (range: (- (call quantile qty 1) (call quantile qty 0)))
+      (label: (+ (call string_agg region "+") "!")))
+    (call sort product)))
+(call print
+  (|> sales
+    (call group product)
+    (call pivot region (list "north" "south") (call count_if (> qty 2)))
+    (call sort product)))

@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 use arrow::array::{
     Array, ArrayRef, ArrowPrimitiveType, AsArray, Date32Array, Decimal128Array, Float64Array,
-    Int64Array, PrimitiveArray, RecordBatch, UInt32Array,
+    Int64Array, PrimitiveArray, RecordBatch, StringArray, UInt32Array,
 };
 use arrow::compute::cast;
 use arrow::datatypes::{DataType as ArrowType, Decimal128Type, Float64Type, Int64Type};
 use arrow::row::{RowConverter, SortField};
-use biggo_plan::{AggCall, AggFn, ColType, DataType, Expr, Scalar, Schema};
+use biggo_plan::{AggCall, AggFn, ColType, DataType, Expr, ExprKind, Extra, Scalar, Schema};
 use hashbrown::{DefaultHashBuilder, HashSet, HashTable};
 use rayon::prelude::*;
 
@@ -77,7 +77,10 @@ pub enum Acc {
         counts: Vec<u64>,
     },
     /// Count, mean, and sum of squared distances from the mean, kept up to date per value.
+    /// The standard deviation and the variance, of a sample or of a population, follow
+    /// from them; `func` says which is wanted.
     Stddev {
+        func: AggFn,
         counts: Vec<f64>,
         means: Vec<f64>,
         squares: Vec<f64>,
@@ -104,6 +107,30 @@ pub enum Acc {
         last: bool,
     },
     Median(Vec<Vec<f64>>),
+    /// The values of each group, of which the one a share of the way up is found at the end.
+    Quantile {
+        all: Vec<Vec<f64>>,
+        share: f64,
+    },
+    Product {
+        products: Vec<f64>,
+        seen: Vec<bool>,
+    },
+    /// The strings of each group, joined as they come.
+    Strings {
+        texts: Vec<String>,
+        seen: Vec<bool>,
+        separator: Arc<str>,
+    },
+    /// The value of one column in the row where another is largest or smallest. `keys` holds
+    /// the best of that other column so far, in a form that compares as its values do.
+    ArgExtreme {
+        keys: Vec<Vec<u8>>,
+        values: Vec<Scalar>,
+        seen: Vec<bool>,
+        max: bool,
+        converter: Arc<RowConverter>,
+    },
     SumDecimal {
         sums: Vec<i128>,
         seen: Vec<bool>,
@@ -221,11 +248,65 @@ impl Acc {
                 sums: Vec::new(),
                 counts: Vec::new(),
             },
-            (AggFn::Stddev, _) => Acc::Stddev {
-                counts: Vec::new(),
-                means: Vec::new(),
-                squares: Vec::new(),
+            (AggFn::Stddev | AggFn::Variance | AggFn::StddevPop | AggFn::VariancePop, _) => {
+                Acc::Stddev {
+                    func: call.func,
+                    counts: Vec::new(),
+                    means: Vec::new(),
+                    squares: Vec::new(),
+                }
+            }
+            (AggFn::Quantile, _) => {
+                let share = match call.arg2.as_ref().map(|share| &share.kind) {
+                    Some(ExprKind::Literal(Scalar::Float(share))) => *share,
+                    Some(ExprKind::Literal(Scalar::Int(share))) => *share as f64,
+                    _ => return Err(Error("internal error: `quantile` without a share".into())),
+                };
+                if !(0.0..=1.0).contains(&share) {
+                    return Err(Error(format!(
+                        "the share of `quantile` is from 0 to 1, not {share}"
+                    )));
+                }
+                Acc::Quantile {
+                    all: Vec::new(),
+                    share,
+                }
+            }
+            (AggFn::Product, _) => Acc::Product {
+                products: Vec::new(),
+                seen: Vec::new(),
             },
+            (AggFn::StringAgg, _) => {
+                let separator = match call.arg2.as_ref().map(|separator| &separator.kind) {
+                    Some(ExprKind::Literal(Scalar::Str(separator))) => separator.clone(),
+                    _ => {
+                        return Err(Error(
+                            "internal error: `string_agg` without a separator".into(),
+                        ));
+                    }
+                };
+                Acc::Strings {
+                    texts: Vec::new(),
+                    seen: Vec::new(),
+                    separator,
+                }
+            }
+            (AggFn::ArgMax | AggFn::ArgMin, _) => {
+                let Some(by) = &call.arg2 else {
+                    return Err(Error(format!(
+                        "internal error: `{}` without a column to go by",
+                        call.func.name()
+                    )));
+                };
+                let field = SortField::new(arrow_type(by.ty.dtype));
+                Acc::ArgExtreme {
+                    keys: Vec::new(),
+                    values: Vec::new(),
+                    seen: Vec::new(),
+                    max: call.func == AggFn::ArgMax,
+                    converter: Arc::new(RowConverter::new(vec![field])?),
+                }
+            }
             (AggFn::Min | AggFn::Max, Some(dtype)) => {
                 let max = call.func == AggFn::Max;
                 match dtype {
@@ -294,6 +375,7 @@ impl Acc {
                 counts,
                 means,
                 squares,
+                ..
             } => {
                 counts.resize(groups, 0.0);
                 means.resize(groups, 0.0);
@@ -313,6 +395,22 @@ impl Acc {
                 seen.resize(groups, false);
             }
             Acc::Median(values) => values.resize(groups, Vec::new()),
+            Acc::Quantile { all, .. } => all.resize(groups, Vec::new()),
+            Acc::Product { products, seen } => {
+                products.resize(groups, 1.0);
+                seen.resize(groups, false);
+            }
+            Acc::Strings { texts, seen, .. } => {
+                texts.resize(groups, String::new());
+                seen.resize(groups, false);
+            }
+            Acc::ArgExtreme {
+                keys, values, seen, ..
+            } => {
+                keys.resize(groups, Vec::new());
+                values.resize(groups, Scalar::Null);
+                seen.resize(groups, false);
+            }
             Acc::SumDecimal { sums, seen } => {
                 sums.resize(groups, 0);
                 seen.resize(groups, false);
@@ -399,6 +497,7 @@ impl Acc {
                 counts,
                 means,
                 squares,
+                ..
             } => {
                 let floats = as_floats(values)?;
                 each_valid(
@@ -525,7 +624,7 @@ impl Acc {
                     "internal error: a pair aggregate needs two columns".into(),
                 ));
             }
-            Acc::Median(all) => {
+            Acc::Median(all) | Acc::Quantile { all, .. } => {
                 let floats = as_floats(values)?;
                 each_valid(
                     floats.as_primitive::<Float64Type>(),
@@ -534,6 +633,40 @@ impl Acc {
                         all[group].push(value);
                     },
                 );
+            }
+            Acc::Product { products, seen } => {
+                let floats = as_floats(values)?;
+                each_valid(
+                    floats.as_primitive::<Float64Type>(),
+                    groups,
+                    |group, value| {
+                        products[group] *= value;
+                        seen[group] = true;
+                    },
+                );
+            }
+            Acc::Strings {
+                texts,
+                seen,
+                separator,
+            } => {
+                let strings = values.as_string::<i32>();
+                for (row, &group) in groups.iter().enumerate() {
+                    if strings.is_null(row) {
+                        continue;
+                    }
+                    let group = group as usize;
+                    if seen[group] {
+                        texts[group].push_str(separator);
+                    }
+                    texts[group].push_str(strings.value(row));
+                    seen[group] = true;
+                }
+            }
+            Acc::ArgExtreme { .. } => {
+                return Err(Error(
+                    "internal error: an aggregate of two columns was given one".into(),
+                ));
             }
             Acc::DistinctFixed(all) => {
                 let keys = distinct_keys(values)?;
@@ -567,6 +700,37 @@ impl Acc {
         count: usize,
     ) -> Result<()> {
         self.resize(count);
+        if let Acc::ArgExtreme {
+            keys,
+            values,
+            seen,
+            max,
+            converter,
+        } = self
+        {
+            // `second` is the column to go by. A row where it is null is never the best.
+            let by = converter.convert_columns(std::slice::from_ref(second))?;
+            for (row, &group) in groups.iter().enumerate() {
+                if second.is_null(row) {
+                    continue;
+                }
+                let (group, key) = (group as usize, by.row(row));
+                let key = key.as_ref();
+                // An equal key does not replace: the first row with the best one is kept.
+                let better = match (seen[group], *max) {
+                    (false, _) => true,
+                    (true, true) => key > keys[group].as_slice(),
+                    (true, false) => key < keys[group].as_slice(),
+                };
+                if better {
+                    keys[group].clear();
+                    keys[group].extend_from_slice(key);
+                    values[group] = scalar_at(first, row)?;
+                    seen[group] = true;
+                }
+            }
+            return Ok(());
+        }
         let Acc::Pair {
             counts,
             mean_x,
@@ -653,11 +817,13 @@ impl Acc {
                     counts,
                     means,
                     squares,
+                    ..
                 },
                 Acc::Stddev {
                     counts: other_counts,
                     means: other_means,
                     squares: other_squares,
+                    ..
                 },
             ) => {
                 for (from, to) in pairs() {
@@ -748,8 +914,76 @@ impl Acc {
                     }
                 }
             }
-            (Acc::Median(all), Acc::Median(other)) => {
+            (Acc::Median(all), Acc::Median(other))
+            | (Acc::Quantile { all, .. }, Acc::Quantile { all: other, .. }) => {
                 pairs().for_each(|(from, to)| all[to].extend_from_slice(&other[from]));
+            }
+            (
+                Acc::Product { products, seen },
+                Acc::Product {
+                    products: other,
+                    seen: other_seen,
+                },
+            ) => {
+                for (from, to) in pairs() {
+                    products[to] *= other[from];
+                    seen[to] |= other_seen[from];
+                }
+            }
+            (
+                Acc::Strings {
+                    texts,
+                    seen,
+                    separator,
+                },
+                Acc::Strings {
+                    texts: other,
+                    seen: other_seen,
+                    ..
+                },
+            ) => {
+                // `other` covers later rows, so its strings go after these.
+                for (from, to) in pairs() {
+                    if !other_seen[from] {
+                        continue;
+                    }
+                    if seen[to] {
+                        texts[to].push_str(separator);
+                    }
+                    texts[to].push_str(&other[from]);
+                    seen[to] = true;
+                }
+            }
+            (
+                Acc::ArgExtreme {
+                    keys,
+                    values,
+                    seen,
+                    max,
+                    ..
+                },
+                Acc::ArgExtreme {
+                    keys: other_keys,
+                    values: other,
+                    seen: other_seen,
+                    ..
+                },
+            ) => {
+                for (from, to) in pairs() {
+                    if !other_seen[from] {
+                        continue;
+                    }
+                    let better = match (seen[to], *max) {
+                        (false, _) => true,
+                        (true, true) => other_keys[from] > keys[to],
+                        (true, false) => other_keys[from] < keys[to],
+                    };
+                    if better {
+                        keys[to].clone_from(&other_keys[from]);
+                        values[to] = other[from].clone();
+                        seen[to] = true;
+                    }
+                }
             }
             (Acc::Distinct { sets, .. }, Acc::Distinct { sets: other, .. }) => {
                 pairs().for_each(|(from, to)| sets[to].extend(other[from].iter().cloned()));
@@ -859,13 +1093,20 @@ impl Acc {
                 Arc::new(means.collect::<Float64Array>())
             }
             Acc::Stddev {
-                counts, squares, ..
+                func,
+                counts,
+                squares,
+                ..
             } => {
-                let deviations = squares.into_iter().zip(counts);
-                let deviations = deviations.map(|(squares, count)| {
-                    (count > 1.0).then(|| (squares / (count - 1.0)).sqrt())
+                // A sample of one value has no spread to speak of; a population of one has none.
+                let population = matches!(func, AggFn::StddevPop | AggFn::VariancePop);
+                let root = matches!(func, AggFn::Stddev | AggFn::StddevPop);
+                let spreads = squares.into_iter().zip(counts).map(|(squares, count)| {
+                    let divisor = if population { count } else { count - 1.0 };
+                    let variance = (divisor > 0.0).then(|| squares / divisor)?;
+                    Some(if root { variance.sqrt() } else { variance })
                 });
-                Arc::new(deviations.collect::<Float64Array>())
+                Arc::new(spreads.collect::<Float64Array>())
             }
             Acc::ExtremeInt { best, seen, .. } => {
                 let best = best
@@ -945,6 +1186,32 @@ impl Acc {
                 });
                 Arc::new(medians.collect::<Float64Array>())
             }
+            Acc::Quantile { all, share } => {
+                let quantiles = all.into_iter().map(|mut values| {
+                    values.sort_unstable_by(f64::total_cmp);
+                    // The position a share of the way from the first value to the last,
+                    // and between two values in proportion to how far it is past the lower.
+                    let position = share * (values.len().checked_sub(1)? as f64);
+                    let below = position.floor() as usize;
+                    let above = (below + 1).min(values.len() - 1);
+                    let past = position - below as f64;
+                    Some(values[below] + (values[above] - values[below]) * past)
+                });
+                Arc::new(quantiles.collect::<Float64Array>())
+            }
+            Acc::Product { products, seen } => {
+                let products = products.into_iter().zip(seen);
+                let products: Float64Array = products
+                    .map(|(product, seen)| optional(seen).then_some(product))
+                    .collect();
+                Arc::new(products)
+            }
+            Acc::Strings { texts, seen, .. } => {
+                let texts = texts.into_iter().zip(seen);
+                let texts: StringArray = texts.map(|(text, seen)| seen.then_some(text)).collect();
+                Arc::new(texts)
+            }
+            Acc::ArgExtreme { values, .. } => scalars_to_array(values.into_iter(), ty.dtype)?,
             Acc::Distinct { sets, .. } => Arc::new(
                 sets.iter()
                     .map(|set| set.len() as i64)
@@ -1021,7 +1288,7 @@ impl State {
                 None => None,
             };
             match (&values, &call.arg2) {
-                (Some(first), Some(second)) => {
+                (Some(first), Some(second)) if call.func.extra() == Extra::Column => {
                     let second = eval_array(second, batch)?;
                     acc.update_pair(first, &second, &groups, count)?;
                 }
