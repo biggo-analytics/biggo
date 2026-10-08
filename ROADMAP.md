@@ -347,23 +347,21 @@ with a grammar.
 
 | Feature | What it does | Priority |
 | --- | --- | --- |
-| CI on GitHub Actions | `cargo test`, `cargo clippy` and `cargo fmt --check` on Linux, macOS and Windows for every push and pull request, and fixes for what differs between systems | Must |
-| prebuilt binaries | In GitHub Releases for macOS (arm64, x86_64), Linux (x86_64, arm64) and Windows (x86_64), with an install script and a Homebrew formula | Must |
+| CI on GitHub Actions: first run | The workflow is written, and the tests, the format check and clippy pass on Linux in a container and on macOS. What is left is its first run on GitHub, and the fixes for what differs on Windows, where nothing has been tried | Must |
+| prebuilt binaries: first release | The release workflow and `install.sh` are written, and the script is tried against stand-in archives. What is left is a tagged release to build the real ones, and a Homebrew formula | Must |
 | the VS Code extension, verified | Tried in VS Code, fixed, and published to the Marketplace and Open VSX | Must |
-| REPL: line editing | Arrow keys and earlier input | Must |
-| `biggo help substring` | The reference entry of a built-in function in the terminal, and `:help` in the REPL | Should |
-| `biggo run -e '...'` | A program given on the command line or on standard input, for one-off questions | Should |
 | language server: more | Go to definition, rename, the arguments of the function being typed, the outline of a file, and the type of the table between the stages of a pipeline | Should |
-| REPL: `:type x`, `:schema t` | The type of a value and the columns of a table without printing them | Should |
 | `biggo test` | Tests chosen by name, several files at once, and the time each took | Should |
 | `biggo explain --timings` | Runs the query and shows the rows and the time of each operator | Should |
 | `--threads n` and a memory limit | As options, beside the `RAYON_NUM_THREADS` variable | Should |
-| `biggo fmt -` | Formats standard input, which editors other than VS Code use | Should |
 | Neovim and Helix | The settings in [docs/07-tools.md](docs/07-tools.md) tried and made to work | Should |
 | documentation: a cookbook | "How do I ..." recipes, and tables that put SQL and pandas beside the biggo for the same thing | Should |
 | a changelog, a contributing guide, issue templates | What changed in each release, and how to take part | Should |
 | a web playground | The language compiled to WebAssembly, to try it without installing | Later |
 
+- [x] REPL: line editing, history that lasts between sessions, `:type` and `:help`
+- [x] `biggo help <name>`, `biggo run -e '...'`, and `-` for standard input in `run`, `explain`,
+      `check` and `fmt`
 - [x] Language server: autocomplete of the columns available at that point in a pipeline, the
       fields of a record, the names in scope, the built-in functions and the keywords, also on
       a line that is still being typed
