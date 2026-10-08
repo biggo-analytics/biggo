@@ -1,0 +1,13 @@
+{name: "Ann", age: 42, city: "Bangkok"}
+{name: "Ann", age: 42, city: "Chiang Mai"} {name: "Ann", age: 41, city: "Bangkok"}
+{name: "Ann", age: "forty-one", city: "Bangkok", email: "ann@example.com"}
+{name: "Ann", age: 41, city: "Bangkok"}
+loading 7
+{id: 7, tries: 1} 1
+[{name: "Ann", age: 51, city: "Bangkok", senior: true}, {name: "Bo", age: 39, city: "Phuket", senior: false}]
++------+-----+
+| name | age |
++------+-----+
+| Ann  | 51  |
++------+-----+
+Phuket 109.5 Bangkok

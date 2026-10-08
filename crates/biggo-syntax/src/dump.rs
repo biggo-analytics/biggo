@@ -201,6 +201,12 @@ impl Dumper<'_> {
                 });
                 list("record", fields)
             }
+            Expr::Update { base, fields } => {
+                let fields = fields.iter().map(|(name, value)| {
+                    Sexp::List(vec![atom(self.name(name.name)), self.expr(*value)])
+                });
+                list("update", std::iter::once(self.expr(*base)).chain(fields))
+            }
             Expr::Map(entries) => {
                 let entries = entries
                     .iter()

@@ -268,13 +268,13 @@ Exists: `len` `range` `map` `filter` `fold` `each` `split`, `xs[i]`, `xs + ys`, 
 - [x] `first(xs)`, `last(xs)`, `find(xs, f)`, `any(xs, f)`, `all(xs, f)`, `count(xs, f)`
 - [x] `flatten(xss)`
 - [x] `remove(m, k)`, `merge(a, b)`, `entries(m)`
+- [x] A record made from another: `{ ...r, a: 1 }`
 
 These take the names that tables and strings already use, and which one a call means shows in
 its first argument.
 
 | Feature | Result | What it does | Priority |
 | --- | --- | --- | --- |
-| record update: `{ ...r, a: 1 }` | record | A copy of a record with some fields changed | Should |
 | `zip(xs, ys)`, `group_by(xs, f)` | | Pairs of two lists, and a list split into a map | Later |
 
 ### 8. Getting data in and out

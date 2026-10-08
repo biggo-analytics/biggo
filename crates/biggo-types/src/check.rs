@@ -1401,6 +1401,7 @@ impl<'a> Cx<'a> {
             ast::Expr::Name(name) => self.name(span, *name),
             ast::Expr::List(items) => self.list(span, items),
             ast::Expr::Record(fields) => self.record(span, fields),
+            ast::Expr::Update { base, fields } => self.update(span, *base, fields),
             ast::Expr::Map(entries) => self.map(span, entries),
             ast::Expr::Index { base, index } => self.index(span, *base, *index),
             ast::Expr::Lambda { params, ret, body } => {
@@ -1464,6 +1465,60 @@ impl<'a> Cx<'a> {
         // A field of a record that is null is null.
         let ty = fields[index].1.clone().with_null(nullable);
         Expr::new(ExprKind::Field(Box::new(base), index as u32), ty, span)
+    }
+
+    /// `{ ...base, name: value }`: a record with the fields of `base`, where a field that is
+    /// named takes the new value, and a name that `base` does not have is a field more.
+    fn update(&mut self, span: Span, base: ExprId, fields: &[(Ident, ExprId)]) -> Expr {
+        let from = self.expr(base);
+        let given = self.record(span, fields);
+        let have = match &from.ty {
+            Type::Record(have) => have.clone(),
+            Type::Error => return Expr::error(span),
+            other => {
+                let message = format!("`...` takes the fields of a record, and this is {other}");
+                return self.error(from.span, message);
+            }
+        };
+        let ExprKind::Record(new_names, new_values) = given.kind else {
+            return Expr::error(span);
+        };
+        // The record is read once, however many of its fields are kept.
+        let cheap = matches!(from.kind, ExprKind::Local(_) | ExprKind::Global(..));
+        let (binding, read) = match cheap {
+            true => (None, from),
+            false => {
+                let local = self.fresh_local();
+                let read = Expr::new(ExprKind::Local(local), from.ty.clone(), from.span);
+                (Some((local, from)), read)
+            }
+        };
+        let mut names: Vec<Arc<str>> = Vec::with_capacity(have.len());
+        let mut values: Vec<Expr> = Vec::with_capacity(have.len());
+        for (index, (name, ty)) in have.iter().enumerate() {
+            let kept = ExprKind::Field(Box::new(read.clone()), index as u32);
+            names.push(name.clone());
+            values.push(Expr::new(kept, ty.clone(), span));
+        }
+        for (name, value) in new_names.iter().zip(new_values) {
+            match names.iter().position(|kept| kept == name) {
+                Some(at) => values[at] = value,
+                None => {
+                    names.push(name.clone());
+                    values.push(value);
+                }
+            }
+        }
+        let types = values.iter().map(|value| value.ty.clone());
+        let ty = Type::Record(Arc::new(names.iter().cloned().zip(types).collect()));
+        let record = Expr::new(ExprKind::Record(names.into(), values), ty.clone(), span);
+        match binding {
+            Some((local, from)) => {
+                let kind = ExprKind::Block(vec![Stmt::Let(local, from)], Some(Box::new(record)));
+                Expr::new(kind, ty, span)
+            }
+            None => record,
+        }
     }
 
     fn record(&mut self, span: Span, fields: &[(Ident, ExprId)]) -> Expr {

@@ -100,6 +100,9 @@ impl Lexer<'_> {
             ']' => self.take(1, RBracket),
             ',' => self.take(1, Comma),
             ':' => self.take(1, Colon),
+            '.' if self.byte(1) == Some(b'.') && self.byte(2) == Some(b'.') => {
+                self.take(3, Ellipsis)
+            }
             '.' => self.take(1, Dot),
             '+' => self.take(1, Plus),
             '*' => self.take(1, Star),

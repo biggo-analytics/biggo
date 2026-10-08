@@ -592,6 +592,29 @@ Two record types are the same type when their fields have the same names, in the
 matching types. A record that is *written out directly* (`{ x: 3, y: 4 }`) is converted field by
 field to fit the type that is required, for example `3` becomes `3.0` above.
 
+A record does not change once it is made. `{ ...r, name: value }` makes another from it: the
+fields of `r`, where a field that is named takes the new value, and a name that `r` does not
+have is one field more.
+
+```biggo
+let ann = { name: "Ann", age: 31 }
+let older = { ...ann, age: ann.age + 1 }
+print(older, ann)
+print({ ...ann, age: "thirty-one", city: "Bangkok" })
+
+let people = [ann, { name: "Bo", age: 17 }]
+print(map(people, fn(p) { { ...p, adult: p.age >= 18 } }))
+```
+
+```text output
+{name: "Ann", age: 32} {name: "Ann", age: 31}
+{name: "Ann", age: "thirty-one", city: "Bangkok"}
+[{name: "Ann", age: 31, adult: true}, {name: "Bo", age: 17, adult: false}]
+```
+
+The new value of a field may have another type than the old one, as `age` has in the second
+`print`: the type of the result is worked out from what is written.
+
 A table row is also a record: `to_rows(table)` gives a `list` of records, and `from_rows(list)`
 creates a table from a list of records. See
 [Working with tables](04-tables.md#tables-and-lists-of-records).

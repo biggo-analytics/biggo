@@ -1,0 +1,14 @@
+// Mistakes in making a record from another.
+let ann = { name: "Ann", age: 41 }
+let xs = [1, 2]
+let maybe: { name: string }? = null
+
+{ ...xs, a: 1 }
+{ ...5 }
+{ ...maybe, name: "x" }
+{ ...ann, age: 1, age: 2 }
+{ ...ann, f: fn(x: int) { x } }
+{ ...nope, a: 1 }
+let n: int = { ...ann, age: "x" }.age
+let t = from_rows([ann])
+t |> derive(r = { ...ann, name: name })

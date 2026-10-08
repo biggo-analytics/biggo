@@ -1,0 +1,31 @@
+// A record made from another: its fields, with some given anew and some added.
+
+let ann = { name: "Ann", age: 41, city: "Bangkok" }
+print({ ...ann, age: 42 })
+print({ ...ann, city: "Chiang Mai", age: ann.age + 1 }, ann)
+// A new value may be of another type, and a name that is not there is a field more.
+print({ ...ann, age: "forty-one", email: "ann@example.com" })
+print({ ...ann })
+
+// The record that is copied is worked out once.
+fn load(id: int) -> { id: int, tries: int } {
+  print("loading", id)
+  { id: id, tries: 0 }
+}
+let loaded = { ...load(7), tries: 1 }
+print(loaded, loaded.tries)
+
+// In a function over a list of records, and on its way to a table.
+let people = [ann, { name: "Bo", age: 29, city: "Phuket" }]
+let older = map(people, fn(p) { { ...p, age: p.age + 10, senior: p.age + 10 >= 50 } })
+print(older)
+print(from_rows(older) |> where(senior) |> select(name, age))
+
+// Nested, and spread over lines.
+let order = { id: 1, buyer: ann, total: 99.5 }
+let moved = {
+  ...order,
+  buyer: { ...order.buyer, city: "Phuket" },
+  total: order.total + 10.0,
+}
+print(moved.buyer.city, moved.total, order.buyer.city)

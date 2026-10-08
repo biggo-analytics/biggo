@@ -382,6 +382,26 @@ impl<'a> Formatter<'a> {
                 });
                 self.list("{", fields, "}", true)
             }
+            Expr::Update { base, fields } => {
+                let from = self.extent(*base);
+                let mut spans = vec![(from.0 - 3, from.1)];
+                spans.extend(
+                    fields
+                        .iter()
+                        .map(|(name, value)| (name.span.start, self.extent(*value).1)),
+                );
+                let parts = self.items(&spans, span.end - 1, |this, index| match index {
+                    0 => concat([text("..."), this.expr(*base, 0)]),
+                    index => {
+                        let (name, value) = &fields[index - 1];
+                        concat([
+                            text(format!("{}: ", this.text(name.span))),
+                            this.expr(*value, 0),
+                        ])
+                    }
+                });
+                self.list("{", parts, "}", true)
+            }
             Expr::Map(entries) => {
                 let spans: Vec<(u32, u32)> = entries
                     .iter()

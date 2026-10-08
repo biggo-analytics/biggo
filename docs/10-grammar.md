@@ -113,10 +113,11 @@ primary = INT | FLOAT | DECIMAL | STRING | DATE | DATETIME
         | "true" | "false" | "null"
         | NAME
         | "(" expr ")"
-        | list | record | map | block | if | match | lambda
+        | list | record | update | map | block | if | match | lambda
 
 list    = "[" [ expr { "," expr } [ "," ] ] "]"
 record  = "{" NAME ":" expr { "," NAME ":" expr } [ "," ] "}"
+update  = "{" "..." expr { "," NAME ":" expr } [ "," ] "}"       a record made from another
 map     = "{" key ":" expr { "," key ":" expr } [ "," ] "}"
 key     = literal that is not null                           (the first key shows that it is a map)
 block   = "{" { statement } "}"
@@ -133,6 +134,7 @@ Disambiguating `{`:
 | What follows `{` | Meaning |
 | --- | --- |
 | `NAME :` | record |
+| `...` | a record made from another |
 | literal `:` | map |
 | Anything else (including `}`) | block |
 

@@ -674,10 +674,36 @@ impl<'a> Parser<'a> {
         Ok(self.ast.alloc(Expr::Unary { op, operand }, span))
     }
 
+    /// Parses `{ ...base, name: value }`: a record made from another.
+    fn update(&mut self) -> PResult<ExprId> {
+        let open = self.peek().span;
+        self.bump();
+        self.bump();
+        self.depth += 1;
+        let base = self.expr()?;
+        let fields = match self.eat(TokenKind::Comma) {
+            true => self.comma_list(TokenKind::RBrace, "`}`", |parser| {
+                let name = parser.ident("a field name")?;
+                parser.expect(TokenKind::Colon, "`:`")?;
+                Ok((name, parser.expr()?))
+            })?,
+            false => {
+                self.expect(TokenKind::RBrace, "`,` or `}`")?;
+                Vec::new()
+            }
+        };
+        self.depth -= 1;
+        let span = Span::new(open.start, self.prev_end());
+        Ok(self.ast.alloc(Expr::Update { base, fields }, span))
+    }
+
     /// Parses what a `{` starts: a record `{ name: value }`, a map `{ "key": value }`, or a
     /// block. No statement begins with a name or a literal followed by `:`.
     fn brace(&mut self) -> PResult<ExprId> {
         let first = self.peek_second().kind;
+        if first == TokenKind::Ellipsis {
+            return self.update();
+        }
         let then = self.tokens[(self.pos + 2).min(self.tokens.len() - 1)].kind;
         if then != TokenKind::Colon {
             return self.block();

@@ -1,0 +1,47 @@
+error: `...` takes the fields of a record, and this is list<int>
+ --> check/record_update.bgo:6:6
+  |
+6 | { ...xs, a: 1 }
+  |      ^^
+
+error: `...` takes the fields of a record, and this is int
+ --> check/record_update.bgo:7:6
+  |
+7 | { ...5 }
+  |      ^
+
+error: `...` takes the fields of a record, and this is {name: string}?
+ --> check/record_update.bgo:8:6
+  |
+8 | { ...maybe, name: "x" }
+  |      ^^^^^
+
+error: field `age` is given twice
+ --> check/record_update.bgo:9:19
+  |
+9 | { ...ann, age: 1, age: 2 }
+  |                   ^^^
+
+error: a record cannot hold a value of type fn(x: int) -> int
+  --> check/record_update.bgo:10:14
+   |
+10 | { ...ann, f: fn(x: int) { x } }
+   |              ^^^^^^^^^^^^^^^^
+
+error: undefined name `nope`
+  --> check/record_update.bgo:11:6
+   |
+11 | { ...nope, a: 1 }
+   |      ^^^^
+
+error: expected int, found string
+  --> check/record_update.bgo:12:14
+   |
+12 | let n: int = { ...ann, age: "x" }.age
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: a record or a map cannot be built from columns
+  --> check/record_update.bgo:14:33
+   |
+14 | t |> derive(r = { ...ann, name: name })
+   |                                 ^^^^

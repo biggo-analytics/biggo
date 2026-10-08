@@ -35,6 +35,8 @@ pub enum TokenKind {
     Comma,
     Colon,
     Dot,
+    /// `...`, before the record whose fields a new record starts from.
+    Ellipsis,
     Eq,
     Arrow,
     FatArrow,

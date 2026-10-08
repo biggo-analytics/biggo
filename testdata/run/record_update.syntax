@@ -1,0 +1,24 @@
+(let ann (record (name: "Ann") (age: 41) (city: "Bangkok")))
+(call print (update ann (age 42)))
+(call print (update ann (city "Chiang Mai") (age (+ (. ann age) 1))) ann)
+(call print (update ann (age "forty-one") (email "ann@example.com")))
+(call print (update ann))
+(fn load(id: int) -> {id: int, tries: int}
+  (block (call print "loading" id) (record (id: id) (tries: 0))))
+(let loaded (update (call load 7) (tries 1)))
+(call print loaded (. loaded tries))
+(let people (list ann (record (name: "Bo") (age: 29) (city: "Phuket"))))
+(let older
+  (call map people
+    (lambda (p)
+      (block
+        (update p (age (+ (. p age) 10)) (senior (>= (+ (. p age) 10) 50)))))))
+(call print older)
+(call print
+  (|> (call from_rows older) (call where senior) (call select name age)))
+(let order (record (id: 1) (buyer: ann) (total: 99.5)))
+(let moved
+  (update order
+    (buyer (update (. order buyer) (city "Phuket")))
+    (total (+ (. order total) 10.0))))
+(call print (. (. moved buyer) city) (. moved total) (. (. order buyer) city))

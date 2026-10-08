@@ -112,6 +112,12 @@ pub enum Expr {
     List(Vec<ExprId>),
     /// `{ name: value, ... }`
     Record(Vec<(Ident, ExprId)>),
+    /// `{ ...base, name: value }`: the fields of a record, with some of them given anew
+    /// and others added.
+    Update {
+        base: ExprId,
+        fields: Vec<(Ident, ExprId)>,
+    },
     /// `{ "key": value, ... }`
     Map(Vec<(ExprId, ExprId)>),
     /// `base[index]`
