@@ -2,6 +2,8 @@
 name = "biggo-exec"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 arrow = { version = "60.0.0", default-features = false, features = ["csv", "json", "prettyprint"] }

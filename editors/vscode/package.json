@@ -4,6 +4,7 @@
   "description": "Syntax highlighting, errors as you type, types on hover, and formatting for the biggo data language.",
   "version": "0.1.0",
   "publisher": "biggo",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/biggo-analytics/biggo.git",

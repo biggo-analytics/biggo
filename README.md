@@ -309,3 +309,7 @@ What comes next, in order of priority and with no dates. The details, the reason
 
 Found a bug, or want to propose a feature? Open an issue at
 <https://github.com/biggo-analytics/biggo/issues>.
+
+## License
+
+biggo is released under the [MIT License](LICENSE).

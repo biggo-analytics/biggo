@@ -5,6 +5,8 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/biggo-analytics/biggo"
 
 [workspace.dependencies]
 biggo-syntax = { path = "crates/biggo-syntax" }
