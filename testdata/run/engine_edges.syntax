@@ -1,0 +1,88 @@
+(let odd
+  (call from_rows
+    (list
+      (record (i: 1) (v: (/ 0.0 0.0)))
+      (record (i: 2) (v: 3.0))
+      (record (i: 3) (v: 1.0)))))
+(call print (|> odd (call agg (high: (call max v)) (low: (call min v)))))
+(call print
+  (|> odd
+    (call sort (call desc i))
+    (call agg (high: (call max v)) (low: (call min v)))))
+(call print (|> odd (call sort v) (call select v)))
+(call print (call greatest (/ 0.0 0.0) 1.0) (call least (/ 0.0 0.0) 1.0))
+(let big 9223372036854775807)
+(call print
+  (|>
+    (call from_rows
+      (list (record (n: big)) (record (n: 1)) (record (n: (- 1)))))
+    (call agg (total: (call sum n)))))
+(call print
+  (|>
+    (call from_rows
+      (list (record (n: 1)) (record (n: (- 1))) (record (n: big))))
+    (call agg (total: (call sum n)))))
+(let rows
+  (call from_rows
+    (list
+      (record (x: 7) (n: 0) (s: "maybe"))
+      (record (x: (- (- 9223372036854775807) 1)) (n: 2) (s: "yes"))
+      (record (x: 5) (n: 1) (s: "no")))))
+(|> rows
+  (call select
+    (quotient: (if (!= n 0) (block (call div x n)) (block 0)))
+    (size: (if (> x 0) (block (call abs x)) (block 0)))
+    (agreed: (if (!= s "maybe") (block (call to_bool s)) (block false)))
+    (both: (and (!= n 0) (> (call div x n) 1)))
+    (padded: (if (> n 0) (block (call pad_left s (+ n 3) "*")) (block s)))
+    (day: (if (> n 0) (block (call make_date 2026 n 1)) (block @2026-01-01))))
+  (call print))
+(let nan (/ 0.0 0.0))
+(let minus (- 0.0))
+(call print
+  (== 0.0 minus)
+  (== nan nan)
+  (!= nan nan)
+  (> nan 1.0)
+  (< nan 1.0)
+  (< minus 0.0)
+  (in 0.0 (list minus))
+  (in nan (list nan)))
+(let floats
+  (call from_rows
+    (list
+      (record (a: 0.0) (b: minus) (n: nan))
+      (record (a: minus) (b: 0.0) (n: 1.0)))))
+(|> floats
+  (call select
+    (same: (== a b))
+    (nan_same: (== n n))
+    (nan_differs: (!= n n))
+    (above: (> n 1.0))
+    (below: (< n 1.0))
+    (less: (< b a))
+    (listed: (in a (list minus)))
+    (nan_listed: (in n (list nan))))
+  (call print))
+(call print
+  (|> floats (call group a) (call agg (rows: (call count))))
+  (|> floats (call distinct b) (call count))
+  (|> floats (call agg (kinds: (call count_distinct a)))))
+(call print
+  (|> floats
+    (call join (|> floats (call select (key: b))) (left_on: a) (right_on: key))
+    (call count)))
+(call print
+  (|> floats
+    (call derive
+      (zero: (* a (- 1.0)))
+      (least: (call least a b))
+      (marked: (call null_if a minus)))
+    (call select zero least marked)))
+(call print
+  (|> floats (call where (== (* a (- 1.0)) 0.0)) (call count))
+  (|> floats (call sort n) (call select n)))
+(call print
+  (|>
+    (call from_rows (list (record (n: big)) (record (n: 1))))
+    (call agg (total: (call sum n)))))

@@ -180,6 +180,23 @@ pub fn decimal_trunc(value: i128, places: i64) -> i128 {
     }
 }
 
+/// The form of a float that stands for all that compare equal to it: zero without a sign,
+/// and one "not a number" for the many there are.
+pub fn float_key(value: f64) -> f64 {
+    if value.is_nan() {
+        f64::NAN
+    } else {
+        value + 0.0
+    }
+}
+
+/// How two floats compare: as numbers do, with negative zero equal to zero, and with "not a
+/// number" equal to itself and above every number. Comparing, sorting, grouping and joining
+/// all go by this, so that they agree with each other and from one machine to the next.
+pub fn float_cmp(a: f64, b: f64) -> std::cmp::Ordering {
+    float_key(a).total_cmp(&float_key(b))
+}
+
 /// -1, 0 or 1 for a float, where the library gives 1 for zero. Not a number stays so.
 pub fn float_sign(value: f64) -> f64 {
     if value == 0.0 { 0.0 } else { value.signum() }

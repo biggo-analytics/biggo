@@ -421,3 +421,36 @@ compares the whole structure deeply, including two tables. See [Tools](07-tools.
 
 Strings sort by UTF-8 byte order (uppercase letters come before lowercase letters; Thai text sorts
 by character code, not in dictionary order).
+
+Floats compare as numbers, with two rules for the values that are not ordinary numbers:
+
+- Negative zero equals zero. `-1 * 0.0 == 0.0` is true, and a column never shows `-0.0`.
+- "Not a number" (`NaN`, which `0.0 / 0.0` gives) equals itself and is above every number,
+  infinity included.
+
+```biggo
+let nan = 0.0 / 0.0
+print(0.0 == -0.0, nan == nan, nan > 1e308, nan in [nan], greatest(nan, 1.0))
+let readings = from_rows([{ v: 2.0 }, { v: nan }, { v: -0.0 }, { v: nan }])
+print(readings |> agg(high = max(v), low = min(v), kinds = count_distinct(v)), readings |> sort(desc(v)) |> take(2))
+```
+
+```text output
+true true true true NaN
++------+-----+-------+
+| high | low | kinds |
++------+-----+-------+
+| NaN  | 0.0 | 3     |
++------+-----+-------+
++-----+
+| v   |
++-----+
+| NaN |
+| NaN |
++-----+
+```
+
+Everything that compares goes by these rules, on a single value and on a column alike: `==` and
+`<`, `in`, `sort`, `group`, `distinct`, `join`, `min` and `max`, `greatest` and `least`, and the
+window functions. So a `NaN` in a column is one group, sorts last, and is the `max`. Use
+`is_nan(x)` to find such values, and `where(not is_nan(x))` to leave them out.

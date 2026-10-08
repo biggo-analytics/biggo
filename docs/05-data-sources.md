@@ -4,8 +4,11 @@ biggo reads and writes data in 4 formats. All of them follow the same principles
 
 - **Read**: `read_xxx<row type>(path)` returns a table. The program says which columns it wants and
   what their types are, and the engine checks them against the file at run time.
-- **Write**: `write_xxx(table, path)` runs the query and writes the whole result. It overwrites the
-  file if it already exists, and creates the folder if it does not exist yet.
+- **Write**: `write_xxx(table, path)` runs the query and writes the whole result. It replaces the
+  file if it already exists, and creates the folder if it does not exist yet. The result is
+  written under a temporary name beside the file and takes the file's name only when all of it
+  is there: a query that fails leaves the old file as it was, and a query can replace the file
+  that it reads.
 - **path** is relative to the folder of the program file, not to where you run the command. So you
   can move a program, together with its data, and run it from anywhere.
 - Reading is lazy: `read_xxx` does not open the file yet. The file is read when the query runs, and

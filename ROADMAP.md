@@ -376,6 +376,11 @@ with a grammar.
 
 ### 12. Engine
 
+The methods chosen for this work, and the reasons for them, are set out in
+[docs/design/engine.md](docs/design/engine.md): push-based pipelines over morsels, partitioned
+aggregation and joins with typed keys, spilling to Arrow IPC files under one memory budget, and
+one connector interface for every data source.
+
 | Work | Today (5 million rows, M1 Pro) | Target |
 | --- | --- | --- |
 | Parquet: skip row groups using their min/max statistics, and decode only the rows that pass the filter | 2.6 times slower than DuckDB and Polars | Within 1.5 times |
@@ -396,6 +401,10 @@ with a grammar.
 - [ ] Files in another encoding than UTF-8 converted in pieces on all cores, instead of whole on
       one
 - [ ] SQLite: read in parallel by splitting the rowid range
+- [ ] A CSV file with a stray quote in an unquoted field is cut into pieces as fast as any other
+      (today every cut after the quote scans on to the next quote, and the file is decoded on
+      one core)
+- [ ] Tables of more than 4 billion rows, and more than 2 GiB of text in one column of a sort
 - [ ] Wider benchmarks: the TPC-H queries, data larger than RAM, measurements on Linux, and a run
       in CI to catch speed regressions
 

@@ -16,7 +16,7 @@ mod window;
 use std::fmt;
 use std::fs::File;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arrow::array::{AsArray, Float64Array, RecordBatch, RecordBatchOptions};
@@ -242,8 +242,67 @@ pub fn format_table(plan: &Arc<Plan>, max_rows: usize) -> Result<String> {
     Ok(text)
 }
 
-fn create(path: &Path) -> Result<File> {
-    File::create(path).map_err(|err| Error(format!("cannot write {}: {err}", path.display())))
+/// A file that is written under another name, and takes its own only once it is whole. A
+/// query that fails then leaves the file that was there as it was, and a query can replace a
+/// file that it is still reading.
+struct Draft {
+    written: PathBuf,
+    wanted: PathBuf,
+    kept: bool,
+}
+
+impl Draft {
+    /// Opens a file to write what `path` is to hold.
+    fn create(path: &Path) -> Result<(File, Draft)> {
+        let refuse = |err: std::io::Error| Error(format!("cannot write {}: {err}", path.display()));
+        let existing = std::fs::metadata(path).ok();
+        // Only a regular file is replaced. Anything else, such as a terminal or a pipe, is
+        // written to as it is.
+        if existing
+            .as_ref()
+            .is_some_and(|existing| !existing.is_file())
+        {
+            let draft = Draft {
+                written: path.to_path_buf(),
+                wanted: path.to_path_buf(),
+                kept: true,
+            };
+            return Ok((File::create(path).map_err(refuse)?, draft));
+        }
+        // What a link points to is replaced, not the link.
+        let wanted = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        let name = wanted.file_name().unwrap_or_default().to_string_lossy();
+        let written = wanted.with_file_name(format!(".{name}.{}.partial", std::process::id()));
+        let file = File::create(&written).map_err(refuse)?;
+        if let Some(existing) = existing {
+            // Failing to keep the permissions of the old file is no reason not to write.
+            let _ = std::fs::set_permissions(&written, existing.permissions());
+        }
+        let draft = Draft {
+            written,
+            wanted,
+            kept: false,
+        };
+        Ok((file, draft))
+    }
+
+    /// Gives the file its own name, in place of the file that had it.
+    fn keep(mut self) -> Result<()> {
+        if !self.kept {
+            std::fs::rename(&self.written, &self.wanted)
+                .map_err(|err| Error(format!("cannot write {}: {err}", self.wanted.display())))?;
+            self.kept = true;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Draft {
+    fn drop(&mut self) {
+        if !self.kept {
+            let _ = std::fs::remove_file(&self.written);
+        }
+    }
 }
 
 /// Gives the columns of a batch the form they have in a text file, which is the form the
@@ -278,11 +337,16 @@ fn for_text_file(batch: &RecordBatch) -> Result<RecordBatch> {
 }
 
 pub fn write_csv(plan: &Arc<Plan>, path: &Path, options: CsvOptions) -> Result<()> {
+    let (file, draft) = Draft::create(path)?;
+    csv_into(plan, path, file, options)?;
+    draft.keep()
+}
+
+fn csv_into(plan: &Arc<Plan>, path: &Path, file: File, options: CsvOptions) -> Result<()> {
     let batches = execute(&optimize(plan))?;
     let builder = arrow::csv::WriterBuilder::new()
         .with_header(true)
         .with_delimiter(options.delimiter);
-    let file = create(path)?;
     // The writer produces UTF-8. For another encoding it writes each batch to memory, and
     // the batch goes to the file converted.
     let (mut writer, mut encoded) = match options.encoding {
@@ -365,12 +429,14 @@ fn encode(text: &str, encoding: &'static Encoding) -> std::result::Result<Vec<u8
 
 /// Writes one JSON object per row, a row per line.
 pub fn write_json(plan: &Arc<Plan>, path: &Path) -> Result<()> {
-    let mut writer = arrow::json::LineDelimitedWriter::new(create(path)?);
+    let (file, draft) = Draft::create(path)?;
+    let mut writer = arrow::json::LineDelimitedWriter::new(file);
     for batch in execute(&optimize(plan))? {
         writer.write_batches(&[&for_text_file(&batch?)?])?;
     }
     writer.finish()?;
-    Ok(())
+    drop(writer);
+    draft.keep()
 }
 
 pub fn write_parquet(plan: &Arc<Plan>, path: &Path) -> Result<()> {
@@ -380,7 +446,8 @@ pub fn write_parquet(plan: &Arc<Plan>, path: &Path) -> Result<()> {
         // Row groups are the units a reader can work on in parallel.
         .set_max_row_group_row_count(Some(128 << 10))
         .build();
-    let mut writer = ArrowWriter::try_new(create(path)?, schema.clone(), Some(properties))?;
+    let (file, draft) = Draft::create(path)?;
+    let mut writer = ArrowWriter::try_new(file, schema.clone(), Some(properties))?;
     for batch in execute(&optimize(plan))? {
         // The file declares which columns may hold nulls; batches are looser about it.
         let batch = batch?;
@@ -390,7 +457,7 @@ pub fn write_parquet(plan: &Arc<Plan>, path: &Path) -> Result<()> {
         )?)?;
     }
     writer.close()?;
-    Ok(())
+    draft.keep()
 }
 
 fn sql_name(name: &str) -> String {

@@ -45,6 +45,7 @@ pub fn scan(scan: &Scan) -> Result<BatchIter> {
     Ok(Box::new(ScanIter {
         pieces: pieces.into_iter(),
         ready: VecDeque::new(),
+        error: None,
         remaining: scan.limit,
         // With a limit, the first piece often has every row that is wanted.
         group: if scan.limit.is_some() {
@@ -61,6 +62,8 @@ type Piece = Box<dyn FnOnce() -> Result<Vec<RecordBatch>> + Send>;
 struct ScanIter {
     pieces: std::vec::IntoIter<Piece>,
     ready: VecDeque<RecordBatch>,
+    /// The error of a piece, to report once the batches of the pieces before it are given.
+    error: Option<Error>,
     remaining: Option<usize>,
     group: usize,
 }
@@ -80,22 +83,30 @@ impl Iterator for ScanIter {
                 }
                 return Some(Ok(batch));
             }
+            if let Some(err) = self.error.take() {
+                return Some(Err(err));
+            }
             let group: Vec<Piece> = self.pieces.by_ref().take(self.group).collect();
             if group.is_empty() {
                 return None;
             }
             self.group = rayon::current_num_threads();
-            let decoded: Result<Vec<Vec<RecordBatch>>> =
+            // Several pieces are decoded at once, but the reader sees them one after the
+            // other: a piece that fails stops the scan only when the reader gets to it,
+            // however many cores were decoding ahead.
+            let decoded: Vec<Result<Vec<RecordBatch>>> =
                 group.into_par_iter().map(|piece| piece()).collect();
-            match decoded {
-                Ok(batches) => {
-                    let batches = batches.into_iter().flatten();
-                    self.ready
-                        .extend(batches.filter(|batch| batch.num_rows() > 0));
-                }
-                Err(err) => {
-                    self.pieces = Vec::new().into_iter();
-                    return Some(Err(err));
+            for piece in decoded {
+                match piece {
+                    Ok(batches) => {
+                        let filled = batches.into_iter().filter(|batch| batch.num_rows() > 0);
+                        self.ready.extend(filled);
+                    }
+                    Err(err) => {
+                        self.pieces = Vec::new().into_iter();
+                        self.error = Some(err);
+                        break;
+                    }
                 }
             }
         }
@@ -192,7 +203,8 @@ impl Shape {
                     )));
                 }
             }
-            columns.push(column);
+            // A file can hold negative zero and any "not a number"; a column holds one of each.
+            columns.push(crate::expr::canonical(column));
         }
         let mut batch = make_batch(&self.read, columns, rows)?;
         for filter in &self.filters {

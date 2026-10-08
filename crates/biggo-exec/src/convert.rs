@@ -10,7 +10,7 @@ use arrow::datatypes::{
     Field as ArrowField, Float64Type, Int64Type, Schema as ArrowSchema, SchemaRef, TimeUnit,
     TimestampMicrosecondType,
 };
-use biggo_plan::scalar::DECIMAL_SCALE;
+use biggo_plan::scalar::{self, DECIMAL_SCALE};
 use biggo_plan::{DataType, Scalar, Schema};
 
 use crate::{Error, Result};
@@ -66,7 +66,7 @@ pub fn scalar_array(value: &Scalar, dtype: DataType) -> Result<ArrayRef> {
         Scalar::Null => new_null_array(&arrow_type(dtype), 1),
         Scalar::Bool(value) => Arc::new(BooleanArray::from(vec![*value])),
         Scalar::Int(value) => Arc::new(Int64Array::from(vec![*value])),
-        Scalar::Float(value) => Arc::new(Float64Array::from(vec![*value])),
+        Scalar::Float(value) => Arc::new(Float64Array::from(vec![scalar::float_key(*value)])),
         Scalar::Str(value) => Arc::new(StringArray::from(vec![&**value])),
         Scalar::Date(value) => Arc::new(Date32Array::from(vec![*value])),
         Scalar::DateTime(value) => Arc::new(TimestampMicrosecondArray::from(vec![*value])),
@@ -123,7 +123,10 @@ pub fn scalars_to_array(values: impl Iterator<Item = Scalar>, dtype: DataType) -
     }
     Ok(match dtype {
         DataType::Int => Arc::new(collect!(Int, Int64Array)),
-        DataType::Float => Arc::new(collect!(Float, Float64Array)),
+        DataType::Float => {
+            let floats = collect!(Float, Float64Array);
+            crate::expr::canonical(Arc::new(floats))
+        }
         DataType::Date => Arc::new(collect!(Date, Date32Array)),
         DataType::DateTime => Arc::new(collect!(DateTime, TimestampMicrosecondArray)),
         DataType::Duration => Arc::new(collect!(Duration, DurationMicrosecondArray)),

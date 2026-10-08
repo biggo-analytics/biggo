@@ -286,6 +286,12 @@ cargo fmt                       # format the Rust code
 After `BIGGO_BLESS=1`, always read the diff of the files that changed: blessing is a statement that
 the new behavior is correct.
 
+## Where the engine is going
+
+[design/engine.md](design/engine.md) is the design for the next engine: how it will run pipelines
+in parallel, handle data larger than memory, account for memory, and connect to data sources. It
+also lists the faults that reading the present engine for that design turned up.
+
 ## Adding a feature
 
 **A scalar function** (such as `reverse(s)`):

@@ -17,7 +17,7 @@ use rayon::prelude::*;
 
 use crate::aggregate::aggregate_groups;
 use crate::convert::batch as make_batch;
-use crate::expr::eval_array;
+use crate::expr::{canonical, eval_array};
 use crate::ops::{concat, sort_indices};
 use crate::{BatchIter, Error, Result};
 
@@ -594,7 +594,7 @@ pub fn window(
 
     // The functions do not depend on each other: each is computed on a core of its own.
     let computed = funcs.par_iter().map(|(_, call)| -> Result<ArrayRef> {
-        let in_sorted_order = compute(call, &batch, &sorted, &layout)?;
+        let in_sorted_order = canonical(compute(call, &batch, &sorted, &layout)?);
         let mut column = take(&in_sorted_order, &positions, None)?;
         if call.ty.dtype == DataType::Date && column.data_type() != &ArrowType::Date32 {
             column = cast(&column, &ArrowType::Date32)?;

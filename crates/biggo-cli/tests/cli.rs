@@ -511,3 +511,121 @@ fn the_clock_can_be_set_for_a_run() {
         "{stderr}"
     );
 }
+
+/// Runs `biggo run` on a program with the engine held to a number of threads.
+fn run_with_threads(program: &std::path::Path, threads: &str) -> (String, String, Option<i32>) {
+    let output = Command::new(env!("CARGO_BIN_EXE_biggo"))
+        .args(["run", program.to_str().unwrap()])
+        .env("RAYON_NUM_THREADS", threads)
+        .output()
+        .unwrap();
+    (
+        String::from_utf8(output.stdout).unwrap(),
+        String::from_utf8(output.stderr).unwrap(),
+        output.status.code(),
+    )
+}
+
+#[test]
+fn a_failure_does_not_depend_on_the_number_of_threads() {
+    let dir = scratch("threads");
+    // A file of several pieces, with a value that is no number far into it and another
+    // further on.
+    let mut data = String::from("id,amount\n");
+    for id in 0..400_000 {
+        let amount = match id {
+            300_000 => "first".to_string(),
+            390_000 => "second".to_string(),
+            id => (id % 97).to_string(),
+        };
+        data.push_str(&format!("{id},{amount}\n"));
+    }
+    std::fs::write(dir.join("amounts.csv"), data).unwrap();
+    let source = "type Row = { id: int, amount: int }\nlet rows = read_csv<Row>(\"amounts.csv\")\n";
+
+    // The first rows can be had without reading as far as the bad value.
+    let early = dir.join("early.bgo");
+    let query = "print(rows |> derive(twice = amount * 2) |> where(twice >= 0) |> take(5))\n";
+    std::fs::write(&early, format!("{source}{query}")).unwrap();
+    let one = run_with_threads(&early, "1");
+    assert_eq!((one.1.as_str(), one.2), ("", Some(0)), "{}", one.1);
+    assert_eq!(run_with_threads(&early, "8"), one);
+    assert_eq!(run_with_threads(&early, "3"), one);
+
+    // Reading all of it fails at the first of the two, whichever was decoded first.
+    let all = dir.join("all.bgo");
+    std::fs::write(
+        &all,
+        format!("{source}print(rows |> agg(total = sum(amount)))\n"),
+    )
+    .unwrap();
+    let one = run_with_threads(&all, "1");
+    assert!(
+        one.1
+            .contains("amounts.csv, line 300002: cannot read 'first' as an int"),
+        "{}",
+        one.1
+    );
+    assert_eq!(run_with_threads(&all, "8"), one);
+    assert_eq!(run_with_threads(&all, "3"), one);
+}
+
+#[test]
+fn a_file_is_replaced_only_by_a_whole_result() {
+    let dir = scratch("replace");
+    let data = dir.join("stock.csv");
+    let original = "item,count\nbolt,5\nnut,many\nscrew,7\n";
+    std::fs::write(&data, original).unwrap();
+    let files = || {
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    };
+
+    // A query that fails partway leaves the file it was to replace as it was.
+    let failing = dir.join("failing.bgo");
+    let source = "type Row = { item: string, count: string }\n\
+                  let stock = read_csv<Row>(\"stock.csv\")\n\
+                  write_csv(stock |> derive(n = to_int(count)), \"stock.csv\")\n";
+    std::fs::write(&failing, source).unwrap();
+    let (stdout, stderr, code) = run_with_threads(&failing, "2");
+    assert_eq!((stdout.as_str(), code), ("", Some(1)));
+    assert!(
+        stderr.contains("cannot convert 'many' to an int"),
+        "{stderr}"
+    );
+    assert_eq!(std::fs::read_to_string(&data).unwrap(), original);
+    assert_eq!(files(), ["failing.bgo", "stock.csv"]);
+
+    // A query can replace the file that it reads.
+    let trimming = dir.join("trimming.bgo");
+    let source = "type Row = { item: string, count: string }\n\
+                  let stock = read_csv<Row>(\"stock.csv\")\n\
+                  write_csv(stock |> where(count != \"many\"), \"stock.csv\")\n\
+                  write_json(read_csv<Row>(\"stock.csv\"), \"stock.json\")\n\
+                  write_parquet(read_csv<Row>(\"stock.csv\"), \"stock.parquet\")\n\
+                  print(count(read_parquet<Row>(\"stock.parquet\")), count(read_json<Row>(\"stock.json\")))\n";
+    std::fs::write(&trimming, source).unwrap();
+    let (stdout, stderr, code) = run_with_threads(&trimming, "2");
+    assert_eq!(
+        (stdout.as_str(), stderr.as_str(), code),
+        ("2 2\n", "", Some(0))
+    );
+    assert_eq!(
+        std::fs::read_to_string(&data).unwrap(),
+        "item,count\nbolt,5\nscrew,7\n"
+    );
+    assert_eq!(
+        files(),
+        [
+            "failing.bgo",
+            "stock.csv",
+            "stock.json",
+            "stock.parquet",
+            "trimming.bgo"
+        ]
+    );
+}

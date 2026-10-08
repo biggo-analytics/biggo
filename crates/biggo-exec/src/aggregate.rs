@@ -16,7 +16,7 @@ use hashbrown::{DefaultHashBuilder, HashSet, HashTable};
 use rayon::prelude::*;
 
 use crate::convert::{arrow_type, batch as make_batch, decimals, scalar_at, scalars_to_array};
-use crate::expr::eval_array;
+use crate::expr::{canonical, eval_array};
 use crate::{BatchIter, Error, Result};
 
 /// The distinct keys seen so far, each with a dense id in order of first appearance.
@@ -64,8 +64,10 @@ impl Groups {
 /// The running state of one aggregate function, one slot per group.
 pub enum Acc {
     Count(Vec<i64>),
+    /// The sums are kept wider than an int, so that whether a sum overflows depends on the
+    /// sum alone, and not on how the rows that make it up were divided among cores.
     SumInt {
-        sums: Vec<i64>,
+        sums: Vec<i128>,
         seen: Vec<bool>,
     },
     SumFloat {
@@ -460,17 +462,11 @@ impl Acc {
                 }
             }
             Acc::SumInt { sums, seen } => {
-                let mut overflowed = false;
                 let ints = cast(values, &ArrowType::Int64)?;
                 each_valid(ints.as_primitive::<Int64Type>(), groups, |group, value| {
-                    let (sum, wrapped) = sums[group].overflowing_add(value);
-                    sums[group] = sum;
-                    overflowed |= wrapped;
+                    sums[group] += i128::from(value);
                     seen[group] = true;
                 });
-                if overflowed {
-                    return Err(overflow());
-                }
             }
             Acc::SumFloat { sums, seen } => {
                 each_valid(
@@ -530,11 +526,10 @@ impl Acc {
                     values.as_primitive::<Float64Type>(),
                     groups,
                     |group, value| {
-                        let better = if *max {
-                            value > best[group]
-                        } else {
-                            value < best[group]
-                        };
+                        // "Not a number" compares as the largest, as it sorts; taken as
+                        // unordered, it would win or lose by where it stood among the rows.
+                        let order = value.total_cmp(&best[group]);
+                        let better = if *max { order.is_gt() } else { order.is_lt() };
                         if better || !seen[group] {
                             best[group] = value;
                             seen[group] = true;
@@ -784,7 +779,7 @@ impl Acc {
                 },
             ) => {
                 for (from, to) in pairs() {
-                    sums[to] = sums[to].checked_add(other[from]).ok_or_else(overflow)?;
+                    sums[to] += other[from];
                     seen[to] |= other_seen[from];
                 }
             }
@@ -868,11 +863,8 @@ impl Acc {
             ) => {
                 for (from, to) in pairs() {
                     let value = other[from];
-                    let better = if *max {
-                        value > best[to]
-                    } else {
-                        value < best[to]
-                    };
+                    let order = value.total_cmp(&best[to]);
+                    let better = if *max { order.is_gt() } else { order.is_lt() };
                     if other_seen[from] && (better || !seen[to]) {
                         best[to] = value;
                         seen[to] = true;
@@ -1074,11 +1066,12 @@ impl Acc {
         Ok(match acc {
             Acc::Count(counts) => Arc::new(Int64Array::from(counts)),
             Acc::SumInt { sums, seen } => {
-                let sums = sums.into_iter().zip(seen);
-                let sums: Int64Array = sums
-                    .map(|(sum, seen)| optional(seen).then_some(sum))
-                    .collect();
-                cast(&sums, &arrow_type(ty.dtype))?
+                let mut narrowed = Vec::with_capacity(sums.len());
+                for (sum, seen) in sums.into_iter().zip(seen) {
+                    let sum = i64::try_from(sum).map_err(|_| overflow())?;
+                    narrowed.push(optional(seen).then_some(sum));
+                }
+                cast(&Int64Array::from(narrowed), &arrow_type(ty.dtype))?
             }
             Acc::SumFloat { sums, seen } => {
                 let sums = sums.into_iter().zip(seen);
@@ -1239,7 +1232,7 @@ pub fn aggregate_groups(
 ) -> Result<ArrayRef> {
     let mut acc = Acc::new(call)?;
     acc.update(values, groups, count)?;
-    acc.finish(call.ty, count)
+    Ok(canonical(acc.finish(call.ty, count)?))
 }
 
 type Named<T> = [(Arc<str>, T)];
@@ -1344,7 +1337,7 @@ impl State {
             None => Vec::new(),
         };
         for (acc, (_, call)) in self.accs.into_iter().zip(aggs) {
-            columns.push(acc.finish(call.ty, count)?);
+            columns.push(canonical(acc.finish(call.ty, count)?));
         }
         make_batch(schema, columns, count)
     }

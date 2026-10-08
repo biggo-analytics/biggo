@@ -93,10 +93,15 @@ pub fn eval(expr: &Expr, batch: &RecordBatch) -> Result<Col> {
         ExprKind::Binary(BinaryOp::Coalesce, left, right) => coalesce(batch, left, right),
         ExprKind::Binary(BinaryOp::In, value, list) => match &list.kind {
             ExprKind::Literal(biggo_plan::Scalar::List(items)) => {
-                membership(eval(value, batch)?, items, list.ty.dtype)
+                membership(comparable(value, batch)?, items, list.ty.dtype)
             }
             _ => Err(Error("internal error: `in` without its list".into())),
         },
+        ExprKind::Binary(op, left, right) if op.is_comparison() => {
+            let left = comparable(left, batch)?;
+            let right = comparable(right, batch)?;
+            binary(*op, left, right, batch.num_rows())
+        }
         ExprKind::Binary(op, left, right) => {
             let left = eval(left, batch)?;
             let right = eval(right, batch)?;
@@ -115,7 +120,46 @@ pub fn eval(expr: &Expr, batch: &RecordBatch) -> Result<Col> {
 
 /// Evaluates `expr` to one value per row.
 pub fn eval_array(expr: &Expr, batch: &RecordBatch) -> Result<ArrayRef> {
-    eval(expr, batch)?.into_array(batch.num_rows())
+    let array = eval(expr, batch)?.into_array(batch.num_rows())?;
+    Ok(match settled(expr) {
+        true => array,
+        false => canonical(array),
+    })
+}
+
+/// Floats in the one form that stands for all that compare equal: see `scalar::float_key`.
+/// Every float column is kept in this form, so that the kernels that compare, sort and hash
+/// bit patterns order floats as the language says they order.
+pub(crate) fn canonical(array: ArrayRef) -> ArrayRef {
+    if array.data_type() != &ArrowType::Float64 {
+        return array;
+    }
+    let floats = array.as_primitive::<Float64Type>();
+    // Nearly always there is nothing to change, and looking is cheaper than copying.
+    let settled = |value: &f64| value.to_bits() == scalar::float_key(*value).to_bits();
+    if floats.values().iter().all(settled) {
+        return array;
+    }
+    let keyed: Float64Array = floats.unary(scalar::float_key);
+    Arc::new(keyed)
+}
+
+/// Whether the floats that `expr` gives are known to be in canonical form already: those of
+/// a column are, and those of a constant.
+fn settled(expr: &Expr) -> bool {
+    matches!(
+        expr.kind,
+        ExprKind::Column(_) | ExprKind::Literal(_) | ExprKind::Param(_)
+    )
+}
+
+/// The value of an operand that is about to be compared.
+fn comparable(expr: &Expr, batch: &RecordBatch) -> Result<Col> {
+    let value = eval(expr, batch)?;
+    match settled(expr) {
+        true => Ok(value),
+        false => value.map(|array| Ok(canonical(array.clone()))),
+    }
 }
 
 fn cast(array: &ArrayRef, to: &ArrowType) -> Result<ArrayRef> {

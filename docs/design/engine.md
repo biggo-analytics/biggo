@@ -1125,6 +1125,14 @@ Found while reading for this document. "Observed" means reproduced on 9 October 
 existing binary (the release build of 8 October; the debug build of 9 October for item 5).
 "Read" means seen in the code and not run.
 
+Since this list was written, items 1, 2, 3, 4, 5, 7 and 8 have been fixed, each with a test:
+float `min` and `max` and every other comparison now follow one order (negative zero equals
+zero, `NaN` equals itself and is the largest, and every float column is kept in that one form);
+moving sums and averages total each partition on its own; scans and maps hand on batches and
+errors in input order; files are written under a temporary name and renamed when whole;
+`can_fail` lists the functions that cannot fail instead of those that can; and `sum` of `int`
+is totalled in 128 bits and checked once at the end. Items 6 and 9 are open.
+
 | # | Finding | Where | Evidence |
 | --- | --- | --- | --- |
 | 1 | Float `min` and `max` lose values when a group contains `NaN`. A `NaN` that is the first value of a run becomes that run's result, and then loses every comparison in the merge | `aggregate.rs`: `Acc::ExtremeFloat` in `update` and `merge` | Observed: a column of `1.0`, 250,000 `NaN`, one `3.0`, then more `NaN` gives `max = 1.0`. `[NaN, 3.0]` gives `NaN`; `[3.0, NaN]` gives `3.0` |

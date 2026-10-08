@@ -927,5 +927,9 @@ The engine runs on several cores, but **the result is the same every time, no ma
 - `group` gives the groups in order of first appearance
 - `sort` is a stable sort
 - Sums of `float` are added in a fixed order, so every digit of the result is the same, no matter how many threads are used
+- An error is part of the result: a query fails on any number of threads or on none, and with the
+  same message. A query that stops early, such as `take(5)`, does not fail for a bad value in a
+  row that it never needed, however far ahead other cores had read
+- A sum of `int` overflows only if the sum itself does not fit, whatever the order of the rows
 
 The number of threads is set with the environment variable `RAYON_NUM_THREADS` (the default is the number of cores).

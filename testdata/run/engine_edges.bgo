@@ -1,0 +1,47 @@
+// Cases where the answer must not depend on the order of rows or on how the work is divided.
+
+// "Not a number" is the largest float wherever it stands, as it is when sorting.
+let odd = from_rows([{ i: 1, v: 0.0 / 0.0 }, { i: 2, v: 3.0 }, { i: 3, v: 1.0 }])
+print(odd |> agg(high = max(v), low = min(v)))
+print(odd |> sort(desc(i)) |> agg(high = max(v), low = min(v)))
+print(odd |> sort(v) |> select(v))
+print(greatest(0.0 / 0.0, 1.0), least(0.0 / 0.0, 1.0))
+
+// A sum of whole numbers overflows only if the sum itself does not fit.
+let big = 9223372036854775807
+print(from_rows([{ n: big }, { n: 1 }, { n: -1 }]) |> agg(total = sum(n)))
+print(from_rows([{ n: 1 }, { n: -1 }, { n: big }]) |> agg(total = sum(n)))
+
+// What a condition guards is not computed for the rows it turns away.
+let rows = from_rows([
+  { x: 7, n: 0, s: "maybe" },
+  { x: -9223372036854775807 - 1, n: 2, s: "yes" },
+  { x: 5, n: 1, s: "no" },
+])
+rows
+  |> select(
+    quotient = if n != 0 { div(x, n) } else { 0 },
+    size = if x > 0 { abs(x) } else { 0 },
+    agreed = if s != "maybe" { to_bool(s) } else { false },
+    both = n != 0 and div(x, n) > 1,
+    padded = if n > 0 { pad_left(s, n + 3, "*") } else { s },
+    day = if n > 0 { make_date(2026, n, 1) } else { @2026-01-01 },
+  )
+  |> print()
+
+// Floats compare one way everywhere: negative zero is zero, and "not a number" equals itself
+// and is above every number. First on single values, then the same on columns.
+let nan = 0.0 / 0.0
+let minus = -0.0
+print(0.0 == minus, nan == nan, nan != nan, nan > 1.0, nan < 1.0, minus < 0.0, 0.0 in [minus], nan in [nan])
+let floats = from_rows([{ a: 0.0, b: minus, n: nan }, { a: minus, b: 0.0, n: 1.0 }])
+floats
+  |> select(same = a == b, nan_same = n == n, nan_differs = n != n, above = n > 1.0, below = n < 1.0, less = b < a, listed = a in [minus], nan_listed = n in [nan])
+  |> print()
+print(floats |> group(a) |> agg(rows = count()), floats |> distinct(b) |> count(), floats |> agg(kinds = count_distinct(a)))
+print(floats |> join(floats |> select(key = b), left_on = a, right_on = key) |> count())
+print(floats |> derive(zero = a * -1.0, least = least(a, b), marked = null_if(a, minus)) |> select(zero, least, marked))
+print(floats |> where(a * -1.0 == 0.0) |> count(), floats |> sort(n) |> select(n))
+
+// The sum that does not fit is still an error.
+print(from_rows([{ n: big }, { n: 1 }]) |> agg(total = sum(n)))

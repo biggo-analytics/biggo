@@ -72,13 +72,18 @@ where
                     }
                 }
             }
-            let mapped: Result<Vec<RecordBatch>> = pending.into_par_iter().map(&self.f).collect();
-            match mapped {
-                Ok(batches) => {
-                    let batches = batches.into_iter().filter(|batch| batch.num_rows() > 0);
-                    self.ready.extend(batches);
+            // The batches are worked on at once but handed on in order, and so is an error:
+            // it comes after the batches before it, and before any error further on.
+            let mapped: Vec<Result<RecordBatch>> = pending.into_par_iter().map(&self.f).collect();
+            for batch in mapped {
+                match batch {
+                    Ok(batch) if batch.num_rows() > 0 => self.ready.push_back(batch),
+                    Ok(_) => {}
+                    Err(err) => {
+                        self.error = Some(err);
+                        break;
+                    }
                 }
-                Err(err) => self.error = Some(err),
             }
         }
     }

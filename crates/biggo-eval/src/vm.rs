@@ -1083,12 +1083,7 @@ fn float_op(op: BinaryOp, a: f64, b: f64) -> std::result::Result<Value, String> 
         Mul => Value::Float(a * b),
         Div => Value::Float(a / b),
         Rem => Value::Float(a % b),
-        Eq => Value::Bool(a == b),
-        Ne => Value::Bool(a != b),
-        Lt => Value::Bool(a < b),
-        Le => Value::Bool(a <= b),
-        Gt => Value::Bool(a > b),
-        Ge => Value::Bool(a >= b),
+        Eq | Ne | Lt | Le | Gt | Ge => Value::Bool(compare(op, scalar::float_cmp(a, b))),
         And | Or | Coalesce | In | NotIn => {
             return Err("internal error: logic on numbers".into());
         }

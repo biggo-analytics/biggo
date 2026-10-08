@@ -14,7 +14,7 @@ use arrow::error::ArrowError;
 use biggo_plan::{DataType, ScalarFn, scalar, text};
 
 use crate::convert::{arrow_type, decimals};
-use crate::expr::Col;
+use crate::expr::{Col, canonical};
 use crate::rows::{Bools, Ints, Strs, result, shape};
 use crate::{Error, Result};
 
@@ -50,6 +50,7 @@ fn floats2(left: &Col, right: &Col, rows: usize, f: impl Fn(f64, f64) -> f64) ->
 /// The larger or the smaller of two values. A null on either side gives null.
 fn extreme(largest: bool, left: &Col, right: &Col, rows: usize) -> Result<Col> {
     let (left, right, single) = pair(left, right, rows)?;
+    let (left, right) = (canonical(left), canonical(right));
     let keep_left = match largest {
         true => cmp::gt_eq(&left, &right)?,
         false => cmp::lt_eq(&left, &right)?,
@@ -164,7 +165,7 @@ pub fn call(func: ScalarFn, args: &[Col], dtype: DataType, rows: usize) -> Resul
         }
         NullIf => {
             let (value, marker, single) = pair(first, &args[1], rows)?;
-            let same = cmp::eq(&value, &marker)?;
+            let same = cmp::eq(&canonical(value.clone()), &canonical(marker))?;
             Ok(result(single, nullif(&value, &same)?))
         }
         TryToInt => first.clone().map(try_to_int),

@@ -129,19 +129,7 @@ impl Expr {
             // The conversions the type checker inserts always succeed; those a program asks
             // for may meet a value that does not convert.
             ExprKind::Cast(_) => false,
-            ExprKind::Call(func, _) => matches!(
-                func,
-                ScalarFn::ToInt
-                    | ScalarFn::ToFloat
-                    | ScalarFn::ToDecimal
-                    | ScalarFn::ToDate
-                    | ScalarFn::ToDateTime
-                    | ScalarFn::Round
-                    | ScalarFn::Days
-                    | ScalarFn::Hours
-                    | ScalarFn::Minutes
-                    | ScalarFn::Seconds
-            ),
+            ExprKind::Call(func, _) => func.can_fail(),
             _ => false,
         };
         let mut fails = fails_here;
@@ -343,6 +331,77 @@ functions! {
     /// The value of one column in the row where another is largest, or smallest.
     ArgMax => "arg_max",
     ArgMin => "arg_min",
+    }
+}
+
+impl ScalarFn {
+    /// Whether the function can stop the program for some value, as `to_int` does for a
+    /// string that is no number. A function counts as one that can unless it is listed here
+    /// as safe: to forget a new function then costs a little speed, and never a wrong error.
+    pub fn can_fail(self) -> bool {
+        use ScalarFn::*;
+        !matches!(
+            self,
+            IsNull
+                | Floor
+                | Ceil
+                | Sqrt
+                | Lower
+                | Upper
+                | Trim
+                | Length
+                | Contains
+                | StartsWith
+                | EndsWith
+                | Year
+                | Month
+                | Day
+                | Hour
+                | Minute
+                | Second
+                | ToString
+                | TotalSeconds
+                | TotalMinutes
+                | TotalHours
+                | TotalDays
+                | Substring
+                | Replace
+                | SplitPart
+                | IndexOf
+                | Greatest
+                | Least
+                | NullIf
+                | TryToInt
+                | TryToFloat
+                | TryToDecimal
+                | TryToDate
+                | TryToDateTime
+                | TryToBool
+                | Pow
+                | Exp
+                | Ln
+                | Log10
+                | Log2
+                | Log
+                | Sign
+                | Trunc
+                | IsNan
+                | IsFinite
+                | Sin
+                | Cos
+                | Tan
+                | Asin
+                | Acos
+                | Atan
+                | Atan2
+                | Degrees
+                | Radians
+                | ParseNumber
+                | Weekday
+                | DayName
+                | IsWeekend
+                | ToUnix
+        )
     }
 }
 
