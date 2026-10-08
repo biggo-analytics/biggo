@@ -110,15 +110,22 @@ impl Dumper<'_> {
                 ret,
                 body,
             } => {
-                let params: Vec<String> = params
+                let shown: Vec<String> = params
                     .iter()
                     .map(|p| format!("{}: {}", self.name(p.name.name), self.ty(&p.ty)))
                     .collect();
-                let mut signature = format!("{}({})", self.name(name.name), params.join(", "));
+                let mut signature = format!("{}({})", self.name(name.name), shown.join(", "));
                 if let Some(ret) = ret {
                     signature = format!("{signature} -> {}", self.ty(ret));
                 }
-                list("fn", [atom(signature), self.expr(*body)])
+                let defaults = params.iter().filter_map(|param| {
+                    let name = atom(self.name(param.name.name));
+                    Some(list("default", [name, self.expr(param.default?)]))
+                });
+                let mut parts = vec![atom(signature)];
+                parts.extend(defaults);
+                parts.push(self.expr(*body));
+                list("fn", parts)
             }
             StmtKind::Import { path } => list("import", [atom(format!("{path:?}"))]),
             StmtKind::Expr(expr) => self.expr(*expr),

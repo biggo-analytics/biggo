@@ -38,6 +38,8 @@ struct Signature {
     /// The body of a function declared with `fn` at the top of a file, once it has been
     /// checked: what a call of the function on columns is replaced by.
     body: Option<Arc<Expr>>,
+    /// For each parameter, the value it has in a call that does not give it one.
+    defaults: Vec<Option<Expr>>,
 }
 
 /// What the place where a lambda is written says about its type.
@@ -929,6 +931,7 @@ impl<'a> Cx<'a> {
             ret: ret.map(|ret| self.resolve_type(ret)),
             lambda: false,
             body: None,
+            defaults: Vec::new(),
         };
         for param in params {
             if signature.params.iter().any(|p| p.name == param.name.name) {
@@ -938,14 +941,80 @@ impl<'a> Cx<'a> {
                 );
                 self.error(param.name.span, message);
             }
+            let ty = self.resolve_type(&param.ty);
+            let default = param
+                .default
+                .and_then(|default| self.default_value(param, default, &ty));
+            if default.is_none()
+                && param.default.is_none()
+                && signature.defaults.iter().any(Option::is_some)
+            {
+                let message = format!(
+                    "parameter `{}` has no default, so it cannot come after one that has",
+                    self.text(param.name.name)
+                );
+                self.error(param.name.span, message);
+            }
+            signature.defaults.push(default);
             signature.params.push(Param {
                 name: param.name.name,
                 text: self.text(param.name.name),
-                ty: self.resolve_type(&param.ty),
+                ty,
             });
         }
         self.checker.functions.push(signature);
         self.checker.functions.len() as u32 - 1
+    }
+
+    /// Whether an expression is a value written out: a literal, or a list, a record or a
+    /// map of them.
+    fn written_out(&self, id: ExprId) -> bool {
+        match self.ast.expr(id) {
+            ast::Expr::Int(_)
+            | ast::Expr::Float(_)
+            | ast::Expr::Str(_)
+            | ast::Expr::Bool(_)
+            | ast::Expr::Null
+            | ast::Expr::Date(_)
+            | ast::Expr::DateTime(_)
+            | ast::Expr::Decimal(_) => true,
+            ast::Expr::Unary {
+                op: UnaryOp::Neg,
+                operand,
+            } => self.written_out(*operand),
+            ast::Expr::List(items) => items.iter().all(|item| self.written_out(*item)),
+            ast::Expr::Record(fields) => fields.iter().all(|(_, value)| self.written_out(*value)),
+            ast::Expr::Map(entries) => entries
+                .iter()
+                .all(|(key, value)| self.written_out(*key) && self.written_out(*value)),
+            _ => false,
+        }
+    }
+
+    /// The default of a parameter of type `ty`. It is a value written out, so that it means
+    /// the same wherever the function is called from.
+    fn default_value(&mut self, param: &ast::Param, default: ExprId, ty: &Type) -> Option<Expr> {
+        let name = self.text(param.name.name);
+        if !self.written_out(default) {
+            let message = format!(
+                "the default of `{name}` must be a value written out, \
+                 such as `10`, `\"all\"`, `null` or `[]`"
+            );
+            self.error(self.ast.span(default), message);
+            return None;
+        }
+        let value = self.expr_expecting(default, ty);
+        if value.ty.is_error() {
+            return None;
+        }
+        match coerce(value, ty) {
+            Ok(value) => Some(value),
+            Err(value) => {
+                let message = format!("the default of `{name}` must be {ty}, found {}", value.ty);
+                self.error(value.span, message);
+                None
+            }
+        }
     }
 
     /// Checks the body of a declared function and stores its HIR. `params` are the names of
@@ -1079,6 +1148,7 @@ impl<'a> Cx<'a> {
             ret,
             lambda: true,
             body: None,
+            defaults: Vec::new(),
         });
         let id = self.checker.functions.len() as u32 - 1;
         let names: Vec<Symbol> = params.iter().map(|param| param.name.name).collect();
@@ -2250,11 +2320,26 @@ impl<'a> Cx<'a> {
                 }
             }
         }
-        if let Some(missing) = filled.iter().position(|filled| !filled)
-            && !failed
-        {
-            let message = format!("missing argument {} in call to `{name}`", label(missing));
-            return self.error(call.span, message);
+        // A parameter that the call leaves out takes its default, if it has one.
+        let defaults = match &callee {
+            Callee::Function(id) => self.checker.functions[*id as usize].defaults.clone(),
+            Callee::Value(_) => Vec::new(),
+        };
+        for (index, _) in filled.iter().enumerate().filter(|(_, filled)| !**filled) {
+            match defaults.get(index).cloned().flatten() {
+                Some(mut value) => {
+                    value.span = call.span;
+                    args.push(Arg {
+                        value,
+                        param: index as u32,
+                    });
+                }
+                None if failed => {}
+                None => {
+                    let message = format!("missing argument {} in call to `{name}`", label(index));
+                    return self.error(call.span, message);
+                }
+            }
         }
         if failed {
             return Expr::error(call.span);

@@ -1,0 +1,66 @@
+(fn greet(name: string, greeting: string, marks: int) -> string
+  (default greeting "hello")
+  (default marks 1)
+  (block (+ (+ (+ greeting ", ") name) (call repeat "!" marks))))
+(call print (call greet "Ann") (call greet "Bo" "hi") (call greet "Cy" "hey" 3))
+(call print (call greet "Di" (marks: 2)) (call greet (marks: 0) (name: "Ed")))
+(fn top(t: table<{product: string, qty: int}>, n: int, least: int?) -> table<{product: string, qty: int}>
+  (default n 2)
+  (default least null)
+  (block
+    (|> t
+      (call where (>= qty (?? least 0)))
+      (call sort (call desc qty))
+      (call take n))))
+(let sales
+  (call from_rows
+    (list
+      (record (product: "widget") (qty: 10) (price: 2.5))
+      (record (product: "gadget") (qty: 3) (price: 10.0))
+      (record (product: "gizmo") (qty: 7) (price: 99.9)))))
+(call print
+  (call top sales)
+  (|> sales (call top 1))
+  (|> sales (call top (least: 5) (n: 9))))
+(fn every(a: float, b: bool, day: date, amount: decimal, tags: list<string>, limits: {low: int, high: int}, names: map<string, int>, none: list<int>) -> string
+  (default a (- 1.5))
+  (default b true)
+  (default day @2026-01-05)
+  (default amount 0.5d)
+  (default tags (list "new" "sale"))
+  (default limits (record (low: 0) (high: 9)))
+  (default names (map ("one" 1)))
+  (default none (list))
+  (block
+    (+
+      (+
+        (+
+          (+
+            (+
+              (+
+                (+
+                  (+
+                    (+
+                      (+ (+ (+ (call to_string a) " ") (call to_string b)) " ")
+                      (call to_string day))
+                    " ")
+                  (call to_string amount))
+                " ")
+              (call join tags "+"))
+            " ")
+          (call to_string (. limits high)))
+        " ")
+      (call to_string (+ (call len names) (call len none))))))
+(call print (call every) (call every 2.0 (tags: (list))))
+(fn discounted(price: float, rate: float) -> float
+  (default rate 0.1)
+  (block (call round (* price (- 1.0 rate)) 2)))
+(call print
+  (|> sales
+    (call derive
+      (sale: (call discounted price))
+      (clearance: (call discounted price 0.5)))
+    (call select product sale clearance)))
+(call print
+  (call map (list 1.0 2.0) (lambda (p) (block (call discounted p))))
+  (call fold (list 0.5 0.2) 100.0 discounted))

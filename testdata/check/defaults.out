@@ -1,0 +1,71 @@
+error: the default of `n` must be int, found string
+ --> check/defaults.bgo:5:15
+  |
+5 | fn a(n: int = "ten") -> int { n }
+  |               ^^^^^
+
+error: the default of `n` must be a value written out, such as `10`, `"all"`, `null` or `[]`
+ --> check/defaults.bgo:6:15
+  |
+6 | fn b(n: int = base) -> int { n }
+  |               ^^^^
+
+error: the default of `n` must be a value written out, such as `10`, `"all"`, `null` or `[]`
+ --> check/defaults.bgo:7:15
+  |
+7 | fn c(n: int = limit()) -> int { n }
+  |               ^^^^^^^
+
+error: the default of `n` must be a value written out, such as `10`, `"all"`, `null` or `[]`
+ --> check/defaults.bgo:8:15
+  |
+8 | fn d(n: int = 1 + 1) -> int { n }
+  |               ^^^^^
+
+error: parameter `second` has no default, so it cannot come after one that has
+ --> check/defaults.bgo:9:22
+  |
+9 | fn e(first: int = 1, second: int) -> int { first + second }
+  |                      ^^^^^^
+
+error: the elements of a list must have one type, found int and string
+  --> check/defaults.bgo:10:26
+   |
+10 | fn f(xs: list<int> = [1, "two"]) -> int { len(xs) }
+   |                          ^^^^^
+
+error: missing argument `name` in call to `h`
+  --> check/defaults.bgo:14:1
+   |
+14 | h()
+   | ^^^
+
+error: too many arguments: `h` takes 2
+  --> check/defaults.bgo:15:11
+   |
+15 | h("a", 1, 2)
+   |           ^
+
+error: `h` expects int for `times`, found string
+  --> check/defaults.bgo:16:16
+   |
+16 | h("a", times = "3")
+   |                ^^^
+
+error: `h` has no parameter named `count`
+  --> check/defaults.bgo:17:8
+   |
+17 | h("a", count = 3)
+   |        ^^^^^
+
+error: too many arguments: `g` takes 2
+  --> check/defaults.bgo:18:11
+   |
+18 | g(1, 2.0, 3)
+   |           ^
+
+error: missing argument `times` in call to `held`
+  --> check/defaults.bgo:20:1
+   |
+20 | held("a")
+   | ^^^^^^^^^

@@ -405,7 +405,11 @@ impl<'a> Parser<'a> {
         let name = self.ident("a parameter name")?;
         self.expect(TokenKind::Colon, "`:`")?;
         let ty = self.type_expr()?;
-        Ok(Param { name, ty })
+        let default = match self.eat(TokenKind::Eq) {
+            true => Some(self.expr()?),
+            false => None,
+        };
+        Ok(Param { name, ty, default })
     }
 
     fn type_expr(&mut self) -> PResult<TypeExpr> {

@@ -336,7 +336,6 @@ arguments, type inference for lambdas.
 
 | Feature | What it does | Priority |
 | --- | --- | --- |
-| default values for parameters | `fn top(t: table<Sale>, n: int = 10)` | Should |
 | user-defined generic functions | `fn first<T>(xs: list<T>) -> T?` | Should |
 | named imports | `import "lib/geo.bgo" as geo`, then `geo.area(...)`. Today the names of every file share one namespace | Should |
 | a fuller `match` | Ranges of values, guards, and taking a record's fields apart. Today a pattern can only be a literal or `_` | Should |
@@ -351,6 +350,7 @@ arguments, type inference for lambdas.
       expression out
 - [x] A function that takes `table<{region: string, qty: int}>` accepts a table with more
       columns than those
+- [x] Default values for parameters: `fn top(t: table<Sale>, n: int = 10)`
 
 ### 11. Tooling
 

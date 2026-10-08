@@ -1,0 +1,20 @@
+// Mistakes with default values of parameters.
+let base = 10
+fn limit() -> int { 5 }
+
+fn a(n: int = "ten") -> int { n }
+fn b(n: int = base) -> int { n }
+fn c(n: int = limit()) -> int { n }
+fn d(n: int = 1 + 1) -> int { n }
+fn e(first: int = 1, second: int) -> int { first + second }
+fn f(xs: list<int> = [1, "two"]) -> int { len(xs) }
+fn g(n: int? = null, m: float = 2) -> float { m }
+fn h(name: string, times: int = 2) -> string { repeat(name, times) }
+
+h()
+h("a", 1, 2)
+h("a", times = "3")
+h("a", count = 3)
+g(1, 2.0, 3)
+let held = h
+held("a")

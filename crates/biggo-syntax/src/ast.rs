@@ -92,6 +92,8 @@ pub enum StmtKind {
 pub struct Param {
     pub name: Ident,
     pub ty: TypeExpr,
+    /// The value the parameter has in a call that does not give it one.
+    pub default: Option<ExprId>,
 }
 
 #[derive(Debug)]

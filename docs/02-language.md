@@ -354,6 +354,30 @@ room has area 13.5
 - A function that has no value (one that ends with `print`, for example) needs no `->`.
 - `area(3, 4.5)`: `3` is an `int` but the parameter is a `float`, so it is converted automatically.
 
+### Default values
+
+A parameter can have a default, which it takes in a call that leaves it out:
+
+```biggo
+fn greet(name: string, greeting: string = "hello", marks: int = 1) -> string {
+  greeting + ", " + name + repeat("!", marks)
+}
+
+print(greet("Ann"), greet("Bo", "hi"), greet("Cy", marks = 3))
+```
+
+```text output
+hello, Ann! hi, Bo! hello, Cy!!!
+```
+
+- The parameters with a default come after those without. A call gives the ones it wants from
+  the left, or picks one by name, as `marks = 3` does above.
+- A default is a value written out: a number, a string, `true`, `null`, a date, or a list, a
+  record or a map of those. It cannot be computed, so it is the same wherever the function is
+  called from.
+- A function that is passed as a value, as in `map(xs, greet)`, is called with all of its
+  arguments.
+
 ### Name visibility
 
 A top-level function can be called from anywhere in the file, even if it is declared further down.

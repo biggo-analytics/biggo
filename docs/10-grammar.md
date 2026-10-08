@@ -40,7 +40,7 @@ import    = "import" STRING
 type_decl = "type" NAME "=" type
 let       = "let" NAME [ ":" type ] "=" expr
 fn_decl   = "fn" NAME "(" [ param { "," param } [ "," ] ] ")" [ "->" type ] block
-param     = NAME ":" type
+param     = NAME ":" type [ "=" expr ]
 ```
 
 - `import` and `type_decl` are allowed only at the top level of a file, and `import` must come before

@@ -191,13 +191,19 @@ impl<'a> Formatter<'a> {
                 ret,
                 body,
             } => {
-                let params = params.iter().map(|param| {
-                    concat([
+                let mut docs = Vec::with_capacity(params.len());
+                for param in params {
+                    let mut parts = vec![
                         text(format!("{}: ", self.text(param.name.span))),
                         self.type_expr(&param.ty),
-                    ])
-                });
-                let params: Vec<Doc> = params.collect();
+                    ];
+                    if let Some(default) = param.default {
+                        parts.push(text(" = "));
+                        parts.push(self.expr(default, 0));
+                    }
+                    docs.push(concat(parts));
+                }
+                let params = docs;
                 let mut parts = vec![
                     text(format!("fn {}", self.text(name.span))),
                     self.list("(", params, ")", false),

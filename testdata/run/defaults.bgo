@@ -1,0 +1,44 @@
+// Parameters with a default value, which a call may leave out.
+
+fn greet(name: string, greeting: string = "hello", marks: int = 1) -> string {
+  greeting + ", " + name + repeat("!", marks)
+}
+
+print(greet("Ann"), greet("Bo", "hi"), greet("Cy", "hey", 3))
+// A later one can be given by name, leaving out the one before it.
+print(greet("Di", marks = 2), greet(marks = 0, name = "Ed"))
+
+fn top(t: table<{ product: string, qty: int }>, n: int = 2, least: int? = null) -> table<{ product: string, qty: int }> {
+  t |> where(qty >= (least ?? 0)) |> sort(desc(qty)) |> take(n)
+}
+
+let sales = from_rows([
+  { product: "widget", qty: 10, price: 2.5 },
+  { product: "gadget", qty: 3, price: 10.0 },
+  { product: "gizmo", qty: 7, price: 99.9 },
+])
+print(top(sales), sales |> top(1), sales |> top(least = 5, n = 9))
+
+// Defaults of every kind of value.
+fn every(
+  a: float = -1.5,
+  b: bool = true,
+  day: date = @2026-01-05,
+  amount: decimal = 0.50d,
+  tags: list<string> = ["new", "sale"],
+  limits: { low: int, high: int } = { low: 0, high: 9 },
+  names: map<string, int> = { "one": 1 },
+  none: list<int> = [],
+) -> string {
+  to_string(a) + " " + to_string(b) + " " + to_string(day) + " " + to_string(amount) + " " + join(tags, "+") + " " + to_string(limits.high) + " " + to_string(len(names) + len(none))
+}
+print(every(), every(2.0, tags = []))
+
+// A function with a default is called on a column like any other.
+fn discounted(price: float, rate: float = 0.1) -> float {
+  round(price * (1.0 - rate), 2)
+}
+print(sales |> derive(sale = discounted(price), clearance = discounted(price, 0.5)) |> select(product, sale, clearance))
+
+// As a value, a function takes all of its arguments.
+print(map([1.0, 2.0], fn(p) { discounted(p) }), fold([0.5, 0.2], 100.0, discounted))
