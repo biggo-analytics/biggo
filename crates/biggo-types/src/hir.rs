@@ -154,6 +154,14 @@ pub enum Builtin {
     WriteJson,
     /// Writes a table as a workbook with one sheet.
     WriteExcel,
+    /// Writes a table as a Markdown table, and as a page of HTML.
+    WriteMarkdown,
+    WriteHtml,
+    /// A table as the text of a Markdown table, and of an HTML one.
+    ToMarkdown,
+    ToHtml,
+    /// `print` with a number of rows to show of each table: the first argument.
+    PrintRows,
     /// Writes a table as a table of a SQLite database, in place of the one of that name.
     WriteSqlite,
     /// The rows of a table as a list of records.

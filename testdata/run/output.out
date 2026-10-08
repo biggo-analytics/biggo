@@ -1,0 +1,86 @@
++---+
+| n |
++---+
+| 0 |
+| 1 |
+| 2 |
++---+
+... only the first 3 rows are shown
+first two:
++--------+-------+
+| region | units |
++--------+-------+
+| north  | 10    |
+| south  | 3     |
++--------+-------+
+... only the first 2 rows are shown
++--------+
+| region |
++--------+
++--------+
+... its rows are not shown
++--------+
+| region |
++--------+
+| north  |
+| south  |
+| east   |
++--------+
++----------------+
+| product        |
++----------------+
+| widget | large |
++----------------+
+... only the first row is shown
++---+
+| n |
++---+
+| 0 |
++---+
+... only the first row is shown
+| region | units | amount | share |
+| --- | ---: | ---: | ---: |
+| north | 10 | 15 | 0.5 |
+| south | 3 | 4.5 | 0.15 |
+| east | 7 | 10.5 | 0.35 |
+| product | sold |
+| --- | --- |
+| a | b | c |
+| ---: | --- | ---: |
+| 1 | x<br>y |  |
+<table>
+<thead>
+<tr><th>product</th><th class="n">units</th><th>sold</th></tr>
+</thead>
+<tbody>
+<tr><td>widget | large</td><td class="n">10</td><td>2026-01-05</td></tr>
+<tr><td>gadget</td><td class="n">3</td><td>2026-01-17</td></tr>
+<tr><td>&lt;gizmo&gt; &amp; co</td><td class="n">7</td><td>2026-02-02</td></tr>
+</tbody>
+</table>
++-------------------------------------+
+| line                                |
++-------------------------------------+
+| | region | units | amount | share | |
+| | --- | ---: | ---: | ---: |        |
+| | north | 10 | 15 | 0.5 |           |
+| | south | 3 | 4.5 | 0.15 |          |
+| | east | 7 | 10.5 | 0.35 |          |
++-------------------------------------+
++---------------------------------------------------------------------------------------------------+
+| line                                                                                              |
++---------------------------------------------------------------------------------------------------+
+| <title>totals</title>                                                                             |
+| <table>                                                                                           |
+| <thead>                                                                                           |
+| <tr><th>region</th><th class="n">units</th><th class="n">amount</th><th class="n">share</th></tr> |
+| <tbody>                                                                                           |
+| <tr><td>north</td><td class="n">10</td><td class="n">15</td><td class="n">0.5</td></tr>           |
+| <tr><td>south</td><td class="n">3</td><td class="n">4.5</td><td class="n">0.15</td></tr>          |
+| <tr><td>east</td><td class="n">7</td><td class="n">10.5</td><td class="n">0.35</td></tr>          |
++---------------------------------------------------------------------------------------------------+
+error: `rows` cannot be negative, found -1
+  --> run/output.bgo:37:1
+   |
+37 | print(many, rows = 0 - shown)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -830,7 +830,9 @@ Details: [statistics](04-tables.md#statistics)
 
 | Function | Meaning |
 | --- | --- |
-| `print(a, b, ...)` | Prints the values separated by spaces, then a newline; a table is run and its first 50 rows are printed |
+| `print(a, b, ...)`, `print(t, rows = n)` | Prints the values separated by spaces, then a newline; a table is run and its first 50 rows are printed, or its first `n` |
+| `to_markdown(t)`, `to_html(t)` | The whole table as the text of a Markdown table, or of an HTML `<table>` |
+| `write_markdown(t, path)`, `write_html(t, path)` | Writes the whole table as a Markdown file, or as a page that a browser opens |
 | `explain(t)` | Prints the query's plan, both before and after it is optimized, without running it |
 | `assert(cond)`, `assert(cond, message)` | Stops the program with an error if `cond` is not `true` |
 | `assert_eq(a, b)` | Stops the program if the two values are not equal; it can compare lists, records, maps and tables |
@@ -857,3 +859,42 @@ optimized plan:
 `print` shows strings and dates bare when they are top-level values, and as literals
 (with `"` or `@`) when they are inside a list, record or map. Details of `assert`:
 [biggo test](07-tools.md#biggo-test)
+
+A result that goes into a document, a chat message or a page:
+
+```biggo
+let totals = from_rows([
+  { branch: "north", units: 21, share: 0.467 },
+  { branch: "south", units: 17, share: 0.378 },
+  { branch: "east", units: 7, share: 0.155 },
+])
+print(totals, rows = 2)
+print(to_markdown(totals |> derive(share = format_percent(share, 1))))
+write_html(totals, "out/totals.html")
+```
+
+```text output
++--------+-------+-------+
+| branch | units | share |
++--------+-------+-------+
+| north  | 21    | 0.467 |
+| south  | 17    | 0.378 |
++--------+-------+-------+
+... only the first 2 rows are shown
+| branch | units | share |
+| --- | ---: | --- |
+| north | 21 | 46.7% |
+| south | 17 | 37.8% |
+| east | 7 | 15.5% |
+```
+
+- `print` stops at 50 rows so that a large table does not flood a terminal; `rows` sets another
+  number. `to_markdown`, `to_html` and the two that write files take every row: cut the table
+  with `take` first if it is long.
+- In Markdown and HTML a null is an empty cell, columns of numbers are set to the right, and the
+  characters that would break the table (`|`, a line break, `<`, `&`) are escaped.
+- `to_html` gives the `<table>` alone, to put inside a page of your own; cells of numbers have
+  the class `n`. `write_html` writes a whole page with a plain style, titled with the name of
+  the file.
+- To choose how numbers look, format them into text first, with `format_number` or
+  `format_percent`.

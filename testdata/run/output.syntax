@@ -1,0 +1,54 @@
+(let sales
+  (call from_rows
+    (list
+      (record
+        (region: "north")
+        (product: "widget | large")
+        (units: 10)
+        (price: 2.5)
+        (sold: @2026-01-05))
+      (record
+        (region: "south")
+        (product: "gadget")
+        (units: 3)
+        (price: 10.0)
+        (sold: @2026-01-17))
+      (record
+        (region: "east")
+        (product: "<gizmo> & co")
+        (units: 7)
+        (price: 0.75)
+        (sold: @2026-02-02)))))
+(let totals
+  (|> sales
+    (call derive (amount: (* (call to_decimal units) 1.5d)))
+    (call select region units amount (share: (/ (call to_float units) 20.0)))))
+(let many
+  (call from_rows
+    (call map (call range 0 60) (lambda (n) (block (record (n: n)))))))
+(call print many (rows: 3))
+(call print "first two:" (|> sales (call select region units)) (rows: 2))
+(call print (|> sales (call select region)) (rows: 0))
+(call print (|> sales (call select region)) (rows: 99))
+(let shown 1)
+(call print (|> sales (call select product)) many (rows: shown))
+(call print (call to_markdown totals))
+(call print
+  (call to_markdown
+    (|> sales (call where (> units 99)) (call select product sold))))
+(let holes
+  (|>
+    (call from_rows (list (record (a: 1) (b: "x\ny"))))
+    (call derive (c: (if (> a 1) (block a) (block null))))))
+(call print (call to_markdown holes))
+(call print (call to_html (|> sales (call select product units sold))))
+(call write_markdown totals "out/totals.md")
+(call write_html totals "out/totals.html")
+(type Line {line: string})
+(call print
+  (call read_csv <Line> "out/totals.md" (delimiter: "\t") (header: false)))
+(call print
+  (|>
+    (call read_csv <Line> "out/totals.html" (delimiter: "\t") (header: false))
+    (call where (call starts_with line "<t"))))
+(call print many (rows: (- 0 shown)))

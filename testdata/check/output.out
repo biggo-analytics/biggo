@@ -1,0 +1,71 @@
+error: `rows` must be int, found string
+ --> check/output.bgo:4:17
+  |
+4 | print(t, rows = "3")
+  |                 ^^^
+
+error: `rows` cannot be negative
+ --> check/output.bgo:5:17
+  |
+5 | print(t, rows = -1)
+  |                 ^^
+
+error: the only named argument of `print` is `rows`, the number of rows to show of a table, and it comes last
+ --> check/output.bgo:6:7
+  |
+6 | print(rows = 3, t)
+  |       ^^^^
+
+error: the only named argument of `print` is `rows`, the number of rows to show of a table, and it comes last
+ --> check/output.bgo:7:10
+  |
+7 | print(t, limit = 3)
+  |          ^^^^^
+
+error: `to_markdown` needs a table to work on, as in `table |> to_markdown(...)`
+ --> check/output.bgo:8:1
+  |
+8 | to_markdown()
+  | ^^^^^^^^^^^^^
+
+error: `to_markdown` takes only a table
+ --> check/output.bgo:9:1
+  |
+9 | to_markdown(t, 5)
+  | ^^^^^^^^^^^^^^^^^
+
+error: `to_markdown` works on a table, found string
+  --> check/output.bgo:10:13
+   |
+10 | to_markdown("text")
+   |             ^^^^^^
+
+error: `to_html` takes only a table
+  --> check/output.bgo:11:1
+   |
+11 | to_html(t, title = "x")
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `write_markdown` takes a table and a file path
+  --> check/output.bgo:12:1
+   |
+12 | write_markdown(t)
+   | ^^^^^^^^^^^^^^^^^
+
+error: `write_html` takes a table and a file path
+  --> check/output.bgo:13:1
+   |
+13 | write_html(t, "a.html", "title")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `write_markdown` works on a table, found string
+  --> check/output.bgo:14:16
+   |
+14 | write_markdown("a.md", t)
+   |                ^^^^^^
+
+error: expected int, found string
+  --> check/output.bgo:15:17
+   |
+15 | let text: int = to_markdown(t)
+   |                 ^^^^^^^^^^^^^^

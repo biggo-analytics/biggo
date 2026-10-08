@@ -310,16 +310,17 @@ Exists: `read_csv` and `write_csv` (with `delimiter`, `encoding`, `header`, `ski
 
 ### 9. Output and reports
 
-Exists: `print` (the first 50 rows of a table), `explain`, the four `write_` functions.
+Exists: `print` (the first 50 rows of a table, or as many as `rows` says), `explain`, Markdown
+and HTML, and the `write_` functions of the file formats.
 
 | Feature | What it does | Priority |
 | --- | --- | --- |
-| `print(t, rows = 200)` | More or fewer rows than 50 | Must |
-| `to_markdown(t)`, `write_markdown(t, path)` | A table for a document, an issue or a chat message | Should |
-| `write_html(t, path)` | A table as a page, with numbers aligned | Should |
 | number display | How many decimal places a `float` column prints with | Should |
 | charts | Functions that write a chart from a table as an SVG or HTML file | Later |
 | a Jupyter kernel | biggo in notebooks | Later |
+
+- [x] `print(t, rows = n)` for more or fewer rows than 50
+- [x] `to_markdown(t)`, `to_html(t)`, `write_markdown(t, path)`, `write_html(t, path)`
 
 ### 10. Language
 

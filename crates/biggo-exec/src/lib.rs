@@ -10,12 +10,14 @@ pub mod infer;
 mod join;
 mod math;
 mod ops;
+mod report;
 mod rows;
 mod scan;
 mod text;
 mod window;
 
 pub use excel::write_excel;
+pub use report::{to_html, to_markdown, write_html, write_markdown};
 
 use std::fmt;
 use std::fs::File;
@@ -241,7 +243,11 @@ pub fn format_table(plan: &Arc<Plan>, max_rows: usize) -> Result<String> {
     let mut text = pretty_format_batches_with_options(&batches, &options)?.to_string();
     text.push('\n');
     if rows > max_rows {
-        text.push_str(&format!("... only the first {max_rows} rows are shown\n"));
+        text.push_str(&match max_rows {
+            0 => "... its rows are not shown\n".to_string(),
+            1 => "... only the first row is shown\n".to_string(),
+            shown => format!("... only the first {shown} rows are shown\n"),
+        });
     }
     Ok(text)
 }

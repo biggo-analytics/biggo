@@ -1,0 +1,37 @@
+// Results for people: more or fewer rows of a table, Markdown, and HTML.
+
+let sales = from_rows([
+  { region: "north", product: "widget | large", units: 10, price: 2.5, sold: @2026-01-05 },
+  { region: "south", product: "gadget", units: 3, price: 10.0, sold: @2026-01-17 },
+  { region: "east", product: "<gizmo> & co", units: 7, price: 0.75, sold: @2026-02-02 },
+])
+let totals = sales
+  |> derive(amount = to_decimal(units) * 1.5d)
+  |> select(region, units, amount, share = to_float(units) / 20.0)
+
+// `print` shows 50 rows of a table unless it is told how many.
+let many = from_rows(map(range(0, 60), fn(n) { { n: n } }))
+print(many, rows = 3)
+print("first two:", sales |> select(region, units), rows = 2)
+print(sales |> select(region), rows = 0)
+print(sales |> select(region), rows = 99)
+let shown = 1
+print(sales |> select(product), many, rows = shown)
+
+// A table for a document or a message. Numbers are set to the right.
+print(to_markdown(totals))
+print(to_markdown(sales |> where(units > 99) |> select(product, sold)))
+let holes = from_rows([{ a: 1, b: "x\ny" }]) |> derive(c = if a > 1 { a } else { null })
+print(to_markdown(holes))
+
+// The same as HTML, to put in a page.
+print(to_html(sales |> select(product, units, sold)))
+
+// Whole files.
+write_markdown(totals, "out/totals.md")
+write_html(totals, "out/totals.html")
+type Line = { line: string }
+print(read_csv<Line>("out/totals.md", delimiter = "\t", header = false))
+print(read_csv<Line>("out/totals.html", delimiter = "\t", header = false) |> where(starts_with(line, "<t")))
+
+print(many, rows = 0 - shown)

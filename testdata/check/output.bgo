@@ -1,0 +1,15 @@
+// Mistakes in the functions that show and write results.
+let t = from_rows([{ a: 1 }])
+
+print(t, rows = "3")
+print(t, rows = -1)
+print(rows = 3, t)
+print(t, limit = 3)
+to_markdown()
+to_markdown(t, 5)
+to_markdown("text")
+to_html(t, title = "x")
+write_markdown(t)
+write_html(t, "a.html", "title")
+write_markdown("a.md", t)
+let text: int = to_markdown(t)

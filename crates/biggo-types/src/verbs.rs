@@ -32,7 +32,7 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 78] = [
+const VERBS: [&str; 82] = [
     "print",
     "read_csv",
     "read_parquet",
@@ -40,6 +40,10 @@ const VERBS: [&str; 78] = [
     "read_sql",
     "read_excel",
     "write_excel",
+    "write_markdown",
+    "write_html",
+    "to_markdown",
+    "to_html",
     "write_csv",
     "write_parquet",
     "write_json",
@@ -427,6 +431,10 @@ impl Cx<'_> {
             "read_sql" => self.read(call, Format::Sqlite),
             "read_excel" => self.read(call, Format::Excel),
             "write_excel" => self.write(call, Builtin::WriteExcel),
+            "write_markdown" => self.write(call, Builtin::WriteMarkdown),
+            "write_html" => self.write(call, Builtin::WriteHtml),
+            "to_markdown" => self.table_builtin(call, Builtin::ToMarkdown),
+            "to_html" => self.table_builtin(call, Builtin::ToHtml),
             "write_csv" => self.write(call, Builtin::WriteCsv),
             "write_parquet" => self.write(call, Builtin::WriteParquet),
             "write_json" => self.write(call, Builtin::WriteJson),
@@ -930,9 +938,29 @@ impl Cx<'_> {
     }
 
     fn print(&mut self, call: &Call) -> Expr {
-        let ok = self.all_positional(call, call.args);
-        let args: Vec<Expr> = call.args.iter().map(|arg| self.plain(arg.value)).collect();
-        if !ok || args.iter().any(|arg| arg.ty.is_error()) {
+        // `rows = n`, after the values, is how many rows of a table are shown.
+        let (values, rows) = match call.args.split_last() {
+            Some((last, values))
+                if last
+                    .name
+                    .is_some_and(|name| &*self.text(name.name) == "rows") =>
+            {
+                (values, Some(last.value))
+            }
+            _ => (call.args, None),
+        };
+        let ok = match values.iter().find_map(|arg| arg.name) {
+            Some(name) => {
+                let message = "the only named argument of `print` is `rows`, the number of rows \
+                               to show of a table, and it comes last";
+                self.error(name.span, message);
+                false
+            }
+            None => true,
+        };
+        let mut args: Vec<Expr> = values.iter().map(|arg| self.plain(arg.value)).collect();
+        let rows = rows.map(|rows| self.scalar_arg(rows, Type::Int, "`rows`"));
+        if !ok || args.iter().any(|arg| arg.ty.is_error()) || matches!(rows, Some(None)) {
             return Expr::error(call.span);
         }
         if let Some(grouped) = args.iter().find(|arg| matches!(arg.ty, Type::Grouped(_))) {
@@ -941,11 +969,17 @@ impl Cx<'_> {
                 "a grouped table has no rows to print; call `agg` first",
             );
         }
-        Expr::new(
-            ExprKind::Builtin(Builtin::Print, args),
-            Type::Unit,
-            call.span,
-        )
+        let builtin = match rows.flatten() {
+            Some(rows) if written_int(&rows).is_some_and(|rows| rows < 0) => {
+                return self.error(rows.span, "`rows` cannot be negative");
+            }
+            Some(rows) => {
+                args.insert(0, rows);
+                Builtin::PrintRows
+            }
+            None => Builtin::Print,
+        };
+        Expr::new(ExprKind::Builtin(builtin, args), Type::Unit, call.span)
     }
 
     fn read(&mut self, call: &Call, format: Format) -> Expr {
@@ -1176,6 +1210,7 @@ impl Cx<'_> {
             Builtin::Collect => Type::Table(schema),
             Builtin::Describe => Type::Table(Arc::new(plan::describe_schema())),
             Builtin::Count => Type::Int,
+            Builtin::ToMarkdown | Builtin::ToHtml => Type::Str,
             _ => Type::Unit,
         };
         Expr::new(ExprKind::Builtin(builtin, vec![table]), ty, call.span)

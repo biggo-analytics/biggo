@@ -665,14 +665,14 @@ impl<W: Write> Vm<W> {
     }
 
     /// The text that shows a table: its first rows, or in explain mode its plan.
-    fn show_table(&self, frame: &Frame, plan: &Arc<Plan>) -> Result<String> {
+    fn show_table(&self, frame: &Frame, plan: &Arc<Plan>, rows: usize) -> Result<String> {
         if let Plan::Group { .. } = &**plan {
             return Ok("<grouped table; call agg(...) on it to get rows>\n".to_string());
         }
         if self.explain {
             return Ok(explanation(plan));
         }
-        match biggo_exec::format_table(plan, PREVIEW_ROWS) {
+        match biggo_exec::format_table(plan, rows) {
             Ok(text) => Ok(text),
             Err(err) => self.fail(frame, err.0),
         }
@@ -731,7 +731,20 @@ impl<W: Write> Vm<W> {
         };
         let path = |index: usize| frame.proto.module.dir.join(&*text(index));
         match builtin {
-            Builtin::Print | Builtin::Echo => {
+            Builtin::Print | Builtin::Echo | Builtin::PrintRows => {
+                // The number of rows to show of a table comes first, when the call has one.
+                let (shown, args) = match (builtin, &args[..]) {
+                    (Builtin::PrintRows, [Value::Int(rows), values @ ..]) => {
+                        match usize::try_from(*rows) {
+                            Ok(rows) => (rows, values),
+                            Err(_) => {
+                                let message = format!("`rows` cannot be negative, found {rows}");
+                                return self.fail(frame, message);
+                            }
+                        }
+                    }
+                    _ => (PREVIEW_ROWS, &args[..]),
+                };
                 let mut text = String::new();
                 for (index, arg) in args.iter().enumerate() {
                     match arg {
@@ -740,7 +753,7 @@ impl<W: Write> Vm<W> {
                             if !text.is_empty() && !text.ends_with('\n') {
                                 text.push('\n');
                             }
-                            text.push_str(&self.show_table(frame, plan)?);
+                            text.push_str(&self.show_table(frame, plan, shown)?);
                         }
                         _ => {
                             if index > 0 && !text.ends_with('\n') {
@@ -768,6 +781,8 @@ impl<W: Write> Vm<W> {
             | Builtin::WriteParquet
             | Builtin::WriteJson
             | Builtin::WriteExcel
+            | Builtin::WriteMarkdown
+            | Builtin::WriteHtml
             | Builtin::WriteSqlite => {
                 let (plan, path) = (table(0), path(1));
                 if self.explain {
@@ -799,6 +814,8 @@ impl<W: Write> Vm<W> {
                     Builtin::WriteParquet => biggo_exec::write_parquet(&plan, &path),
                     Builtin::WriteJson => biggo_exec::write_json(&plan, &path),
                     Builtin::WriteExcel => biggo_exec::write_excel(&plan, &path, &text(2)),
+                    Builtin::WriteMarkdown => biggo_exec::write_markdown(&plan, &path),
+                    Builtin::WriteHtml => biggo_exec::write_html(&plan, &path),
                     _ => biggo_exec::write_sqlite(&plan, &path, &text(2)),
                 };
                 match written {
@@ -813,6 +830,22 @@ impl<W: Write> Vm<W> {
                 }
                 match biggo_exec::materialize(&plan) {
                     Ok(memory) => Ok(Value::Table(Arc::new(memory))),
+                    Err(err) => self.fail(frame, err.0),
+                }
+            }
+            Builtin::ToMarkdown | Builtin::ToHtml => {
+                let plan = table(0);
+                if self.explain {
+                    let text = explanation(&plan);
+                    self.write(frame, &text)?;
+                    return Ok(Value::Str("".into()));
+                }
+                let text = match builtin {
+                    Builtin::ToMarkdown => biggo_exec::to_markdown(&plan),
+                    _ => biggo_exec::to_html(&plan),
+                };
+                match text {
+                    Ok(text) => Ok(Value::Str(text.into())),
                     Err(err) => self.fail(frame, err.0),
                 }
             }

@@ -321,7 +321,8 @@ fn reports_bad_calls() {
     assert_eq!(fails("nope(1)"), "undefined function `nope`");
     assert_eq!(
         fails("print(x = 1)"),
-        "`print` does not take named arguments"
+        "the only named argument of `print` is `rows`, the number of rows to show of a table, \
+         and it comes last"
     );
     assert_eq!(
         fails("fn none() {}\n1 |> none()"),
