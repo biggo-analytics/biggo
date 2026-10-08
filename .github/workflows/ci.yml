@@ -30,6 +30,32 @@ jobs:
       - name: Run the tests
         run: cargo test --workspace --no-fail-fast
 
+  databases:
+    name: Databases
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: biggo
+          POSTGRES_DB: shop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d shop"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Read and write a PostgreSQL server
+        env:
+          BIGGO_TEST_POSTGRES: postgres://app:biggo@localhost:5432/shop
+        run: cargo test -p biggo-cli --test cli postgres
+
   lint:
     name: Format and lints
     runs-on: ubuntu-latest

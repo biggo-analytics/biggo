@@ -790,7 +790,10 @@ impl<W: Write> Vm<W> {
                     self.write(frame, &text)?;
                     return Ok(Value::Unit);
                 }
-                if let Some(parent) = path.parent() {
+                // `write_sql` writes to a server when it is given the address of one.
+                let server = builtin == Builtin::WriteSqlite
+                    && biggo_plan::source::server(&text(1)).is_some();
+                if let Some(parent) = path.parent().filter(|_| !server) {
                     // Failing to create the directory shows up as failing to create the file.
                     let _ = std::fs::create_dir_all(parent);
                 }
@@ -816,6 +819,7 @@ impl<W: Write> Vm<W> {
                     Builtin::WriteExcel => biggo_exec::write_excel(&plan, &path, &text(2)),
                     Builtin::WriteMarkdown => biggo_exec::write_markdown(&plan, &path),
                     Builtin::WriteHtml => biggo_exec::write_html(&plan, &path),
+                    _ if server => biggo_exec::write_postgres(&plan, &text(1), &text(2)),
                     _ => biggo_exec::write_sqlite(&plan, &path, &text(2)),
                 };
                 match written {

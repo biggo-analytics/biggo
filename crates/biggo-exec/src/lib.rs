@@ -3,6 +3,7 @@
 
 mod aggregate;
 mod convert;
+mod database;
 mod dates;
 mod excel;
 mod expr;
@@ -16,6 +17,7 @@ mod scan;
 mod text;
 mod window;
 
+pub use database::write_postgres;
 pub use excel::write_excel;
 pub use report::{to_html, to_markdown, write_html, write_markdown};
 

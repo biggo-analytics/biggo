@@ -1062,3 +1062,114 @@ fn what_infer_writes_runs() {
         "{stderr}"
     );
 }
+
+/// Needs a PostgreSQL server: set `BIGGO_TEST_POSTGRES` to the address of a database that
+/// can be written to, such as `postgres://app:password@localhost:5432/shop`. Without it the
+/// test passes without having tried anything.
+#[test]
+fn a_postgres_server_is_read_and_written() {
+    let Ok(address) = std::env::var("BIGGO_TEST_POSTGRES") else {
+        return;
+    };
+    let program = r#"
+let db = env("BIGGO_TEST_POSTGRES") ?? ""
+let people = from_rows([
+  { id: 1, name: "Ann, \"A\"", score: 9.5, joined: @2026-01-05, at: @2026-01-05T09:30:00, ok: true, paid: 12.50d, took: minutes(2), note: "" },
+  { id: 2, name: "สมหญิง", score: 0.0 / 0.0, joined: @2026-02-28, at: @2026-02-28T23:59:59, ok: false, paid: 0.000001d, took: seconds(1), note: "two\nlines" },
+]) |> derive(maybe = if id > 1 { id * 10 } else { null })
+write_sql(people, db, "biggo_test_people")
+
+type Person = { id: int, name: string, score: float, joined: date, at: datetime, ok: bool, paid: decimal, took: duration, note: string?, maybe: int? }
+let back = read_sql<Person>(db, "select * from biggo_test_people order by id")
+assert_eq(back, people)
+print(back |> where(ok) |> select(id, name, paid, note, maybe))
+
+// A query that ends in a semicolon, one that ends in a comment, and the server stopping
+// after a row.
+print(read_sql<Person>(db, "select * from biggo_test_people order by id desc;") |> select(id, at) |> take(1))
+print(read_sql<Person>(db, "select * from biggo_test_people where id = 1 -- the first") |> select(id) |> count())
+type Made = { n: int, label: string, big: decimal, moment: datetime, flag: bool? }
+print(read_sql<Made>(db, "select count(*) as n, 'x' || 'y' as label, 12345678901234567890.123456::numeric as big, timestamptz '2026-01-05 09:30:00+07' as moment, null::boolean as flag from biggo_test_people"))
+
+// A table is replaced whole, and one that is read can be the one that is written.
+write_sql(back |> where(id > 1), db, "public.biggo_test_people")
+print(read_sql<{ id: int }>(db, "select id from biggo_test_people") |> count())
+print(read_sql<{ nope: int }>(db, "select id from biggo_test_people"))
+"#;
+    let output = Command::new(env!("CARGO_BIN_EXE_biggo"))
+        .args(["run", "-e", program])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let expected = "\
++----+----------+------+------+-------+
+| id | name     | paid | note | maybe |
++----+----------+------+------+-------+
+| 1  | Ann, \"A\" | 12.5 |      | null  |
++----+----------+------+------+-------+
++----+---------------------+
+| id | at                  |
++----+---------------------+
+| 2  | 2026-02-28T23:59:59 |
++----+---------------------+
+1
++---+-------+-----------------------------+---------------------+------+
+| n | label | big                         | moment              | flag |
++---+-------+-----------------------------+---------------------+------+
+| 2 | xy    | 12345678901234567890.123456 | 2026-01-05T02:30:00 | null |
++---+-------+-----------------------------+---------------------+------+
+1
+";
+    assert_eq!(stdout, expected, "{stderr}");
+    // The address is named without its password.
+    let (_, shown) = biggo_plan::source::server(&address).unwrap();
+    let complaint = format!("error: {shown} has no column `nope`; its columns are id\n");
+    assert!(stderr.starts_with(&complaint), "{stderr}");
+    if let Some((_, rest)) = address.split_once("://")
+        && let Some((login, _)) = rest.split_once('@')
+        && let Some((_, password)) = login.split_once(':')
+    {
+        assert!(!stderr.contains(password), "the password is in a message");
+    }
+}
+
+#[test]
+fn the_address_of_a_server_is_shown_without_its_password() {
+    let program = "\
+let shop = \"postgres://report:hunter2@localhost:1/shop?sslmode=disable\"
+let orders = read_sql<{ id: int, total: decimal }>(shop, \"select id, total, placed from orders\")
+explain(orders |> where(id > 5) |> select(total) |> take(3))
+print(orders)
+";
+    let (stdout, stderr, code) = biggo(&["run", "-e", program], "");
+    let plan = "\
+plan:
+  Limit: take 3
+    Project: total
+      Filter: id > 5
+        Scan postgres \"postgres://report:***@localhost:1/shop?sslmode=disable\" \
+\"select id, total, placed from orders\": id, total
+";
+    assert!(stdout.starts_with(plan), "{stdout}");
+    // Nothing listens there, and the message says where without saying the password.
+    let complaint = "error: cannot connect to postgres://report:***@localhost:1/shop?sslmode=disable: \
+                     error connecting to server: ";
+    assert!(stderr.starts_with(complaint), "{stderr}");
+    assert!(!stdout.contains("hunter2") && !stderr.contains("hunter2"));
+    assert_eq!(code, Some(1));
+
+    let (_, stderr, _) = biggo(
+        &[
+            "run",
+            "-e",
+            "let db = \"postgres://u:hunter2@local host/db\"\nwrite_sql(from_rows([{ a: 1 }]), db, \"t\")",
+        ],
+        "",
+    );
+    assert!(!stderr.contains("hunter2"), "{stderr}");
+    assert!(
+        stderr.starts_with("error: cannot connect to postgres://u:***@local host/db"),
+        "{stderr}"
+    );
+}

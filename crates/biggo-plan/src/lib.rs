@@ -6,6 +6,7 @@ mod expr;
 mod optimize;
 mod plan;
 mod schema;
+pub mod source;
 pub mod text;
 
 pub use biggo_syntax::ast::{BinaryOp, Date};

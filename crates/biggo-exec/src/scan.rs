@@ -45,6 +45,7 @@ pub fn scan(scan: &Scan) -> Result<BatchIter> {
             Format::Json => json_pieces(&file, &shape)?,
             Format::Sqlite => sqlite_pieces(&file, &shape)?,
             Format::Excel => crate::excel::pieces(&file, &shape)?,
+            Format::Postgres => crate::database::pieces(&file, &shape)?,
         });
     }
     Ok(Box::new(ScanIter {
@@ -66,8 +67,9 @@ pub fn scan(scan: &Scan) -> Result<BatchIter> {
 /// They come in the order of their names, so that a query reads them the same way each time.
 fn files(scan: &Scan) -> Result<Vec<Scan>> {
     let pattern = scan.path.to_string_lossy();
-    let one =
-        scan.format == Format::Sqlite || !pattern.contains(['*', '?', '[']) || scan.path.exists();
+    let one = matches!(scan.format, Format::Sqlite | Format::Postgres)
+        || !pattern.contains(['*', '?', '['])
+        || scan.path.exists();
     if one {
         return Ok(vec![scan.clone()]);
     }
@@ -220,6 +222,25 @@ impl Shape {
                 column.data_type(),
                 ArrowType::Int64 | ArrowType::Int32 | ArrowType::Float64 | ArrowType::Float32
             );
+            // A length of time is written as a number of seconds, which may come as text.
+            if field.ty.dtype == DataType::Duration && column.data_type() == &ArrowType::Utf8 {
+                let options = CastOptions {
+                    safe: false,
+                    ..CastOptions::default()
+                };
+                column =
+                    cast_with_options(&column, &ArrowType::Float64, &options).map_err(|err| {
+                        let problem = match quoted_value(&err.to_string()) {
+                            Some(value) => format!("cannot read '{value}' as a duration"),
+                            None => "holds text that is not a number of seconds".to_string(),
+                        };
+                        Error(format!(
+                            "column `{}` of {}: {problem}",
+                            field.name, self.file
+                        ))
+                    })?;
+            }
+            let number = number || column.data_type() == &ArrowType::Float64;
             if field.ty.dtype == DataType::Duration && number {
                 column = seconds_to_durations(&column).map_err(|err| {
                     Error(format!(

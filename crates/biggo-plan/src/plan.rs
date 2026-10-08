@@ -87,6 +87,8 @@ pub enum Format {
     Sqlite,
     /// One sheet of an Excel workbook.
     Excel,
+    /// The rows of a query on a PostgreSQL server.
+    Postgres,
 }
 
 impl Format {
@@ -97,6 +99,7 @@ impl Format {
             Format::Json => "json",
             Format::Sqlite => "sqlite",
             Format::Excel => "excel",
+            Format::Postgres => "postgres",
         }
     }
 }
@@ -360,12 +363,22 @@ impl TableOp {
                             }
                         }
                     }
-                    Format::Parquet | Format::Json => {}
+                    Format::Parquet | Format::Json | Format::Postgres => {}
                 }
+                // `read_sql` reads a file, or a server when its source is the address of one.
+                // The address is shown without its password.
+                let server = match format {
+                    Format::Sqlite => crate::source::server(&path),
+                    _ => None,
+                };
+                let (format, file, shown) = match server {
+                    Some((format, shown)) => (format, PathBuf::from(&*path), shown.into()),
+                    None => (*format, base_dir.join(&*path), path),
+                };
                 Plan::Scan(Scan {
-                    format: *format,
-                    path: base_dir.join(&*path),
-                    display_path: path,
+                    format,
+                    path: file,
+                    display_path: shown,
                     query,
                     csv,
                     read,

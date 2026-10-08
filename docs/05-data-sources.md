@@ -1,6 +1,7 @@
-# Data sources: CSV, Parquet, JSON, Excel, SQLite
+# Data sources: CSV, Parquet, JSON, Excel, SQLite, PostgreSQL
 
-biggo reads and writes data in 5 formats. All of them follow the same principles:
+biggo reads and writes files in 5 formats, and tables of a PostgreSQL server. All of them follow
+the same principles:
 
 - **Read**: `read_xxx<row type>(path)` returns a table. The program says which columns it wants and
   what their types are, and the engine checks them against the file at run time.
@@ -21,6 +22,7 @@ biggo reads and writes data in 5 formats. All of them follow the same principles
 | JSON (one object per line, or one array) | `read_json` | `write_json` | ✓ | ✓ |
 | Excel | `read_excel` | `write_excel` | | ✓ (cells are not converted) |
 | SQLite | `read_sql` | `write_sql` | | (you write it in the query yourself) |
+| PostgreSQL | `read_sql` | `write_sql` | | ✓ (the server sends only those columns) |
 
 ## The row type
 
@@ -593,8 +595,7 @@ read_sql<{ product: string, units: int }>("out/shop.db", "select * from product_
 +---------+-------+
 ```
 
-- This works with SQLite files only (SQLite itself is embedded in `biggo`, so there is nothing extra
-  to install). Server databases such as PostgreSQL or MySQL are not supported yet.
+- SQLite itself is embedded in `biggo`, so there is nothing extra to install.
 - The database is opened read-only during `read_sql`.
 - Result columns are matched by name. Use `as` in the SQL to give them names that match the declared
   type.
@@ -606,6 +607,69 @@ read_sql<{ product: string, units: int }>("out/shop.db", "select * from product_
 - A `where` that follows `read_sql` runs in biggo and is not pushed into the SQL: if the table is
   large, filter in the query.
 - Reading from SQLite runs on a single thread.
+
+## PostgreSQL
+
+When the first argument of `read_sql` or `write_sql` is an address that starts with
+`postgres://` (or `postgresql://`), it names a database on a PostgreSQL server in place of a
+file:
+
+```text
+postgres://user:password@host:port/database
+```
+
+```biggo check
+// The password is not written in the program: it comes from the environment.
+let password = env("SHOP_PASSWORD") ?? ""
+let shop = "postgres://report:" + password + "@db.example.com:5432/shop"
+
+type Order = { id: int, customer: string, total: decimal, placed: datetime, paid: bool }
+let orders = read_sql<Order>(shop, "select id, customer, total, placed, paid from orders")
+
+let daily = orders
+  |> where(paid)
+  |> group(day = to_date(placed))
+  |> agg(orders = count(), revenue = sum(total))
+print(daily |> sort(desc(day)) |> take(7))
+
+// The result as a table of the database, in the schema `reports`.
+write_sql(daily, shop, "reports.daily_revenue")
+```
+
+- The query is PostgreSQL's SQL, and its result columns are matched to the row type by name.
+  PostgreSQL writes names in lower case unless they are quoted, so `select OrderId` gives a
+  column named `orderid`.
+- Values are read as the declared type: `integer` and `bigint` as `int`, `numeric` as `decimal`
+  or `float`, `text` and `varchar` as `string`, `boolean` as `bool`, `date` and `timestamp` as
+  `date` and `datetime`. A `timestamptz` is read as its moment in UTC, since a `datetime` has no
+  time zone. Any column can be read as `string`.
+- Only the columns the program uses are sent by the server, and `take(n)` right after `read_sql`
+  stops it after `n` rows. A `where` in biggo is checked after the rows arrive: to filter a large
+  table, filter in the query.
+- `write_sql` **replaces** the table of that name, in one transaction: the table changes when
+  every row is in it, or not at all. `"schema.table"` names a table in a schema. Columns are
+  made as `bigint`, `double precision`, `boolean`, `text`, `date`, `timestamp` and
+  `numeric(38, 6)`; a `duration` is stored as its seconds.
+- Rows cross the connection with PostgreSQL's `COPY`, which is the fastest way in and out of
+  the server. The result of a query is held in memory while it is read, on one thread.
+- A password with characters such as `@`, `:` or `/` is written with percent signs in an
+  address: `p@ss` is `p%40ss`.
+- In messages and in `explain`, an address is shown without its password:
+  `postgres://report:***@db.example.com:5432/shop`.
+
+How the connection is protected is said with `sslmode`, in the words PostgreSQL's own tools use,
+after a `?` at the end of the address:
+
+| `sslmode` | Meaning |
+| --- | --- |
+| (not given), `prefer` | Encrypted if the server can, and plain if it cannot |
+| `require` | Encrypted, or the connection fails |
+| `verify-full`, `verify-ca` | Encrypted, and the certificate of the server must be one this machine trusts, made out for the host in the address |
+| `disable` | Not encrypted |
+
+As with PostgreSQL's tools, `prefer` and `require` encrypt the connection without checking who
+the server is. Use `verify-full` across a network that is not your own:
+`postgres://report:...@db.example.com/shop?sslmode=verify-full`.
 
 ## Common errors
 
@@ -627,6 +691,8 @@ read_sql<{ product: string, units: int }>("out/shop.db", "select * from product_
 | `x.xlsx has no sheet "2026"; its sheets are Sales, Targets` | The name of the sheet is not exact: upper and lower case, and spaces, matter |
 | `column `units` of x.xlsx: cannot read 'north' as an int` | A cell of the column holds something else than the declared type, often because the table starts lower in the sheet: see `skip` and `range` |
 | `x.db: no such table: t` | A message straight from SQLite |
+| `cannot connect to postgres://app:***@db/shop: password authentication failed for user "app"` | What the PostgreSQL server said. `Connection refused` means no server answers at that host and port |
+| `postgres://app:***@db/shop: relation "orders" does not exist` | A message straight from PostgreSQL, here for a table that is not there or is in another schema |
 
 Errors from data point to the program line that *runs* the query (such as `print`), not the line
 where `read_csv` is written, because the file is read when the query runs.
