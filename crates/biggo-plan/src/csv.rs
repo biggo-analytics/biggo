@@ -77,6 +77,11 @@ pub struct ReadOptions {
     /// The declared column that is not read from the file, but holds the path of the file
     /// that each row came from.
     pub file_column: Option<Arc<str>>,
+    /// For a workbook: the sheet, when it is not the first.
+    pub sheet: Option<Arc<str>>,
+    /// For a workbook: the block of cells that holds the table, as in `B3:F200`, when it is
+    /// not all of the sheet.
+    pub range: Option<Arc<str>>,
 }
 
 impl Default for ReadOptions {
@@ -86,6 +91,8 @@ impl Default for ReadOptions {
             skip: 0,
             nulls: Vec::new(),
             file_column: None,
+            sheet: None,
+            range: None,
         }
     }
 }
@@ -93,6 +100,12 @@ impl Default for ReadOptions {
 /// Shows the options that differ from the default, each with a space before it.
 impl fmt::Display for ReadOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(sheet) = &self.sheet {
+            write!(f, " sheet {sheet:?}")?;
+        }
+        if let Some(range) = &self.range {
+            write!(f, " range {range}")?;
+        }
         if !self.header {
             f.write_str(" no header")?;
         }
@@ -164,8 +177,11 @@ mod tests {
             skip: 2,
             nulls: vec!["NA".into(), "-".into()],
             file_column: Some("from file".into()),
+            sheet: Some("2026".into()),
+            range: Some("B3:F9".into()),
         };
-        let shown = " no header skip 2 nulls [\"NA\", \"-\"] file name in `from file`";
+        let shown = " sheet \"2026\" range B3:F9 no header skip 2 nulls [\"NA\", \"-\"] \
+                     file name in `from file`";
         assert_eq!(options.to_string(), shown);
     }
 }

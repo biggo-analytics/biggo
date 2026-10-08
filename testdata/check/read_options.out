@@ -10,7 +10,7 @@ error: `skip` must be int, found string
 5 | read_csv<Row>("a.csv", skip = "3")
   |                               ^^^
 
-error: `skip` is a number of lines, so it cannot be negative
+error: `skip` cannot be negative
  --> check/read_options.bgo:6:31
   |
 6 | read_csv<Row>("a.csv", skip = -1)

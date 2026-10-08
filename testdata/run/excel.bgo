@@ -1,0 +1,47 @@
+// Excel workbooks: sheets, titles above the table, a block of cells, cells of every kind.
+
+type Sale = {
+  id: int,
+  branch: string,
+  units: int?,
+  price: float?,
+  `sold on`: date,
+  at: datetime,
+  ok: bool,
+  note: string?,
+  took: duration?,
+}
+
+// The table starts on the fourth row of the first sheet. A header is read without the
+// spaces around its names, text in a cell of numbers is read as the number it writes, and
+// a cell with an error such as #N/A has no value.
+let sales = read_excel<Sale>("data/book.xlsx", skip = 3, nulls = ["NA"])
+print(sales)
+print(sales |> where(ok and units > 5) |> select(id, branch, day = `sold on`, took))
+print(sales |> agg(units = sum(units), priced = count(price), last = max(at), longest = max(took)))
+
+// A column can be read as text whatever its cells hold.
+type Loose = { id: string, units: string?, note: string, `sold on`: string, ok: string }
+print(read_excel<Loose>("data/book.xlsx", skip = 3) |> select(id, units, note, `sold on`, ok))
+
+// Another sheet, by name, and one without a header.
+print(read_excel<{ ชื่อ: string, จำนวน: int }>("data/book.xlsx", sheet = "สาขา") |> sort(desc(จำนวน)))
+type Plain = { id: int, branch: string, units: int }
+print(read_excel<Plain>("data/book.xlsx", sheet = "Plain", header = false) |> where(units < 10))
+
+// A block of cells in the middle of a sheet.
+type Stock = { code: string, qty: int }
+let stock = read_excel<Stock>("data/book.xlsx", sheet = "Block", range = "C3:D5")
+print(stock, stock |> agg(total = sum(qty)))
+explain(read_excel<Stock>("data/book.xlsx", sheet = "Block", range = "C3:D5") |> where(qty > 3))
+
+// Writing a workbook, and reading it back.
+let summary = sales
+  |> group(branch)
+  |> agg(units = sum(units), best = max(price), first = min(`sold on`), last = max(at), any_ok = any(ok))
+  |> sort(branch)
+write_excel(summary, "out/summary.xlsx")
+type Summary = { branch: string, units: int?, best: float?, first: date, last: datetime, any_ok: bool }
+print(read_excel<Summary>("out/summary.xlsx"))
+write_excel(summary |> select(branch, units), "out/named.xlsx", sheet = "By branch")
+print(read_excel<{ branch: string, units: int? }>("out/named.xlsx", sheet = "By branch", file_name = "branch") |> count())

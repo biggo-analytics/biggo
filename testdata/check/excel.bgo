@@ -1,0 +1,18 @@
+// Mistakes in reading and writing workbooks.
+type Row = { id: int, name: string }
+let t = from_rows([{ id: 1, name: "a" }])
+
+read_excel<Row>("a.xlsx", sheet = 2)
+read_excel<Row>("a.xlsx", range = 5)
+read_excel<Row>("a.xlsx", delimiter = ";")
+read_excel<Row>("a.xlsx", "Sheet1")
+read_excel<Row>("a.xlsx", skip = -2)
+read_excel<Row>("a.xlsx", header = "no")
+read_excel<Row>("a.xlsx", file_name = "id")
+read_excel("a.xlsx")
+read_excel<Row>()
+write_excel(t)
+write_excel(t, "a.xlsx", "Sheet1")
+write_excel(t, "a.xlsx", sheet = 1)
+write_excel(t, "a.xlsx", range = "A1:B2")
+write_excel("a.xlsx", t)

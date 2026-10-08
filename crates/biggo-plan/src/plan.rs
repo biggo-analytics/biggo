@@ -85,6 +85,8 @@ pub enum Format {
     Json,
     /// The rows of a query on a SQLite database.
     Sqlite,
+    /// One sheet of an Excel workbook.
+    Excel,
 }
 
 impl Format {
@@ -94,6 +96,7 @@ impl Format {
             Format::Parquet => "parquet",
             Format::Json => "json",
             Format::Sqlite => "sqlite",
+            Format::Excel => "excel",
         }
     }
 }
@@ -223,7 +226,8 @@ pub enum TableOp {
     /// Parameter 0 is the path, which for a file can be a pattern that matches several. For
     /// a database, parameter 1 is the query. For a CSV file, parameters 1 to 5 are the
     /// delimiter, the encoding, whether there is a header, the lines to skip, and the texts
-    /// that mean null.
+    /// that mean null. For a workbook the last three are the same, after the sheet and the
+    /// range, each a string or null.
     Read {
         format: Format,
         schema: Arc<Schema>,
@@ -325,9 +329,18 @@ impl TableOp {
                 };
                 match format {
                     Format::Sqlite => query = Some(text(1, "the query")?),
-                    Format::Csv => {
-                        csv.delimiter = CsvOptions::delimiter(&text(1, "the delimiter")?)?;
-                        csv.encoding = CsvOptions::encoding(&text(2, "the encoding")?)?;
+                    Format::Csv | Format::Excel => {
+                        if *format == Format::Csv {
+                            csv.delimiter = CsvOptions::delimiter(&text(1, "the delimiter")?)?;
+                            csv.encoding = CsvOptions::encoding(&text(2, "the encoding")?)?;
+                        } else {
+                            let named = |index: usize| match params.get(index) {
+                                Some(Scalar::Str(text)) => Some(text.clone()),
+                                _ => None,
+                            };
+                            read.sheet = named(1);
+                            read.range = named(2);
+                        }
                         read.header = !matches!(params.get(3), Some(Scalar::Bool(false)));
                         read.skip = match params.get(4) {
                             Some(Scalar::Int(lines)) => usize::try_from(*lines)

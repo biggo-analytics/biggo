@@ -689,10 +689,12 @@ Details: [Working with tables](04-tables.md)
 | `read_parquet<T>(path)` | A table from a Parquet file |
 | `read_json<T>(path)` | A table from a file of JSON objects: one per line, or one array of them |
 | `read_csv<T>(pattern, file_name = "column")`, and so `read_json` and `read_parquet` | A table from every file that a pattern such as `"logs/*.csv"` matches; the column named takes the path of the file of each row |
+| `read_excel<T>(path)`, `read_excel<T>(path, sheet = s, range = "B3:F200", skip = n, header = false, nulls = [...])` | A table from one sheet of an Excel workbook: the first sheet, or the one named, and all of it, or a block of its cells |
 | `read_sql<T>(path, query)` | The result of a query on a SQLite database |
 | `write_csv(t, path)`, `write_csv(t, path, delimiter = d, encoding = e)` | Writes a table as CSV |
 | `write_parquet(t, path)` | Writes a table as Parquet |
 | `write_json(t, path)` | Writes a table as JSON Lines |
+| `write_excel(t, path)`, `write_excel(t, path, sheet = s)` | Writes a table as an Excel workbook with one sheet |
 | `write_sql(t, path, name)` | Writes a table to a SQLite database, as the table named `name` |
 
 `T` is the row type, such as `{ id: int, name: string? }`. Details: [Data sources](05-data-sources.md)

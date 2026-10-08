@@ -409,6 +409,7 @@ what is in a file.
 | `.csv`, `.tsv`, `.txt` | The header and the first 10,000 rows. The delimiter is found among `,` `;` tab and `\|` |
 | `.json`, `.jsonl`, `.ndjson` | The first 10,000 objects, of lines or of one array |
 | `.parquet` | The schema in the file, which is exact |
+| `.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods` | The first sheet, or the one named after the file, as in `biggo infer book.xlsx Targets`; the other sheets are listed in a comment |
 | `.db`, `.sqlite`, `.sqlite3` | The declared columns of the table named after the file, as in `biggo infer shop.db orders` |
 
 How a column of a text file gets its type:
@@ -440,7 +441,7 @@ let orders = read_csv<Orders>("orders.csv", delimiter = ";")
 | --- | --- |
 | `--delimiter <d>` | The delimiter of a CSV file, when it should not be found out; `tab` or `\t` for a tab |
 | `--encoding <e>` | The encoding of a CSV file that is not UTF-8, such as `tis-620`. A UTF-16 file with a byte order mark is recognized without it |
-| `--skip <n>` | The lines before the header |
+| `--skip <n>` | The lines before the header, or the rows of a sheet |
 | `--no-header` | The first line is a row. The columns are named `column_1`, `column_2`, and so on; rename them in the type |
 
 The options that the file needs appear in the `read_csv` call that is printed.

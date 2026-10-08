@@ -44,6 +44,7 @@ pub fn scan(scan: &Scan) -> Result<BatchIter> {
             Format::Parquet => parquet_pieces(&file, &shape)?,
             Format::Json => json_pieces(&file, &shape)?,
             Format::Sqlite => sqlite_pieces(&file, &shape)?,
+            Format::Excel => crate::excel::pieces(&file, &shape)?,
         });
     }
     Ok(Box::new(ScanIter {
@@ -102,7 +103,7 @@ fn files(scan: &Scan) -> Result<Vec<Scan>> {
 }
 
 /// A part of a file that can be decoded independently of the others.
-type Piece = Box<dyn FnOnce() -> Result<Vec<RecordBatch>> + Send>;
+pub(crate) type Piece = Box<dyn FnOnce() -> Result<Vec<RecordBatch>> + Send>;
 
 struct ScanIter {
     pieces: std::vec::IntoIter<Piece>,
@@ -160,12 +161,12 @@ impl Iterator for ScanIter {
 
 /// What a scan makes of the columns it decodes: it checks them against their declared
 /// types, drops the rows that fail the scan's filters, and keeps the columns asked for.
-struct Shape {
-    file: String,
+pub(crate) struct Shape {
+    pub(crate) file: String,
     format: Format,
     /// The declared columns that are read from the file: those produced and those the
     /// filters need.
-    read: Schema,
+    pub(crate) read: Schema,
     /// The columns the filters see: those of `read`, and after them the column that holds
     /// the name of the file, if it is wanted.
     whole: Schema,
@@ -209,7 +210,7 @@ impl Shape {
     }
 
     /// Turns a decoded batch, whose columns are those of `read` in order, into output.
-    fn finish(&self, decoded: &RecordBatch) -> Result<RecordBatch> {
+    pub(crate) fn finish(&self, decoded: &RecordBatch) -> Result<RecordBatch> {
         let rows = decoded.num_rows();
         let mut columns = Vec::with_capacity(self.read.fields.len());
         for (field, column) in self.read.fields.iter().zip(decoded.columns()) {
@@ -249,8 +250,9 @@ impl Shape {
                 })?;
             }
             if column.null_count() > 0 && !field.ty.nullable {
-                // An empty CSV field reads as null, but it is a fine value for a string.
-                if self.format == Format::Csv && field.ty.dtype == DataType::Str {
+                // An empty field or cell reads as null, but it is a fine value for a string.
+                let text = matches!(self.format, Format::Csv | Format::Excel);
+                if text && field.ty.dtype == DataType::Str {
                     let strings = column.as_string::<i32>().iter();
                     let filled: StringArray = strings.map(|s| Some(s.unwrap_or(""))).collect();
                     column = Arc::new(filled);
@@ -287,7 +289,7 @@ impl Shape {
         make_batch(&self.output, output, batch.num_rows())
     }
 
-    fn missing_column(&self, name: &str, available: &[String]) -> Error {
+    pub(crate) fn missing_column(&self, name: &str, available: &[String]) -> Error {
         Error(format!(
             "{} has no column `{name}`; its columns are {}",
             self.file,

@@ -32,12 +32,14 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 76] = [
+const VERBS: [&str; 78] = [
     "print",
     "read_csv",
     "read_parquet",
     "read_json",
     "read_sql",
+    "read_excel",
+    "write_excel",
     "write_csv",
     "write_parquet",
     "write_json",
@@ -199,6 +201,7 @@ pub(crate) fn pass_through(field: &Field) -> (Arc<str>, plan::Expr) {
 
 /// The whole number that an expression writes out, with or without a minus sign.
 /// An argument that a call which reads or writes a file takes by name.
+#[derive(Clone, Copy)]
 struct FileOption {
     name: &'static str,
     /// How a message refers to the value.
@@ -253,6 +256,35 @@ const READ_CSV_OPTIONS: [FileOption; 6] = [
     },
     FILE_NAME,
 ];
+
+/// An option of `read_excel` that the call can leave out, where null means that it did.
+const fn optional(name: &'static str, what: &'static str) -> FileOption {
+    FileOption {
+        name,
+        what,
+        ty: || Type::Str,
+        default: |span| Expr::new(ExprKind::Null, Type::Null, span),
+    }
+}
+
+/// What `read_excel` takes by name: the sheet and the block of cells, then what `read_csv`
+/// takes to say how a table is laid out.
+const READ_EXCEL_OPTIONS: [FileOption; 6] = [
+    optional("sheet", "the name of the sheet"),
+    optional("range", "the range"),
+    READ_CSV_OPTIONS[2],
+    READ_CSV_OPTIONS[3],
+    READ_CSV_OPTIONS[4],
+    FILE_NAME,
+];
+
+/// The sheet that `write_excel` writes, which is named `Sheet1` unless the call names it.
+const WRITE_SHEET: FileOption = FileOption {
+    name: "sheet",
+    what: "the name of the sheet",
+    ty: || Type::Str,
+    default: |span| Expr::new(ExprKind::Str("Sheet1".into()), Type::Str, span),
+};
 
 /// The names of options, for a message: "`a`, `b` and `c`".
 fn option_names(options: &[FileOption]) -> String {
@@ -372,7 +404,7 @@ impl Cx<'_> {
     pub(crate) fn builtin_call(&mut self, call: &Call) -> Option<Expr> {
         let typed = matches!(
             call.name,
-            "read_csv" | "read_parquet" | "read_json" | "read_sql" | "from_rows"
+            "read_csv" | "read_parquet" | "read_json" | "read_sql" | "read_excel" | "from_rows"
         );
         if !typed
             && is_builtin_name(call.name)
@@ -393,6 +425,8 @@ impl Cx<'_> {
             "read_parquet" => self.read(call, Format::Parquet),
             "read_json" => self.read(call, Format::Json),
             "read_sql" => self.read(call, Format::Sqlite),
+            "read_excel" => self.read(call, Format::Excel),
+            "write_excel" => self.write(call, Builtin::WriteExcel),
             "write_csv" => self.write(call, Builtin::WriteCsv),
             "write_parquet" => self.write(call, Builtin::WriteParquet),
             "write_json" => self.write(call, Builtin::WriteJson),
@@ -935,6 +969,7 @@ impl Cx<'_> {
         }
         let takes: &[FileOption] = match format {
             Format::Csv => &READ_CSV_OPTIONS,
+            Format::Excel => &READ_EXCEL_OPTIONS,
             Format::Json | Format::Parquet => &[FILE_NAME],
             Format::Sqlite => &[],
         };
@@ -992,6 +1027,7 @@ impl Cx<'_> {
         };
         let takes: &[FileOption] = match builtin {
             Builtin::WriteCsv => &READ_CSV_OPTIONS[..2],
+            Builtin::WriteExcel => &[WRITE_SHEET],
             _ => &[],
         };
         let Some((positional, options)) = self.file_args(call, takes, true) else {
@@ -1008,13 +1044,16 @@ impl Cx<'_> {
                 return self.error(call.span, message);
             }
             (_, [_, path]) => &[(path.value, "the file path")],
-            (Builtin::WriteCsv, _) => {
-                let message = "`write_csv` takes a table and a file path, \
-                               and can take `delimiter` and `encoding` by name";
+            _ if takes.is_empty() => {
+                let message = format!("`{}` takes a table and a file path", call.name);
                 return self.error(call.span, message);
             }
             _ => {
-                let message = format!("`{}` takes a table and a file path", call.name);
+                let message = format!(
+                    "`{}` takes a table and a file path, and can take {} by name",
+                    call.name,
+                    option_names(takes)
+                );
                 return self.error(call.span, message);
             }
         };
@@ -1083,7 +1122,7 @@ impl Cx<'_> {
                 }
                 (ExprKind::Str(text), "encoding") => CsvOptions::encoding(text).map(drop),
                 (_, "skip") if written_int(&value).is_some_and(|lines| lines < 0) => {
-                    Err("`skip` is a number of lines, so it cannot be negative".to_string())
+                    Err("`skip` cannot be negative".to_string())
                 }
                 (ExprKind::Str(_), "file_name") => Ok(()),
                 (_, "file_name") => Err("the column that takes the file name must be written \

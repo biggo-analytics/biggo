@@ -5,3 +5,4 @@
 *.parquet binary
 *.db binary
 *.sqlite binary
+*.xlsx binary

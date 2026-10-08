@@ -4,6 +4,7 @@
 mod aggregate;
 mod convert;
 mod dates;
+mod excel;
 mod expr;
 pub mod infer;
 mod join;
@@ -13,6 +14,8 @@ mod rows;
 mod scan;
 mod text;
 mod window;
+
+pub use excel::write_excel;
 
 use std::fmt;
 use std::fs::File;

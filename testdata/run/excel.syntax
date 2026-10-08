@@ -1,0 +1,61 @@
+(type Sale {id: int, branch: string, units: int?, price: float?, sold on: date, at: datetime, ok: bool, note: string?, took: duration?})
+(let sales
+  (call read_excel <Sale> "data/book.xlsx" (skip: 3) (nulls: (list "NA"))))
+(call print sales)
+(call print
+  (|> sales
+    (call where (and ok (> units 5)))
+    (call select id branch (day: sold on) took)))
+(call print
+  (|> sales
+    (call agg
+      (units: (call sum units))
+      (priced: (call count price))
+      (last: (call max at))
+      (longest: (call max took)))))
+(type Loose {id: string, units: string?, note: string, sold on: string, ok: string})
+(call print
+  (|>
+    (call read_excel <Loose> "data/book.xlsx" (skip: 3))
+    (call select id units note sold on ok)))
+(call print
+  (|>
+    (call read_excel <{ชื่อ: string, จำนวน: int}> "data/book.xlsx"
+      (sheet: "สาขา"))
+    (call sort (call desc จำนวน))))
+(type Plain {id: int, branch: string, units: int})
+(call print
+  (|>
+    (call read_excel <Plain> "data/book.xlsx" (sheet: "Plain") (header: false))
+    (call where (< units 10))))
+(type Stock {code: string, qty: int})
+(let stock
+  (call read_excel <Stock> "data/book.xlsx" (sheet: "Block") (range: "C3:D5")))
+(call print stock (|> stock (call agg (total: (call sum qty)))))
+(call explain
+  (|>
+    (call read_excel <Stock> "data/book.xlsx" (sheet: "Block") (range: "C3:D5"))
+    (call where (> qty 3))))
+(let summary
+  (|> sales
+    (call group branch)
+    (call agg
+      (units: (call sum units))
+      (best: (call max price))
+      (first: (call min sold on))
+      (last: (call max at))
+      (any_ok: (call any ok)))
+    (call sort branch)))
+(call write_excel summary "out/summary.xlsx")
+(type Summary {branch: string, units: int?, best: float?, first: date, last: datetime, any_ok: bool})
+(call print (call read_excel <Summary> "out/summary.xlsx"))
+(call write_excel
+  (|> summary (call select branch units))
+  "out/named.xlsx"
+  (sheet: "By branch"))
+(call print
+  (|>
+    (call read_excel <{branch: string, units: int?}> "out/named.xlsx"
+      (sheet: "By branch")
+      (file_name: "branch"))
+    (call count)))

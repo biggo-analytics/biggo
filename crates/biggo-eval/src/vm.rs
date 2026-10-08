@@ -767,6 +767,7 @@ impl<W: Write> Vm<W> {
             Builtin::WriteCsv
             | Builtin::WriteParquet
             | Builtin::WriteJson
+            | Builtin::WriteExcel
             | Builtin::WriteSqlite => {
                 let (plan, path) = (table(0), path(1));
                 if self.explain {
@@ -797,6 +798,7 @@ impl<W: Write> Vm<W> {
                     }
                     Builtin::WriteParquet => biggo_exec::write_parquet(&plan, &path),
                     Builtin::WriteJson => biggo_exec::write_json(&plan, &path),
+                    Builtin::WriteExcel => biggo_exec::write_excel(&plan, &path, &text(2)),
                     _ => biggo_exec::write_sqlite(&plan, &path, &text(2)),
                 };
                 match written {

@@ -1,6 +1,6 @@
-# Data sources: CSV, Parquet, JSON, SQLite
+# Data sources: CSV, Parquet, JSON, Excel, SQLite
 
-biggo reads and writes data in 4 formats. All of them follow the same principles:
+biggo reads and writes data in 5 formats. All of them follow the same principles:
 
 - **Read**: `read_xxx<row type>(path)` returns a table. The program says which columns it wants and
   what their types are, and the engine checks them against the file at run time.
@@ -19,6 +19,7 @@ biggo reads and writes data in 4 formats. All of them follow the same principles
 | CSV | `read_csv` | `write_csv` | ✓ | ✓ (values are not converted) |
 | Parquet | `read_parquet` | `write_parquet` | ✓ | ✓ (not read from disk at all) |
 | JSON (one object per line, or one array) | `read_json` | `write_json` | ✓ | ✓ |
+| Excel | `read_excel` | `write_excel` | | ✓ (cells are not converted) |
 | SQLite | `read_sql` | `write_sql` | | (you write it in the query yourself) |
 
 ## The row type
@@ -455,6 +456,99 @@ An array is cut into pieces between its objects and read on every core, like a f
 find the places to cut, the file is first passed over once on one core, which a file of lines
 does not need.
 
+## Excel
+
+`read_excel` reads one sheet of a workbook: `.xlsx`, `.xlsm`, `.xlsb`, the older `.xls`, and
+`.ods` from LibreOffice. The first row is the names of the columns, as in a CSV file.
+
+The example workbook [`data/branches.xlsx`](data/branches.xlsx) has two sheets. `Sales` has a
+title above its table:
+
+```text
+     A                 B       C       D            E
+1    Sales by branch
+2
+3    branch            units   price   sold on      paid
+4    north             10      2.5     2026-01-05   TRUE
+5    south                     7.25    2026-01-06   FALSE
+6    east              5       n/a     2026-02-28   TRUE
+```
+
+```biggo
+type Sale = { branch: string, units: int?, price: float?, `sold on`: date, paid: bool }
+let sales = read_excel<Sale>("data/branches.xlsx", skip = 2, nulls = ["n/a"])
+print(sales)
+
+// Another sheet, joined to the first.
+type Target = { branch: string, target: int }
+let targets = read_excel<Target>("data/branches.xlsx", sheet = "Targets")
+let report = sales
+  |> join(targets, on = branch)
+  |> select(branch, units, target, reached = (units ?? 0) >= target)
+print(report)
+
+write_excel(report, "out/report.xlsx", sheet = "Report")
+print(count(read_excel<{ branch: string, reached: bool }>("out/report.xlsx")))
+```
+
+```text output
++--------+-------+-------+------------+-------+
+| branch | units | price | sold on    | paid  |
++--------+-------+-------+------------+-------+
+| north  | 10    | 2.5   | 2026-01-05 | true  |
+| south  | null  | 7.25  | 2026-01-06 | false |
+| east   | 5     | null  | 2026-02-28 | true  |
++--------+-------+-------+------------+-------+
++--------+-------+--------+---------+
+| branch | units | target | reached |
++--------+-------+--------+---------+
+| north  | 10    | 8      | true    |
+| south  | null  | 6      | false   |
+| east   | 5     | 9      | false   |
++--------+-------+--------+---------+
+3
+```
+
+The named arguments of `read_excel`:
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `sheet` | the first sheet | The name of the sheet |
+| `range` | all of the sheet | The block of cells that holds the table, by its first and last cell: `"B3:F200"` |
+| `skip` | `0` | The number of rows to pass over before the header |
+| `header` | `true` | Whether the first row names the columns; with `header = false` they are the columns of the row type, in order |
+| `nulls` | `[]` | Texts that mean null, besides an empty cell |
+| `file_name` | | The column that takes the path of the file, as for [many files at once](#many-files-at-once) |
+
+How cells become values:
+
+- A cell holds a number, text, a truth value or a date, whatever the column is declared as. It
+  is read the way the same value written in a CSV file would be: the number 12 fits `int`,
+  `float`, `decimal` and `string`; the number 12.5 does not fit `int`
+  (`cannot read '12.5' as an int`).
+- A number typed as text, such as `'007` or a `5` with a space after it, is read as a number in
+  a column of numbers, and stays text in a `string` column, where the zeros are kept.
+- A date cell is read as a `date`, and as a `datetime` when it has a time of day. A date written
+  as text, `2026-03-01`, is read too.
+- A `duration` is a number of seconds, as in the other formats, or a cell that Excel formats as
+  a length of time (`[h]:mm:ss`).
+- An empty cell is null, and so is a cell that shows an error such as `#N/A` or `#DIV/0!`.
+- A formula is read as its result, the one that Excel saved in the file.
+- The spaces around the name of a column in the header, which cannot be seen in a sheet, are not
+  part of the name.
+- Rows that are wholly empty are passed over, wherever they are.
+
+`write_excel(t, path)` writes a workbook with one sheet, named `Sheet1` unless `sheet` names it:
+the header in bold, numbers as numbers, dates and times as dates that Excel can sort and filter,
+and nulls as empty cells.
+
+- A sheet holds 1,048,575 rows under its header. A larger table is an error; write it as CSV or
+  Parquet.
+- Excel keeps every number as a float with 15 digits. A `decimal` is written as such a number,
+  and an `int` beyond 9,007,199,254,740,992 as text, so that no digit of it changes.
+- A sheet is read whole into memory, on one core. For a table of millions of rows, a CSV or a
+  Parquet file is read many times faster.
+
 ## SQLite
 
 `read_sql<T>(path, query)` runs a query on a SQLite database file and returns the result as a table.
@@ -530,6 +624,8 @@ read_sql<{ product: string, units: int }>("out/shop.db", "select * from product_
 | `no file matches logs/*.csv` | A pattern that matches nothing: check the folder, which is relative to the program |
 | `x.csv has 3 columns, but its row type has 5` | With `header = false`, the file has fewer columns than the row type declares |
 | `x.csv has nothing after the 9 lines that `skip` passes over` | `skip` is larger than the file |
+| `x.xlsx has no sheet "2026"; its sheets are Sales, Targets` | The name of the sheet is not exact: upper and lower case, and spaces, matter |
+| `column `units` of x.xlsx: cannot read 'north' as an int` | A cell of the column holds something else than the declared type, often because the table starts lower in the sheet: see `skip` and `range` |
 | `x.db: no such table: t` | A message straight from SQLite |
 
 Errors from data point to the program line that *runs* the query (such as `print`), not the line

@@ -9,11 +9,11 @@ use biggo_plan::{CsvOptions, Format, Name};
 const USAGE: &str = "\
 usage: biggo infer <file> [<table>] [--delimiter <d>] [--encoding <e>] [--skip <n>] [--no-header]
 
-  <table>           for a SQLite database, the table to describe
+  <table>           for a SQLite database, the table to describe; for a workbook, the sheet
   --delimiter <d>   the delimiter of a CSV file, when it is not to be found out
   --encoding <e>    the encoding of a CSV file that is not UTF-8, such as tis-620
-  --skip <n>        the lines before the header of a CSV file
-  --no-header       the first line of a CSV file is a row, not the names of the columns
+  --skip <n>        the lines before the header of a CSV file or a sheet
+  --no-header       the first line is a row, not the names of the columns
 ";
 
 /// What the command line asks for: the file, and what is known of it.
@@ -104,6 +104,17 @@ fn render(file: &str, known: &Known, guess: &Guess) -> String {
     for note in &guess.notes {
         text.push_str(&format!("// {note}\n"));
     }
+    if !guess.sheets.is_empty() {
+        let sheets: Vec<String> = guess
+            .sheets
+            .iter()
+            .map(|sheet| format!("{sheet:?}"))
+            .collect();
+        text.push_str(&format!(
+            "// The other sheets of the workbook: {}\n",
+            sheets.join(", ")
+        ));
+    }
     text.push_str(&format!("type {ty} = {{\n"));
     for field in &guess.fields {
         text.push_str(&format!("  {}: {},\n", Name(&field.name), field.ty));
@@ -131,9 +142,21 @@ fn render(file: &str, known: &Known, guess: &Guess) -> String {
             }
         }
         Format::Sqlite => call.push_str(&format!(", {:?}", format!("select * from {source}"))),
+        Format::Excel => {
+            if let Some(sheet) = &known.table {
+                call.push_str(&format!(", sheet = {sheet:?}"));
+            }
+            if known.no_header {
+                call.push_str(", header = false");
+            }
+            if known.skip > 0 {
+                call.push_str(&format!(", skip = {}", known.skip));
+            }
+        }
         Format::Json | Format::Parquet => {}
     }
     let read = match guess.format {
+        Format::Excel => "read_excel",
         Format::Csv => "read_csv",
         Format::Json => "read_json",
         Format::Parquet => "read_parquet",

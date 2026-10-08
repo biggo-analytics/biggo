@@ -13,7 +13,7 @@ use memmap2::Mmap;
 use parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderOptions};
 
 use crate::scan::{array_items, header_names, line_end, outer_commas, row_end};
-use crate::{Error, Result};
+use crate::{Error, Result, excel};
 
 /// The rows that the types of a text file are worked out from.
 pub const SAMPLE_ROWS: usize = 10_000;
@@ -32,7 +32,7 @@ pub struct Known {
     pub skip: usize,
     /// For a CSV file: that its first line is a row, not the names of the columns.
     pub no_header: bool,
-    /// For a database: the table.
+    /// For a database: the table. For a workbook: the sheet, when it is not the first.
     pub table: Option<String>,
 }
 
@@ -45,6 +45,8 @@ pub struct Guess {
     pub delimiter: u8,
     /// For a CSV file: its encoding, if the file itself says it is not UTF-8.
     pub encoding: Option<&'static Encoding>,
+    /// For a workbook: its other sheets, for a note on what else there is to read.
+    pub sheets: Vec<String>,
     /// The rows that were looked at, if that may not be all of them.
     pub sampled: Option<usize>,
     /// What the reader of the result should know: columns left out, and columns whose
@@ -384,6 +386,7 @@ fn infer_csv(path: &Path, shown: &str, known: &Known) -> Result<Guess> {
         fields,
         delimiter,
         encoding: marked.filter(|_| known.encoding.is_none()),
+        sheets: Vec::new(),
         sampled: (!whole).then_some(SAMPLE_ROWS),
         notes,
     })
@@ -482,6 +485,7 @@ fn infer_json(path: &Path, shown: &str) -> Result<Guess> {
         fields,
         delimiter: b',',
         encoding: None,
+        sheets: Vec::new(),
         sampled: (!whole).then_some(SAMPLE_ROWS),
         notes,
     })
@@ -521,6 +525,7 @@ fn infer_parquet(path: &Path, shown: &str) -> Result<Guess> {
         fields,
         delimiter: b',',
         encoding: None,
+        sheets: Vec::new(),
         sampled: None,
         notes,
     })
@@ -627,8 +632,66 @@ fn infer_sqlite(path: &Path, shown: &str, known: &Known) -> Result<Guess> {
         fields: fields.collect(),
         delimiter: b',',
         encoding: None,
+        sheets: Vec::new(),
         sampled: None,
         notes: Vec::new(),
+    })
+}
+
+fn infer_excel(path: &Path, shown: &str, known: &Known) -> Result<Guess> {
+    use calamine::{Data, Reader, open_workbook_auto};
+    let sheets = open_workbook_auto(path)
+        .map_err(|err| Error(format!("cannot open {shown}: {err}")))?
+        .sheet_names();
+    let (sheet, cells) = excel::open(path, shown, known.table.as_deref(), None)?;
+    let mut rows = excel::rows(&cells, known.skip);
+    let Some(first) = rows.next() else {
+        return Err(Error(format!(
+            "sheet {sheet:?} of {shown} has no rows to read"
+        )));
+    };
+    let mut columns: Vec<Column> = match known.no_header {
+        true => (1..=first.len())
+            .map(|number| Column::new(format!("column_{number}")))
+            .collect(),
+        false => excel::header(first).into_iter().map(Column::new).collect(),
+    };
+    let body = (known.no_header.then_some(first)).into_iter().chain(rows);
+    let mut seen = 0;
+    for row in body.take(SAMPLE_ROWS + 1) {
+        seen += 1;
+        if seen > SAMPLE_ROWS {
+            break;
+        }
+        for (column, cell) in columns.iter_mut().zip(row) {
+            let Some(text) = excel::text(cell) else {
+                column.missing();
+                continue;
+            };
+            // A cell knows what it holds, so text that looks like a number stays text.
+            let kind = match cell {
+                Data::String(_) => match kind_of(&text) {
+                    kind @ (Kind::Date | Kind::DateTime) => kind,
+                    _ => Kind::Str,
+                },
+                _ => kind_of(&text),
+            };
+            match text.is_empty() {
+                true => column.missing(),
+                false => column.see(&text, kind),
+            }
+        }
+    }
+    let mut notes = Vec::new();
+    let fields = declare(&columns, &mut notes);
+    Ok(Guess {
+        format: Format::Excel,
+        fields,
+        delimiter: b',',
+        encoding: None,
+        sheets: sheets.into_iter().filter(|other| *other != sheet).collect(),
+        sampled: (seen > SAMPLE_ROWS).then_some(SAMPLE_ROWS),
+        notes,
     })
 }
 
@@ -640,6 +703,7 @@ pub fn format_of(path: &Path) -> Option<Format> {
         "parquet" | "pq" => Format::Parquet,
         "json" | "jsonl" | "ndjson" => Format::Json,
         "db" | "sqlite" | "sqlite3" => Format::Sqlite,
+        "xlsx" | "xlsm" | "xlsb" | "xls" | "ods" => Format::Excel,
         _ => return None,
     })
 }
@@ -649,7 +713,8 @@ pub fn infer(path: &Path, shown: &str, known: &Known) -> Result<Guess> {
     let Some(format) = format_of(path) else {
         return Err(Error(format!(
             "cannot tell what kind of file {shown} is from its name; the kinds are known by \
-             .csv, .tsv, .txt, .json, .jsonl, .ndjson, .parquet, .db, .sqlite and .sqlite3"
+             .csv, .tsv, .txt, .json, .jsonl, .ndjson, .parquet, .xlsx, .xls, .ods, .db, \
+             .sqlite and .sqlite3"
         )));
     };
     let guess = match format {
@@ -657,6 +722,7 @@ pub fn infer(path: &Path, shown: &str, known: &Known) -> Result<Guess> {
         Format::Json => infer_json(path, shown)?,
         Format::Parquet => infer_parquet(path, shown)?,
         Format::Sqlite => infer_sqlite(path, shown, known)?,
+        Format::Excel => infer_excel(path, shown, known)?,
     };
     if guess.fields.is_empty() {
         return Err(Error(format!("{shown} has no column that can be declared")));

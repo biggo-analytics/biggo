@@ -1,0 +1,83 @@
+error: the name of the sheet must be string, found int
+ --> check/excel.bgo:5:35
+  |
+5 | read_excel<Row>("a.xlsx", sheet = 2)
+  |                                   ^
+
+error: the range must be string, found int
+ --> check/excel.bgo:6:35
+  |
+6 | read_excel<Row>("a.xlsx", range = 5)
+  |                                   ^
+
+error: `read_excel` has no argument `delimiter`; it takes `sheet`, `range`, `header`, `skip`, `nulls` and `file_name`
+ --> check/excel.bgo:7:27
+  |
+7 | read_excel<Row>("a.xlsx", delimiter = ";")
+  |                           ^^^^^^^^^
+
+error: `read_excel` takes the file path, and can take `sheet`, `range`, `header`, `skip`, `nulls` and `file_name` by name
+ --> check/excel.bgo:8:1
+  |
+8 | read_excel<Row>("a.xlsx", "Sheet1")
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `skip` cannot be negative
+ --> check/excel.bgo:9:34
+  |
+9 | read_excel<Row>("a.xlsx", skip = -2)
+  |                                  ^^
+
+error: `header` must be bool, found string
+  --> check/excel.bgo:10:36
+   |
+10 | read_excel<Row>("a.xlsx", header = "no")
+   |                                    ^^^^
+
+error: column `id` takes the file name, so it must be `string`, not `int`
+  --> check/excel.bgo:11:39
+   |
+11 | read_excel<Row>("a.xlsx", file_name = "id")
+   |                                       ^^^^
+
+error: `read_excel` needs the row type of the data, as in `read_excel<{id: int}>("file")`
+  --> check/excel.bgo:12:1
+   |
+12 | read_excel("a.xlsx")
+   | ^^^^^^^^^^^^^^^^^^^^
+
+error: `read_excel` takes the file path, and can take `sheet`, `range`, `header`, `skip`, `nulls` and `file_name` by name
+  --> check/excel.bgo:13:1
+   |
+13 | read_excel<Row>()
+   | ^^^^^^^^^^^^^^^^^
+
+error: `write_excel` takes a table and a file path, and can take `sheet` by name
+  --> check/excel.bgo:14:1
+   |
+14 | write_excel(t)
+   | ^^^^^^^^^^^^^^
+
+error: `write_excel` takes a table and a file path, and can take `sheet` by name
+  --> check/excel.bgo:15:1
+   |
+15 | write_excel(t, "a.xlsx", "Sheet1")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the name of the sheet must be string, found int
+  --> check/excel.bgo:16:34
+   |
+16 | write_excel(t, "a.xlsx", sheet = 1)
+   |                                  ^
+
+error: `write_excel` has no argument `range`; it takes `sheet`
+  --> check/excel.bgo:17:26
+   |
+17 | write_excel(t, "a.xlsx", range = "A1:B2")
+   |                          ^^^^^
+
+error: `write_excel` works on a table, found string
+  --> check/excel.bgo:18:13
+   |
+18 | write_excel("a.xlsx", t)
+   |             ^^^^^^^^

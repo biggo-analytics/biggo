@@ -152,6 +152,8 @@ pub enum Builtin {
     Count,
     Explain,
     WriteJson,
+    /// Writes a table as a workbook with one sheet.
+    WriteExcel,
     /// Writes a table as a table of a SQLite database, in place of the one of that name.
     WriteSqlite,
     /// The rows of a table as a list of records.

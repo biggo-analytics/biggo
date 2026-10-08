@@ -280,8 +280,6 @@ Exists: `read_csv` and `write_csv` (with `delimiter`, `encoding`, `header`, `ski
 
 | Feature | What it does | Priority |
 | --- | --- | --- |
-| `read_excel<T>(path)`, with `sheet`, `skip` and `range` | Excel workbooks, where most analysts' data is | Must |
-| `write_excel(t, path, sheet = "...")` | A result as a workbook | Should |
 | `read_csv(..., date_format = "%d/%m/%Y", decimal = ",")` | Dates and numbers in the form the file uses, read straight into `date` and `float` columns | Should |
 | `read_csv(..., on_error = "null")` | A value that does not fit its column becomes null, and the number of such values is reported, instead of the first one stopping the query | Should |
 | compressed files | `.csv.gz`, `.json.gz`, `.zst` | Should |
@@ -304,6 +302,8 @@ Exists: `read_csv` and `write_csv` (with `delimiter`, `encoding`, `header`, `ski
 - [x] Many files in one call, by a pattern such as `"logs/2026-*.csv"`, with the path of each
       row's file in a column (`file_name = "..."`)
 - [x] `env(name)` for paths and passwords that do not belong in a program
+- [x] `read_excel` with `sheet`, `range`, `skip`, `header` and `nulls`, for `.xlsx`, `.xls` and
+      `.ods`, and `write_excel`
 - [x] Programs can read their command-line arguments with `args()`
 - [x] CSV files with another delimiter (tab, `;`, `|`) and in encodings other than UTF-8 (such as
       TIS-620 / Windows-874), for both reading and writing

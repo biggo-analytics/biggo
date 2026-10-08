@@ -811,6 +811,52 @@ fn files_that_do_not_fit_their_options_are_explained() {
             format!("print(read_parquet<{{ id: int }}>(\"{data}/*.parquet\"))"),
             format!("error: no file matches {data}/*.parquet"),
         ),
+        (
+            format!("print(read_excel<{{ id: int }}>(\"{data}/book.xlsx\", sheet = \"Nope\"))"),
+            format!("error: {data}/book.xlsx has no sheet \"Nope\"; its sheets are Sales, Plain, สาขา, Block"),
+        ),
+        (
+            format!("print(read_excel<{{ id: int }}>(\"{data}/book.xlsx\", range = \"B:F\"))"),
+            "error: `range` names the first and the last cell of a block, as in \"B3:F200\"; found \"B:F\"".to_string(),
+        ),
+        (
+            format!("print(read_excel<{{ id: int }}>(\"{data}/missing.xlsx\"))"),
+            format!("error: cannot open {data}/missing.xlsx: No such file or directory (os error 2)"),
+        ),
+        (
+            format!("print(read_excel<{{ id: int }}>(\"{data}/sales.csv\"))"),
+            format!(
+                "error: {data}/sales.csv is not a workbook by its name; those that can be read are \
+                 .xlsx, .xlsm, .xlsb, .xls and .ods"
+            ),
+        ),
+        (
+            format!("print(read_excel<{{ id: int, branch: int }}>(\"{data}/book.xlsx\", skip = 3))"),
+            format!("error: column `branch` of {data}/book.xlsx: cannot read 'north' as an int"),
+        ),
+        (
+            format!("print(read_excel<{{ id: int, units: int }}>(\"{data}/book.xlsx\", skip = 3))"),
+            format!(
+                "error: column `units` of {data}/book.xlsx has missing values, \
+                 but is declared `int`; declare it `int?`"
+            ),
+        ),
+        (
+            format!(
+                "print(read_excel<{{ a: int, b: string, c: int, d: int }}>\
+                 (\"{data}/book.xlsx\", sheet = \"Plain\", header = false))"
+            ),
+            format!("error: sheet \"Plain\" of {data}/book.xlsx has 3 columns, but its row type has 4"),
+        ),
+        (
+            format!("print(read_excel<{{ id: int }}>(\"{data}/book.xlsx\", skip = 99))"),
+            format!("error: sheet \"Sales\" of {data}/book.xlsx has no rows to read"),
+        ),
+        (
+            "write_excel(from_rows([{ a: 1 }]), \"target/never.xlsx\", sheet = \"a/b\")".to_string(),
+            "error: a sheet cannot be named \"a/b\": a name has 1 to 31 characters, and none of [ ] : * ? / \\"
+                .to_string(),
+        ),
     ];
     for (program, expected) in cases {
         assert_eq!(failure_of(&program), expected, "{program}");
@@ -942,18 +988,19 @@ fn what_infer_writes_runs() {
                  { id: 2, at: @2026-01-06, price: 0.75d, ok: false, note: \"b\" }])";
     let write = format!(
         "let t = {table}\nwrite_parquet(t, \"t.parquet\")\nwrite_sql(t, \"shop.db\", \"orders\")\n\
-         write_csv(t, \"plain.csv\")\nwrite_json(t, \"lines.json\")\n"
+         write_csv(t, \"plain.csv\")\nwrite_json(t, \"lines.json\")\nwrite_excel(t, \"book.xlsx\")\n"
     );
     std::fs::write(dir.join("write.bgo"), write).unwrap();
     let path = |name: &str| dir.join(name).to_str().unwrap().to_string();
     let (_, stderr, code) = biggo(&["run", &path("write.bgo")], "");
     assert_eq!((stderr.as_str(), code), ("", Some(0)));
 
-    let sources: [&[&str]; 4] = [
+    let sources: [&[&str]; 5] = [
         &["t.parquet"],
         &["shop.db", "orders"],
         &["plain.csv"],
         &["lines.json"],
+        &["book.xlsx"],
     ];
     for source in sources {
         let output = Command::new(env!("CARGO_BIN_EXE_biggo"))
