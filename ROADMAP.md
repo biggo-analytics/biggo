@@ -1,24 +1,37 @@
 # biggo roadmap
 
-This document says what biggo can do today, what it lacks, and what comes next, in order.
+This document says what biggo can do today, lists everything it still needs, and gives the order
+in which that will be built.
 
 - The current version is **0.1.0**, the first release. Until 1.0, the language and the commands
   can change without staying compatible with earlier versions.
-- Items are listed in order of priority. There are **no dates**, and the order can change with
-  the problems people actually run into.
-- Every item is something the code does **not** do today. What exists is described in the
-  [README](README.md) and in [docs](docs).
+- Work is listed in the order it will be done. There are **no dates**, and the order can change
+  with the problems people actually run into.
+- An item that is ticked is done. Every other item is something the code does **not** do today.
+  What exists is described in the [README](README.md) and in [docs](docs).
+- The names and signatures in the [catalog](#catalog) are proposals. They can change when the
+  feature is built, and the documentation of the built feature is what counts.
 
 ## Contents
 
 - [Where things stand](#where-things-stand-010)
 - [Principles](#principles)
-- [0.2: Easy to install, works everywhere](#02-easy-to-install-works-everywhere)
-- [0.3: More data sources](#03-more-data-sources)
-- [0.4: A faster engine, and data larger than memory](#04-a-faster-engine-and-data-larger-than-memory)
-- [0.5: A language with more reuse](#05-a-language-with-more-reuse)
-- [Tooling](#tooling-alongside-every-release)
-- [1.0: Stable](#10-stable)
+- [Releases at a glance](#releases-at-a-glance)
+- [Order of work](#order-of-work)
+- [Catalog](#catalog)
+  - [1. Expressions, math and safe conversion](#1-expressions-math-and-safe-conversion)
+  - [2. Dates and times](#2-dates-and-times)
+  - [3. Strings and formatting](#3-strings-and-formatting)
+  - [4. Aggregates](#4-aggregates)
+  - [5. Window functions](#5-window-functions)
+  - [6. Table operations](#6-table-operations)
+  - [7. Lists, maps and records](#7-lists-maps-and-records)
+  - [8. Getting data in and out](#8-getting-data-in-and-out)
+  - [9. Output and reports](#9-output-and-reports)
+  - [10. Language](#10-language)
+  - [11. Tooling](#11-tooling)
+  - [12. Engine](#12-engine)
+  - [13. Stability](#13-stability)
 - [Not planned for now](#not-planned-for-now)
 - [Feedback](#feedback)
 
@@ -26,28 +39,32 @@ This document says what biggo can do today, what it lacks, and what comes next, 
 
 | Area | What exists |
 | --- | --- |
-| Language | Static typing throughout, functions, lambdas, `match`, lists, records, maps, `import` |
+| Language | Static typing throughout, functions, lambdas, `match`, lists, records, maps, `import`, string functions and regular expressions, program arguments |
 | Types | `int` `float` `bool` `string` `date` `datetime` `duration` `decimal`, and a nullable form of each |
 | Tables | `where` `select` `derive` `group` + `agg` `join` (6 kinds) `sort` `window` `pivot` `unpivot` `explode` `union` `distinct`, and statistics (`corr` `linreg` `describe` `histogram`) |
-| Data sources | CSV, Parquet, JSON Lines, SQLite, for both reading and writing |
+| Data sources | CSV (any delimiter, and encodings other than UTF-8), Parquet, JSON Lines, SQLite, for both reading and writing |
 | Engine | Column-at-a-time execution on Apache Arrow, a rule-based optimizer, every stage in parallel, the same result for any number of threads |
 | Tools | `run` `repl` `check` `explain` `test` `fmt` `build` `lsp`, and a VS Code extension |
-| Testing | 125 automated tests, one of which runs all 94 example programs in the documentation and compares their output with what the documentation shows |
+| Testing | 133 automated tests, one of which runs all 99 example programs in the documentation and compares their output with what the documentation shows |
 
 The main limitations of this release, which the plan below comes from:
 
+- The function library is thin next to SQL, pandas or Polars: there is no `in`, no power or
+  logarithm, little for dates beyond their parts, no quantile, few window functions, and one
+  value that cannot be converted stops the whole query.
+- Every file needs its row type written by hand, and Excel files cannot be read.
+- A user-defined function cannot be used on a column.
 - It has been tested on macOS (Apple Silicon) only. There is no CI and there are no prebuilt
   binaries: you build it yourself with Rust.
 - The VS Code extension has been packaged and its grammar tested, but it has never been run
   inside VS Code.
-- SQLite is the only database, and CSV files can only be comma-separated.
+- SQLite is the only database.
 - The data of a `sort`, a `window`, the right side of a `join`, or a `group` with many groups has
   to fit in RAM.
 - Some work is slower than in other engines: reading Parquet is 2.6 times slower than DuckDB and
   Polars, grouping into 1 million groups is 2.7 times slower than Polars, and reading JSON is 2.2
   times slower than DuckDB (the numbers and the method are in
   [docs/09-performance.md](docs/09-performance.md)).
-- A user-defined function cannot be used on a column, and there are few string functions.
 
 ## Principles
 
@@ -64,76 +81,321 @@ No new work may break any of these. When two of them conflict, the one listed fi
 5. **One file does it all.** The runner, the formatter, the test runner and the language server
    are one executable, with nothing else to install.
 
-## 0.2: Easy to install, works everywhere
+## Releases at a glance
 
-**Goal:** someone without Rust can install biggo and use it on their own data files, on Linux,
-macOS and Windows.
+| Release | Goal | What it contains |
+| --- | --- | --- |
+| 0.2 | **The standard library.** What an analyst expects a data tool to have built in | Catalog sections 1 to 7, plus CI and prebuilt binaries from section 11 |
+| 0.3 | **Data in and out.** Read data where it lives, and hand results on | Sections 8 and 9 |
+| 0.4 | **A language with more reuse.** Write logic once, use it on any table | Section 10 |
+| 0.5 | **A faster engine, and data larger than memory** | Section 12 |
+| 1.0 | **Stable.** Programs keep working from one version to the next | Section 13 |
 
-Installation and compatibility
+Tooling (section 11) moves along with every release.
 
-- [ ] CI on GitHub Actions: run `cargo test`, `cargo clippy` and `cargo fmt --check` on Linux,
-      macOS and Windows for every push and pull request
-- [ ] Find and fix behavior that differs between systems, such as Windows paths and files with
-      CRLF line endings
-- [ ] Prebuilt binaries in GitHub Releases for macOS (arm64, x86_64), Linux (x86_64, arm64) and
-      Windows (x86_64), with an install script and a Homebrew formula
-- [ ] The VS Code extension: try it in VS Code, fix what turns up, then publish it to the
-      Marketplace and Open VSX
-- [ ] Try the Neovim and Helix settings written in [docs/07-tools.md](docs/07-tools.md) and make
-      them work
+The engine comes after the library and the language on purpose. Its speed is already in the range
+of DuckDB on most of the queries measured, while a missing function stops people on their first
+day.
 
-Gaps you hit right away with real data
+## Order of work
 
-- [ ] Programs can read command-line arguments and environment variables, so one script works
-      for many files and many periods
-- [ ] String functions: substring, replace, split, pad, find a position, and regular expressions
-      (match, extract, replace)
-- [ ] CSV options: other separators (tab, `;`, `|`), files with no header line, choosing which
-      text means null, and encodings other than UTF-8 (such as TIS-620 / Windows-874, which is
-      common in Thai data)
-- [ ] JSON files that are one array (`[{...}, {...}]`), in addition to JSON Lines
-- [ ] `biggo infer data.csv`: read a sample of the data and print a `type` declaration to copy,
-      instead of typing the type of every column by hand
+Each package is built whole, in this order. A package is done when every function in it has a
+type rule, gives the same answer on a column as on a single value, handles null, has an entry in
+[docs/06-builtins.md](docs/06-builtins.md) with an example that runs, has its mistakes covered in
+`testdata/check`, and leaves the existing benchmarks no slower.
 
-A proposed form (it may change):
+| # | Package | Catalog | Why here |
+| --- | --- | --- | --- |
+| 1 | Expressions, math, safe conversion, raw strings | [1](#1-expressions-math-and-safe-conversion) | The smallest pieces, used by everything after. `try_to_int` and its family end the "one bad value stops the query" problem |
+| 2 | Dates and times | [2](#2-dates-and-times) | Almost every real data set is grouped by period, or holds dates that are not written the ISO way |
+| 3 | Aggregates | [4](#4-aggregates) | Quantiles, conditional counts and joined strings are in every report |
+| 4 | Window functions | [5](#5-window-functions) | Growth, running totals and gap filling for time series |
+| 5 | Table operations | [6](#6-table-operations) | `count_by`, sampling, set operations, checks on data quality |
+| 6 | Strings and formatting | [3](#3-strings-and-formatting) | Numbers formatted for people, and tables that line up for Thai text |
+| 7 | Lists, maps and records | [7](#7-lists-maps-and-records) | Ordinary code catches up with what tables can do |
+| 8 | CI, prebuilt binaries, the extension tried in VS Code | [11](#11-tooling) | Completes 0.2. It can be done at any point, since nothing else depends on it |
+| 9 | `biggo infer`, the remaining CSV and JSON layouts, many files, `env` | [8](#8-getting-data-in-and-out) | Removes the first obstacle of a new user: writing every column type by hand |
+| 10 | Excel | [8](#8-getting-data-in-and-out) | Where most analysts' data is |
+| 11 | Output: more rows, Markdown, HTML | [9](#9-output-and-reports) | Results that go into a document or a message |
+| 12 | PostgreSQL and MySQL | [8](#8-getting-data-in-and-out) | Completes 0.3 |
+| 13 | User-defined functions on columns, tables with extra columns | [10](#10-language) | The largest limit of the language today |
+| 14 | The rest of the language | [10](#10-language) | Completes 0.4 |
+| 15 | Engine speed and spilling to disk | [12](#12-engine) | Completes 0.5 |
+| 16 | Stability | [13](#13-stability) | Completes 1.0 |
 
-```text
-// report.bgo
-let month = args()[0]                       // biggo run report.bgo -- 2026-01
-let sales = read_csv<Sale>("sales.tsv", delimiter = "\t")
-sales |> where(starts_with(to_string(date), month)) |> print()
-```
+## Catalog
 
-**Done when:** CI passes on all three systems, biggo installs with one command and no Rust, and
-the extension installs from the Marketplace.
+Everything biggo should have, by area. Each table lists what is missing. The line above it lists
+what exists, for context.
 
-## 0.3: More data sources
+Priority: **Must** is something every data tool has, and whose absence people hit in their first
+week. **Should** is commonly expected. **Later** is useful but not part of the baseline.
 
-**Goal:** read data from where it actually lives, without exporting it to CSV first.
+Every scalar function works on a single value and on a column, and gives null for a null argument
+unless its row says otherwise.
 
-- [ ] PostgreSQL and MySQL through `read_sql` / `write_sql` with a connection URL, where the
-      password comes from an environment variable and is never written in the program
-- [ ] Push biggo's `where`, `select` and `take` into the SQL so the database does that work.
-      This includes SQLite, where today the filter runs after the rows have been read out
-- [ ] Excel (`.xlsx`), for both reading and writing
-- [ ] Many files in one call, such as `read_csv<T>("logs/2026-*.csv")`, and partitioned Parquet
-      directories
-- [ ] Compressed files: `.csv.gz`, `.json.gz`, `.zst`
-- [ ] Reading from `https://` and S3-style object storage, fetching only the byte ranges of a
-      Parquet file that the query uses
-- [ ] Arrow IPC (Feather), to hand data to Python and R without converting it
-- [ ] Nested columns: let `list<T>` and records be columns, to read JSON and Parquet with nested
-      structure (today a column can only have a basic type, and `explode` works on a string of
-      separated values)
+### 1. Expressions, math and safe conversion
 
-**Done when:** every new source has a round-trip test (write, read back, and get the same values
-for every data type), as the four current formats do, and a documentation page with examples
-that run.
+Exists: `+ - * / %`, comparisons, `and` `or` `not`, `??`, `if`, `match`, `is_null`, `abs` `round`
+`floor` `ceil` `sqrt`, `to_int` `to_float` `to_decimal` `to_string` `to_date` `to_datetime`.
 
-## 0.4: A faster engine, and data larger than memory
+| Feature | Result | What it does | Priority |
+| --- | --- | --- | --- |
+| `x in [a, b, c]`, `x not in [a, b, c]` | `bool` | Whether `x` equals one of the values of a list. The list can be any value of the program that is not a column | Must |
+| `greatest(a, b, ...)`, `least(a, b, ...)` | type of the arguments | The largest or smallest of several values in one row (`max` and `min` work down a column) | Must |
+| `null_if(x, value)` | `T?` | Null when `x` equals `value`, otherwise `x`. Turns markers such as `-999`, `"N/A"` or `""` into null | Must |
+| `try_to_int(x)`, `try_to_float(x)`, `try_to_decimal(x)`, `try_to_date(x)`, `try_to_datetime(x)` | `T?` | Like `to_int` and the others, but a value that cannot be converted gives null instead of stopping the program | Must |
+| `to_bool(x)`, `try_to_bool(x)` | `bool`, `bool?` | From `"true"` / `"false"`, `"yes"` / `"no"`, `1` / `0` | Must |
+| `pow(x, y)` | `float` | `x` to the power `y` | Must |
+| `exp(x)`, `ln(x)`, `log10(x)`, `log2(x)`, `log(x, base)` | `float` | The exponential and logarithms | Must |
+| `sign(x)` | `int` | -1, 0 or 1 | Must |
+| `div(a, b)` | `int` | Whole-number division, since `/` always gives a float | Must |
+| raw strings: `r"\d+"` | `string` | A string in which a backslash is only a backslash, for regular expressions and Windows paths | Must |
+| `between(x, low, high)` | `bool` | `low <= x and x <= high` | Should |
+| `clamp(x, low, high)` | type of `x` | `x` brought into the range | Should |
+| `trunc(x)`, `trunc(x, digits)` | like `round` | Cuts digits off without rounding | Should |
+| `is_nan(x)`, `is_finite(x)` | `bool` | For floats that came out of `0 / 0` or overflowed | Should |
+| `pi()`, `sin` `cos` `tan` `asin` `acos` `atan` `atan2`, `degrees(x)`, `radians(x)` | `float` | Trigonometry, which distances between coordinates need | Should |
+| `parse_number(s)` | `float?` | Reads numbers as people write them: `"1,234.50"`, `"45%"`, `"(120)"` | Should |
+| `recode(x, mapping)`, `recode(x, mapping, default)` | value type of the map | Replaces codes by labels with a map: `recode(sex, { "M": "male", "F": "female" })` | Should |
+| `cut(x, edges)`, `cut(x, edges, labels)` | `string?` | The range a number falls in, for age groups, price bands and the like: `cut(age, [0, 18, 65])` | Should |
+| interpolated strings: `f"total: {x}"` | `string` | Values written into text without `+` and `to_string` | Should |
+| `hash(x)` | `int` | A stable number for a value, for sampling and for splitting data | Later |
 
-**Goal:** close the gap with DuckDB and Polars where biggo clearly loses today, and stop failing
-when the data is larger than memory.
+### 2. Dates and times
+
+Exists: date and datetime literals, `year` `month` `day` `hour` `minute` `second`, `to_date`
+`to_datetime`, `days` `hours` `minutes` `seconds`, `total_seconds`, adding and subtracting dates
+and durations.
+
+| Feature | Result | What it does | Priority |
+| --- | --- | --- | --- |
+| `today()`, `now()` | `date`, `datetime` | The day and the moment the program started. The value is the same all through one run, so a query still gives one answer | Must |
+| `weekday(d)` | `int` | 1 for Monday to 7 for Sunday | Must |
+| `week(d)`, `quarter(d)`, `day_of_year(d)` | `int` | The ISO week number, the quarter from 1 to 4, the day from 1 to 366 | Must |
+| `start_of_week(d)`, `start_of_month(d)`, `start_of_quarter(d)`, `start_of_year(d)`, `end_of_month(d)` | `date` | The first or last day of the period, for grouping by period | Must |
+| `add_days(d, n)`, `add_months(d, n)`, `add_years(d, n)` | type of `d` | Calendar arithmetic. A day that the target month does not have becomes its last day: 31 January plus 1 month is 28 or 29 February | Must |
+| `days_between(a, b)`, `months_between(a, b)`, `years_between(a, b)` | `int` | Whole units from `a` to `b`. `years_between(born, today())` is an age | Must |
+| `total_days(x)`, `total_hours(x)`, `total_minutes(x)` | `float` | The length of a duration, beside `total_seconds` | Must |
+| `make_date(year, month, day)`, `make_datetime(year, month, day, hour, minute, second)` | `date`, `datetime` | A date from its parts, when they are in separate columns | Must |
+| `format_date(d, pattern)` | `string` | A date as text: `format_date(d, "%d/%m/%Y")` | Must |
+| `parse_date(s, pattern)`, `parse_datetime(s, pattern)` | `date`, `datetime` | Reads dates that are not written the ISO way. `try_parse_date` and `try_parse_datetime` give null for text that does not fit | Must |
+| `time_bucket(t, size)` | `datetime` | The start of the interval of that length that `t` falls in: `time_bucket(t, minutes(15))` | Should |
+| Buddhist-era years: `era = "buddhist"` on parsing and formatting, and `buddhist_year(d)` | | Thai data writes 2569 for 2026. Subtracting 543 after parsing is not enough: 29 February 2567 is a real day, but the year 2567 has no 29 February | Should |
+| `fiscal_year(d, first_month)` | `int` | The fiscal year a date belongs to, for years that start in October or April | Should |
+| `month_name(d)`, `day_name(d)` | `string` | `"January"`, `"Monday"` | Should |
+| `is_weekend(d)` | `bool` | Saturday or Sunday | Should |
+| `to_unix(t)`, `from_unix(seconds)` | `int`, `datetime` | Seconds since 1970, which logs and APIs use | Should |
+| time zones: `to_zone(t, "Asia/Bangkok")`, zones kept when reading | | Today a zone in a file is converted to UTC and dropped | Later |
+| `add_business_days(d, n)`, `business_days_between(a, b)`, with a table of holidays | | Working-day arithmetic | Later |
+
+### 3. Strings and formatting
+
+Exists: `length` `lower` `upper` `trim` `contains` `starts_with` `ends_with` `index_of`
+`substring` `replace` `split` `split_part` `pad_left` `pad_right` `regex_match` `regex_extract`
+`regex_replace`, and `+`.
+
+| Feature | Result | What it does | Priority |
+| --- | --- | --- | --- |
+| `format_number(x, decimals)`, with `thousands = ","` | `string` | `1234567.5` as `"1,234,567.50"` | Must |
+| `trim_left(s)`, `trim_right(s)`, `trim(s, chars)` | `string` | Trimming one end, or other characters than whitespace | Must |
+| table printing by display width | | Columns that line up for Thai, Chinese, Japanese and combining marks. Today each code point is counted as one cell, so such tables print ragged | Should |
+| `format_percent(x, decimals)` | `string` | `0.125` as `"12.5%"` | Should |
+| `left(s, n)`, `right(s, n)` | `string` | The first or last `n` characters | Should |
+| `repeat(s, n)`, `reverse(s)`, `title(s)` | `string` | Repeated, backwards, and with each word capitalized | Should |
+| `concat(a, b, ...)` | `string` | Values of any type joined as text, without `to_string` on each | Should |
+| `like(s, pattern)` | `bool` | The SQL pattern with `%` and `_`, for people who think in SQL | Should |
+| `regex_count(s, pattern)` | `int` | How many times a pattern matches | Should |
+| `sha256(s)`, `md5(s)` | `string` | A stable key, or a personal identifier masked before data is shared | Should |
+| `json_get(s, path)` | `string?` | A value out of JSON text that sits in a string column | Should |
+| `levenshtein(a, b)`, `similarity(a, b)` | `int`, `float` | How alike two strings are, for matching names that are spelled differently | Later |
+| `normalize(s)`, `remove_accents(s)` | `string` | One Unicode form for text that looks the same | Later |
+
+- [x] `substring`, `replace`, `split`, `split_part`, `pad_left`, `pad_right`, `index_of`
+- [x] Regular expressions: `regex_match`, `regex_extract`, `regex_replace`
+
+### 4. Aggregates
+
+Exists: `sum` `mean` `min` `max` `count` `count_distinct` `first` `last` `median` `stddev` `corr`
+`cov` `slope` `intercept`.
+
+| Feature | Result | What it does | Priority |
+| --- | --- | --- | --- |
+| `quantile(x, q)` | `float?` | The value below which a share `q` of the values lie: `quantile(price, 0.9)` | Must |
+| `variance(x)` | `float?` | Sample variance | Must |
+| `count_if(condition)` | `int` | The number of rows where the condition is true | Must |
+| `any(condition)`, `all(condition)` | `bool?` | Whether the condition is true in some row, or in every row | Must |
+| `string_agg(x, separator)` | `string?` | The values of the group joined into one string, in row order | Must |
+| `arg_max(x, by)`, `arg_min(x, by)` | type of `x` | The value of `x` in the row where `by` is largest or smallest: the best-selling product of each region | Should |
+| `mode(x)` | type of `x` | The most frequent value | Should |
+| `stddev_pop(x)`, `variance_pop(x)` | `float?` | The population forms | Should |
+| `weighted_mean(x, weight)` | `float?` | A mean in which rows count by a weight, as survey data needs | Should |
+| `product(x)` | type of `x` | All the values multiplied | Should |
+| `count_null(x)` | `int` | The number of nulls | Should |
+| `skewness(x)`, `kurtosis(x)` | `float?` | The shape of a distribution | Later |
+| `approx_count_distinct(x)` | `int` | A fast estimate for very many distinct values | Later |
+
+### 5. Window functions
+
+Exists: `row_number` `rank` `lag` `lead` `cumsum` `moving_avg`, and every aggregate over a whole
+partition.
+
+| Feature | Result | What it does | Priority |
+| --- | --- | --- | --- |
+| `diff(x)`, `diff(x, n)` | type of `x` | `x` minus its value `n` rows earlier | Must |
+| `pct_change(x)`, `pct_change(x, n)` | `float?` | Growth from the earlier row: month over month, year over year | Must |
+| `fill_forward(x)`, `fill_backward(x)` | type of `x` | A null replaced by the last value before it, or the next one after | Must |
+| `cum_count()`, `cum_min(x)`, `cum_max(x)`, `cum_mean(x)` | | Running count, minimum, maximum and mean, beside `cumsum` | Must |
+| `moving_sum(x, n)`, `moving_min(x, n)`, `moving_max(x, n)` | | Over the last `n` rows, beside `moving_avg` | Must |
+| `dense_rank()` | `int` | A rank with no gaps after ties | Must |
+| `ntile(n)` | `int` | The partition cut into `n` groups of nearly equal size: quartiles, deciles | Must |
+| `percent_rank()` | `float` | The rank as a share from 0 to 1 | Should |
+| `moving_stddev(x, n)` | `float?` | Volatility over the last `n` rows | Should |
+| windows by time: `moving_avg(x, over = days(7))` | | The last 7 days, however many rows that is | Should |
+| `cume_dist()` | `float` | The share of rows at or below this one | Later |
+| `ewm_mean(x, alpha)` | `float?` | An exponentially weighted mean | Later |
+
+### 6. Table operations
+
+Exists: `where` `select` `drop` `rename` `derive` `sort` `take` `skip` `distinct` `group` + `agg`
+`join` (inner, left, right, full, semi, anti) `window` `union` `pivot` `unpivot` `explode`
+`collect` `count` `describe` `histogram` `linreg` `to_rows` `from_rows`.
+
+| Feature | Result | What it does | Priority |
+| --- | --- | --- | --- |
+| `count_by(t, a, ...)` | table | The number of rows for each value, most frequent first: `group`, `agg` and `sort` in one | Must |
+| `sample(t, n)`, `sample(t, fraction = 0.1)`, with `seed = 0` | table | Rows picked at random. The same seed picks the same rows, so the result is still reproducible | Must |
+| `join(a, b, how = "cross")` | table | Every row of one table with every row of the other | Must |
+| `intersect(a, b)`, `except(a, b)` | table | The rows in both tables, and the rows of the first that are not in the second | Must |
+| `sort(t, x, nulls = "first")` | table | Where nulls go. Today they are always last | Must |
+| `tail(t, n)` | table | The last `n` rows | Should |
+| `union` by column name | table | Today the tables need their columns in the same order | Should |
+| `drop_nulls(t)`, `drop_nulls(t, a, b)` | table | Without the rows that have a null in any column, or in those named | Should |
+| `fill_nulls(t, a = 0, b = "")` | table | Nulls replaced, column by column | Should |
+| `with_row_number(t, name)` | table | A column that numbers the rows | Should |
+| totals: `agg(..., totals = true)` | table | A row of subtotals for each group and a grand total | Should |
+| `date_range(first, last)`, `complete(t, a, b)` | table | Every day of a period, and every combination of values, so that gaps in data show as rows | Should |
+| `columns(t)` | `list<string>` | The column names of a table, as a value | Should |
+| checks: `assert_unique(t, a, ...)`, `assert_no_nulls(t, a, ...)` | | Stops the program when the data breaks an assumption the query relies on | Should |
+| joins on a range or an inequality, and the nearest earlier row (`asof`) | table | Prices in force on a date, the reading before an event | Later |
+| `select` by pattern or by type | table | `select(matching("^q[0-9]"))`, worked out at compile time | Later |
+| `transpose(t)` | table | Rows as columns | Later |
+
+### 7. Lists, maps and records
+
+Exists: `len` `range` `map` `filter` `fold` `each` `split`, `xs[i]`, `xs + ys`, `keys` `values`
+`put` `has_key`, `m[k]`, `r.field`.
+
+Most of these take a name that tables or strings already use, and work the same way on a list.
+
+| Feature | Result | What it does | Priority |
+| --- | --- | --- | --- |
+| `sort(xs)`, `sort(xs, desc = true)`, `sort_by(xs, f)` | `list<T>` | A sorted copy, by the values or by what `f` gives for each | Must |
+| `sum(xs)`, `min(xs)`, `max(xs)`, `mean(xs)` | | The aggregates, on a list | Must |
+| `contains(xs, x)`, `index_of(xs, x)` | `bool`, `int?` | Whether and where a value is in a list | Must |
+| `join(xs, separator)` | `string` | A list of strings as one string, the opposite of `split` | Must |
+| `reverse(xs)`, `distinct(xs)` | `list<T>` | Backwards, and without repeats | Must |
+| `take(xs, n)`, `skip(xs, n)`, `slice(xs, start, length)` | `list<T>` | Part of a list | Should |
+| `first(xs)`, `last(xs)` | `T?` | Null for an empty list, where `xs[0]` is an error | Should |
+| `find(xs, f)`, `any(xs, f)`, `all(xs, f)`, `count(xs, f)` | `T?`, `bool`, `int` | Searching with a function | Should |
+| `flatten(xss)` | `list<T>` | A list of lists as one list | Should |
+| `remove(m, k)`, `merge(a, b)`, `entries(m)` | | A map without a key, two maps as one, and the entries as a list of records | Should |
+| record update: `{ ...r, a: 1 }` | record | A copy of a record with some fields changed | Should |
+| `zip(xs, ys)`, `group_by(xs, f)` | | Pairs of two lists, and a list split into a map | Later |
+
+### 8. Getting data in and out
+
+Exists: `read_csv` and `write_csv` (with `delimiter` and `encoding`), `read_parquet`
+`write_parquet`, `read_json` `write_json` (JSON Lines), `read_sql` `write_sql` (SQLite), `args()`.
+
+| Feature | What it does | Priority |
+| --- | --- | --- |
+| `biggo infer data.csv` | Reads a sample of a file and prints the `type` declaration for it, to copy into a program, instead of typing the type of every column by hand | Must |
+| `read_csv(..., header = false)` | Files with no header line. Columns are taken in the order of the row type | Must |
+| `read_csv(..., nulls = ["NA", "-"])` | Which text means null | Must |
+| `read_csv(..., skip = 3)` | Lines to pass over before the header, for exports that start with a title | Must |
+| JSON files that are one array | `[{...}, {...}]`, in addition to JSON Lines | Must |
+| many files in one call | `read_csv<T>("logs/2026-*.csv")`, with the file name available as a column | Must |
+| `read_excel<T>(path)`, with `sheet`, `skip` and `range` | Excel workbooks, where most analysts' data is | Must |
+| `env(name)` | An environment variable as a `string?`, for paths and passwords that do not belong in a program | Must |
+| `write_excel(t, path, sheet = "...")` | A result as a workbook | Should |
+| `read_csv(..., date_format = "%d/%m/%Y", decimal = ",")` | Dates and numbers in the form the file uses, read straight into `date` and `float` columns | Should |
+| `read_csv(..., on_error = "null")` | A value that does not fit its column becomes null, and the number of such values is reported, instead of the first one stopping the query | Should |
+| compressed files | `.csv.gz`, `.json.gz`, `.zst` | Should |
+| standard input and output | `read_csv<T>("-")` and `write_csv(t, "-")`, to use biggo between other commands | Should |
+| PostgreSQL and MySQL | Through `read_sql` and `write_sql` with a connection URL, where the password comes from `env` | Should |
+| pushdown | biggo's `where`, `select` and `take` become part of the SQL, so the database does that work. This includes SQLite, where today the filter runs after the rows are read out | Should |
+| appending | `write_csv(t, path, append = true)`, `write_sql(t, path, name, mode = "append")` | Should |
+| files as values | `exists(path)`, `list_files(pattern)`, `read_text(path)`, `write_text(path, s)` | Should |
+| nested JSON | A field inside an object, named by its path in the row type | Should |
+| SQL Server | Through `read_sql` | Later |
+| partitioned Parquet | Reading and writing a directory split by the values of a column | Later |
+| `https://` and S3 | Reading only the byte ranges of a Parquet file that the query uses | Later |
+| Arrow IPC (Feather) | Handing data to Python and R without converting it | Later |
+| nested columns | `list<T>` and records as columns. Today a column can only have a basic type | Later |
+
+- [x] Programs can read their command-line arguments with `args()`
+- [x] CSV files with another delimiter (tab, `;`, `|`) and in encodings other than UTF-8 (such as
+      TIS-620 / Windows-874), for both reading and writing
+
+### 9. Output and reports
+
+Exists: `print` (the first 50 rows of a table), `explain`, the four `write_` functions.
+
+| Feature | What it does | Priority |
+| --- | --- | --- |
+| `print(t, rows = 200)` | More or fewer rows than 50 | Must |
+| `to_markdown(t)`, `write_markdown(t, path)` | A table for a document, an issue or a chat message | Should |
+| `write_html(t, path)` | A table as a page, with numbers aligned | Should |
+| number display | How many decimal places a `float` column prints with | Should |
+| charts | Functions that write a chart from a table as an SVG or HTML file | Later |
+| a Jupyter kernel | biggo in notebooks | Later |
+
+### 10. Language
+
+Exists: functions, lambdas, `if`, `match` on literals, lists, records, maps, `import`, named
+arguments, type inference for lambdas.
+
+| Feature | What it does | Priority |
+| --- | --- | --- |
+| user-defined functions on columns | Today `derive(m = margin(price, cost))` is a compile error, because a column expression can use only operators and built-in functions. The function's body is inlined into the query plan at compile time, so it is as fast as writing the expression out | Must |
+| functions that take a table with "at least" the named columns | Today a parameter of type `table<{region: string, qty: int}>` rejects a table that has extra columns, so a pipeline cannot be written once and reused across tables | Must |
+| default values for parameters | `fn top(t: table<Sale>, n: int = 10)` | Should |
+| user-defined generic functions | `fn first<T>(xs: list<T>) -> T?` | Should |
+| named imports | `import "lib/geo.bgo" as geo`, then `geo.area(...)`. Today the names of every file share one namespace | Should |
+| a fuller `match` | Ranges of values, guards, and taking a record's fields apart. Today a pattern can only be a literal or `_` | Should |
+| `fail(message)` | Stops the program with a message of its own | Should |
+| documentation comments | A comment above a function, shown when the editor hovers over a call | Should |
+| a `decimal` with a chosen number of decimal places | Today it is fixed at 6 | Later |
+| user-defined aggregates | An aggregate written in biggo | Later |
+| a `pivot` that finds its column values at run time | For the REPL, where the result is printed at once and not passed on. In a program the values still have to be listed, by principle 1 | Later |
+
+### 11. Tooling
+
+Exists: `run` `repl` `check` `explain` `test` `fmt` `build` `lsp` `parse`, and a VS Code extension
+with a grammar.
+
+| Feature | What it does | Priority |
+| --- | --- | --- |
+| CI on GitHub Actions | `cargo test`, `cargo clippy` and `cargo fmt --check` on Linux, macOS and Windows for every push and pull request, and fixes for what differs between systems | Must |
+| prebuilt binaries | In GitHub Releases for macOS (arm64, x86_64), Linux (x86_64, arm64) and Windows (x86_64), with an install script and a Homebrew formula | Must |
+| the VS Code extension, verified | Tried in VS Code, fixed, and published to the Marketplace and Open VSX | Must |
+| language server: autocomplete | Names of functions and variables, and the column names available at that point in a pipeline, which the type checker already knows | Must |
+| REPL: line editing | Arrow keys and earlier input | Must |
+| `biggo help substring` | The reference entry of a built-in function in the terminal, and `:help` in the REPL | Should |
+| `biggo run -e '...'` | A program given on the command line or on standard input, for one-off questions | Should |
+| language server: more | Go to definition, rename, the arguments of the function being typed, the outline of a file, and the type of the table between the stages of a pipeline | Should |
+| REPL: `:type x`, `:schema t` | The type of a value and the columns of a table without printing them | Should |
+| `biggo test` | Tests chosen by name, several files at once, and the time each took | Should |
+| `biggo explain --timings` | Runs the query and shows the rows and the time of each operator | Should |
+| `--threads n` and a memory limit | As options, beside the `RAYON_NUM_THREADS` variable | Should |
+| `biggo fmt -` | Formats standard input, which editors other than VS Code use | Should |
+| Neovim and Helix | The settings in [docs/07-tools.md](docs/07-tools.md) tried and made to work | Should |
+| documentation: a cookbook | "How do I ..." recipes, and tables that put SQL and pandas beside the biggo for the same thing | Should |
+| a changelog, a contributing guide, issue templates | What changed in each release, and how to take part | Should |
+| a web playground | The language compiled to WebAssembly, to try it without installing | Later |
+
+### 12. Engine
 
 | Work | Today (5 million rows, M1 Pro) | Target |
 | --- | --- | --- |
@@ -142,6 +404,7 @@ when the data is larger than memory.
 | JSON: biggo's own reader in place of Arrow's general one | 2.2 times slower than DuckDB | Within 1.5 times |
 | VM: make function and lambda calls cheaper | 1.0 to 1.5 times slower than CPython | Not slower than CPython on any of the three benchmark programs |
 
+- [ ] `sort` followed by `take`: keep only the best rows instead of sorting the whole table
 - [ ] `join`: build the hash table in parallel, and pick the smaller side as the build side
       automatically (today it is built on one thread, and the author has to put the small table
       on the right)
@@ -151,63 +414,22 @@ when the data is larger than memory.
       limit, and a setting for the memory limit
 - [ ] A table that is used more than once reads its file once, automatically (today you have to
       call `collect` yourself)
+- [ ] Files in another encoding than UTF-8 converted in pieces on all cores, instead of whole on
+      one
 - [ ] SQLite: read in parallel by splitting the rowid range
 - [ ] Wider benchmarks: the TPC-H queries, data larger than RAM, measurements on Linux, and a run
       in CI to catch speed regressions
 
-Everything in this release has to keep principle 2. Each fast path gets a test that confirms it
-gives the same result as the plain path for every value, as the parallel sort and the VM's
-scalar functions already have.
+Everything here has to keep principle 2. Each fast path gets a test that confirms it gives the
+same result as the plain path for every value, as the parallel sort and the VM's scalar functions
+already have.
 
-**Done when:** the numbers in the table reach their targets when measured with `bench/run.py`
-and `bench/compare.py`, and a query that sorts data twice the size of RAM runs to the end.
-
-## 0.5: A language with more reuse
-
-**Goal:** move repeated logic into functions and imported files, without losing type checking
-and without getting slower.
-
-- [ ] **User-defined functions on columns.** Today `derive(m = margin(price, cost))` is a compile
-      error, because a column expression can use only operators and built-in functions. The plan
-      is to inline the function's body into the query plan at compile time, so it is as fast as
-      writing the expression out.
-- [ ] **Functions that take a table with "at least" the named columns.** Today a parameter of
-      type `table<{region: string, qty: int}>` rejects a table that has extra columns, so you
-      cannot write a pipeline once and reuse it across tables.
-- [ ] User-defined generic functions, such as `fn first<T>(xs: list<T>) -> T?`
-- [ ] Named imports: `import "lib/geo.bgo" as geo`, then `geo.area(...)` (today the names of
-      every file share one namespace)
-- [ ] A fuller `match`: ranges of values, guards, and taking a record's fields apart (today a
-      pattern can only be a literal or `_`)
-- [ ] String interpolation
-- [ ] Time zones for `datetime`, and a `decimal` with a chosen number of decimal places (today it
-      is fixed at 6)
-- [ ] User-defined aggregates
-- [ ] A `pivot` that finds the column values at run time, for the REPL, where the result is
-      printed at once and not passed on (in a program the values still have to be listed, by
-      principle 1)
-
-**Done when:** the documentation examples that repeat one expression in several places can be
-rewritten with a function, and the existing benchmarks are no slower.
-
-## Tooling (alongside every release)
-
-- [ ] Language server: autocomplete (including the column names available at that point in a
-      pipeline, which the type checker already knows), go to definition, rename, and showing the
-      type of the table between the stages of a pipeline
-- [ ] REPL: line editing with the arrow keys, and recalling earlier input
-- [ ] `biggo test`: choose tests by name, and run several files at once
-- [ ] Charts: functions that write a chart from a table as an SVG or HTML file
-- [ ] A Jupyter kernel, to use biggo in notebooks
-- [ ] A web playground (compiled to WebAssembly), to try the language without installing it
-
-## 1.0: Stable
-
-**Goal:** use biggo for routine work without worrying that the next version breaks existing
-programs.
+### 13. Stability
 
 - [ ] Freeze the language: a program that passes `biggo check` in 1.0 must pass, and give the
       same result, in every 1.x release
+- [ ] A rule for adding built-in functions after 1.0. Today a new built-in takes its name away
+      from every program that used it for a function of its own
 - [ ] A deprecation policy: anything to be removed gets a warning at least one release ahead
 - [ ] Fuzzing of the lexer, the parser and the type checker, and comparing the results of
       randomly generated queries with DuckDB, to find wrong results
@@ -226,6 +448,7 @@ be met with what exists.
   and parallel execution simple.
 - **A JIT for the VM.** Heavy work belongs in tables, which the engine already runs fast. The VM
   is there to put pipelines together.
+- **Random numbers without a seed.** They would break principle 2. `sample` takes a seed.
 - **Being a general-purpose language**, for writing web servers or programs with a user
   interface, for example.
 
