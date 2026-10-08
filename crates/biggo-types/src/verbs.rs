@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use biggo_plan::{
     self as plan, AggCall, AggFn, ColType, CsvOptions, DataType, Field, Format, JoinColumn,
-    JoinKind, Scalar, ScalarFn, Schema, SortKey, TableOp, WindowCall, WindowFn, text,
+    JoinKind, Scalar, ScalarFn, Schema, SortKey, TableOp, WindowCall, WindowFn, dates, text,
 };
 use biggo_syntax::Span;
 use biggo_syntax::ast::{self, BinaryOp, Date, ExprId};
@@ -32,7 +32,7 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 53] = [
+const VERBS: [&str; 55] = [
     "print",
     "read_csv",
     "read_parquet",
@@ -69,6 +69,8 @@ const VERBS: [&str; 53] = [
     "between",
     "clamp",
     "pi",
+    "today",
+    "now",
     "where",
     "select",
     "drop",
@@ -600,6 +602,11 @@ impl Cx<'_> {
                             ScalarFn::Round | ScalarFn::Trunc => &[(1, "the number of digits")],
                             ScalarFn::RegexMatch | ScalarFn::RegexReplace => &[(1, "the pattern")],
                             ScalarFn::RegexExtract => &[(1, "the pattern"), (2, "the group")],
+                            ScalarFn::FormatDate
+                            | ScalarFn::ParseDate
+                            | ScalarFn::ParseDateTime
+                            | ScalarFn::TryParseDate
+                            | ScalarFn::TryParseDateTime => &[(1, "the pattern"), (2, "the era")],
                             _ => &[],
                         };
                         for (index, what) in fixed {
@@ -2310,7 +2317,28 @@ impl Cx<'_> {
             Int,
         }
         let name = call.name;
-        if !self.all_positional(call, call.args) {
+        // The functions that write and read dates take the era of their years by name.
+        let dated = matches!(
+            func,
+            ScalarFn::FormatDate
+                | ScalarFn::ParseDate
+                | ScalarFn::ParseDateTime
+                | ScalarFn::TryParseDate
+                | ScalarFn::TryParseDateTime
+        );
+        let era = call
+            .args
+            .last()
+            .filter(|arg| dated && arg.name.is_some_and(|name| &*self.text(name.name) == "era"));
+        let positional = &call.args[..call.args.len() - usize::from(era.is_some())];
+        if dated && let Some(other) = positional.iter().find_map(|arg| arg.name) {
+            let message = format!(
+                "`{name}` has no argument `{}`; the one it takes by name is `era`",
+                self.text(other.name)
+            );
+            return self.error(other.span, message);
+        }
+        if !self.all_positional(call, positional) {
             return Expr::error(call.span);
         }
         let mut args: Vec<Expr> = call.args.iter().map(|arg| self.expr(arg.value)).collect();
@@ -2362,6 +2390,47 @@ impl Cx<'_> {
             ScalarFn::Greatest | ScalarFn::Least | ScalarFn::NullIf => {
                 unreachable!("checked above")
             }
+            ScalarFn::Weekday
+            | ScalarFn::Week
+            | ScalarFn::Quarter
+            | ScalarFn::DayOfYear
+            | ScalarFn::BuddhistYear
+            | ScalarFn::StartOfWeek
+            | ScalarFn::StartOfMonth
+            | ScalarFn::StartOfQuarter
+            | ScalarFn::StartOfYear
+            | ScalarFn::EndOfMonth
+            | ScalarFn::MonthName
+            | ScalarFn::DayName
+            | ScalarFn::IsWeekend => &[Want::Day],
+            ScalarFn::AddDays | ScalarFn::AddMonths | ScalarFn::AddYears | ScalarFn::FiscalYear => {
+                &[Want::Day, Want::Int]
+            }
+            ScalarFn::DaysBetween | ScalarFn::MonthsBetween | ScalarFn::YearsBetween => {
+                &[Want::Day, Want::Day]
+            }
+            ScalarFn::TotalDays | ScalarFn::TotalHours | ScalarFn::TotalMinutes => {
+                &[Want::Duration]
+            }
+            ScalarFn::MakeDate => &[Want::Int, Want::Int, Want::Int],
+            ScalarFn::MakeDateTime => &[Want::Int; 6],
+            ScalarFn::FormatDate if era.is_some() => &[Want::Day, Want::Str, Want::Str],
+            ScalarFn::FormatDate => &[Want::Day, Want::Str],
+            ScalarFn::ParseDate
+            | ScalarFn::ParseDateTime
+            | ScalarFn::TryParseDate
+            | ScalarFn::TryParseDateTime
+                if era.is_some() =>
+            {
+                &[Want::Str, Want::Str, Want::Str]
+            }
+            ScalarFn::ParseDate
+            | ScalarFn::ParseDateTime
+            | ScalarFn::TryParseDate
+            | ScalarFn::TryParseDateTime => &[Want::Str, Want::Str],
+            ScalarFn::TimeBucket => &[Want::Moment, Want::Duration],
+            ScalarFn::ToUnix => &[Want::Moment],
+            ScalarFn::FromUnix => &[Want::Amount],
             ScalarFn::Abs => &[Want::Number],
             ScalarFn::Round if args.len() == 2 => &[Want::Fraction, Want::Count],
             ScalarFn::Round => &[Want::Fraction],
@@ -2396,6 +2465,14 @@ impl Cx<'_> {
                 | ScalarFn::PadRight
                 | ScalarFn::RegexExtract => "2 or 3 arguments".to_string(),
                 ScalarFn::Round | ScalarFn::Trunc => "1 or 2 arguments".to_string(),
+                _ if dated => {
+                    let what = if func == ScalarFn::FormatDate {
+                        "a date"
+                    } else {
+                        "a string"
+                    };
+                    format!("{what} and a pattern, and can take `era` by name")
+                }
                 _ => format!("{} argument{plural}", wants.len()),
             };
             return self.error(call.span, format!("`{name}` takes {count}"));
@@ -2469,6 +2546,22 @@ impl Cx<'_> {
             }
             nullable |= ty.nullable;
         }
+        // A date pattern that is written out is checked now, with its era.
+        if dated && let ExprKind::Str(pattern) = &args[1].kind {
+            let era = match args.get(2).map(|era| (&era.kind, era.span)) {
+                Some((ExprKind::Str(era), span)) => match dates::Era::named(era) {
+                    Ok(era) => Some(era),
+                    Err(message) => return self.error(span, message),
+                },
+                Some(_) => None,
+                None => Some(dates::Era::Common),
+            };
+            if let Some(era) = era
+                && let Err(message) = dates::Pattern::new(pattern, era)
+            {
+                return self.error(args[1].span, message);
+            }
+        }
         // A pattern that is written out is checked now, and so is the group asked of it.
         let regex = matches!(
             func,
@@ -2503,9 +2596,16 @@ impl Cx<'_> {
             | ScalarFn::ToBool
             | ScalarFn::TryToBool
             | ScalarFn::IsNan
-            | ScalarFn::IsFinite => Bool,
+            | ScalarFn::IsFinite
+            | ScalarFn::IsWeekend => Bool,
             // A decimal stays exact when rounded.
-            ScalarFn::Abs | ScalarFn::Round | ScalarFn::Trunc | ScalarFn::Sign => first,
+            ScalarFn::Abs
+            | ScalarFn::Round
+            | ScalarFn::Trunc
+            | ScalarFn::Sign
+            | ScalarFn::AddDays
+            | ScalarFn::AddMonths
+            | ScalarFn::AddYears => first,
             ScalarFn::Floor
             | ScalarFn::Ceil
             | ScalarFn::Sqrt
@@ -2527,7 +2627,10 @@ impl Cx<'_> {
             | ScalarFn::Atan
             | ScalarFn::Degrees
             | ScalarFn::Radians
-            | ScalarFn::ParseNumber => Float,
+            | ScalarFn::ParseNumber
+            | ScalarFn::TotalDays
+            | ScalarFn::TotalHours
+            | ScalarFn::TotalMinutes => Float,
             ScalarFn::Lower
             | ScalarFn::Upper
             | ScalarFn::Trim
@@ -2538,7 +2641,10 @@ impl Cx<'_> {
             | ScalarFn::PadLeft
             | ScalarFn::PadRight
             | ScalarFn::RegexExtract
-            | ScalarFn::RegexReplace => Str,
+            | ScalarFn::RegexReplace
+            | ScalarFn::FormatDate
+            | ScalarFn::MonthName
+            | ScalarFn::DayName => Str,
             ScalarFn::Length
             | ScalarFn::IndexOf
             | ScalarFn::Year
@@ -2549,9 +2655,34 @@ impl Cx<'_> {
             | ScalarFn::Second
             | ScalarFn::ToInt
             | ScalarFn::TryToInt
-            | ScalarFn::Div => Int,
-            ScalarFn::ToDate | ScalarFn::TryToDate => Date,
-            ScalarFn::ToDateTime | ScalarFn::TryToDateTime => DateTime,
+            | ScalarFn::Div
+            | ScalarFn::Weekday
+            | ScalarFn::Week
+            | ScalarFn::Quarter
+            | ScalarFn::DayOfYear
+            | ScalarFn::BuddhistYear
+            | ScalarFn::DaysBetween
+            | ScalarFn::MonthsBetween
+            | ScalarFn::YearsBetween
+            | ScalarFn::ToUnix
+            | ScalarFn::FiscalYear => Int,
+            ScalarFn::ToDate
+            | ScalarFn::TryToDate
+            | ScalarFn::StartOfWeek
+            | ScalarFn::StartOfMonth
+            | ScalarFn::StartOfQuarter
+            | ScalarFn::StartOfYear
+            | ScalarFn::EndOfMonth
+            | ScalarFn::MakeDate
+            | ScalarFn::ParseDate
+            | ScalarFn::TryParseDate => Date,
+            ScalarFn::ToDateTime
+            | ScalarFn::TryToDateTime
+            | ScalarFn::MakeDateTime
+            | ScalarFn::ParseDateTime
+            | ScalarFn::TryParseDateTime
+            | ScalarFn::TimeBucket
+            | ScalarFn::FromUnix => DateTime,
             ScalarFn::ToDecimal | ScalarFn::TryToDecimal => Decimal,
             ScalarFn::Greatest | ScalarFn::Least | ScalarFn::NullIf => {
                 unreachable!("checked above")
@@ -2572,6 +2703,8 @@ impl Cx<'_> {
                 | ScalarFn::TryToDateTime
                 | ScalarFn::TryToBool
                 | ScalarFn::ParseNumber
+                | ScalarFn::TryParseDate
+                | ScalarFn::TryParseDateTime
         );
         let nullable = (nullable || partial) && func != ScalarFn::IsNull;
         let ty = Type::from_col(ColType::new(dtype, nullable));

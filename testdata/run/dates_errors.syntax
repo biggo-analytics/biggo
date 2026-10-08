@@ -1,0 +1,6 @@
+(call print (call add_days @9999-12-31 (- 1)))
+(call print (call try_parse_date "2026-02-30" "%Y-%m-%d"))
+(call print
+  (|>
+    (call from_rows (list (record (y: 2026) (m: 2) (d: 30))))
+    (call select (made: (call make_date y m d)))))

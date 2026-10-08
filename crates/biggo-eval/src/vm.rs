@@ -101,6 +101,9 @@ pub struct Vm<W> {
     own_scalars: bool,
     /// What `args()` gives: the arguments the program was started with.
     args: Rc<[Value]>,
+    /// What `now()` gives, in microseconds since 1970-01-01T00:00:00: the moment the program
+    /// first asked. It does not move after that, so a program sees one "now" all through.
+    started: Option<i64>,
 }
 
 impl<W: Write> Vm<W> {
@@ -116,6 +119,7 @@ impl<W: Write> Vm<W> {
             explain: false,
             own_scalars: true,
             args: Rc::new([]),
+            started: None,
         }
     }
 
@@ -131,6 +135,32 @@ impl<W: Write> Vm<W> {
 
     pub fn base_dir(&self) -> &Path {
         &self.base_dir
+    }
+
+    /// The moment the program takes for "now": the time on the clock of this machine, in its
+    /// own time zone, when the program first asks. The variable `BIGGO_NOW` gives another,
+    /// for a report that is to come out the same on a later day.
+    fn clock(&mut self) -> std::result::Result<i64, String> {
+        if let Some(started) = self.started {
+            return Ok(started);
+        }
+        let started = match std::env::var("BIGGO_NOW") {
+            Ok(text) => {
+                let day = biggo_plan::Date::parse(&text)
+                    .map(|date| i64::from(date.to_days()) * biggo_plan::dates::DAY);
+                scalar::parse_datetime(&text).or(day).ok_or_else(|| {
+                    format!(
+                        "BIGGO_NOW is {text:?}; it has to be a datetime such as 2026-01-31T18:30:00"
+                    )
+                })?
+            }
+            Err(_) => chrono::Local::now()
+                .naive_local()
+                .and_utc()
+                .timestamp_micros(),
+        };
+        self.started = Some(started);
+        Ok(started)
     }
 
     /// Sets the arguments that the program sees as `args()`.
@@ -892,6 +922,11 @@ impl<W: Write> Vm<W> {
                 Ok(Value::Map(Rc::new(map)))
             }
             Builtin::Args => Ok(Value::List(self.args.clone())),
+            Builtin::Today | Builtin::Now => match self.clock() {
+                Ok(now) if builtin == Builtin::Now => Ok(Value::DateTime(now)),
+                Ok(now) => Ok(Value::Date(now.div_euclid(biggo_plan::dates::DAY) as i32)),
+                Err(message) => self.fail(frame, message),
+            },
             Builtin::Split => {
                 let (whole, separator) = (text(0), text(1));
                 let pieces = biggo_plan::text::split(&whole, &separator).into_iter();

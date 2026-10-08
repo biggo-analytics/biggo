@@ -189,6 +189,9 @@ pub enum Builtin {
     Args,
     /// The pieces of a string between its separators, as a list.
     Split,
+    /// The day the program started, and the moment it did.
+    Today,
+    Now,
 }
 
 impl Expr {

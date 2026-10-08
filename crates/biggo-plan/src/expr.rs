@@ -258,6 +258,47 @@ scalar_fns! {
     Radians => "radians",
     /// A number as people write it, with separators of thousands or a percent sign.
     ParseNumber => "parse_number",
+    /// 1 for Monday to 7 for Sunday.
+    Weekday => "weekday",
+    /// The number of the ISO week.
+    Week => "week",
+    Quarter => "quarter",
+    DayOfYear => "day_of_year",
+    StartOfWeek => "start_of_week",
+    StartOfMonth => "start_of_month",
+    StartOfQuarter => "start_of_quarter",
+    StartOfYear => "start_of_year",
+    EndOfMonth => "end_of_month",
+    AddDays => "add_days",
+    AddMonths => "add_months",
+    AddYears => "add_years",
+    /// Whole units from the first moment to the second.
+    DaysBetween => "days_between",
+    MonthsBetween => "months_between",
+    YearsBetween => "years_between",
+    TotalDays => "total_days",
+    TotalHours => "total_hours",
+    TotalMinutes => "total_minutes",
+    MakeDate => "make_date",
+    MakeDateTime => "make_datetime",
+    /// A date as text in a pattern such as `%d/%m/%Y`, and the other way round.
+    FormatDate => "format_date",
+    ParseDate => "parse_date",
+    ParseDateTime => "parse_datetime",
+    TryParseDate => "try_parse_date",
+    TryParseDateTime => "try_parse_datetime",
+    /// The start of the interval of a given length that a moment falls in.
+    TimeBucket => "time_bucket",
+    MonthName => "month_name",
+    DayName => "day_name",
+    IsWeekend => "is_weekend",
+    /// Seconds since 1970-01-01T00:00:00, and the moment that many seconds after it.
+    ToUnix => "to_unix",
+    FromUnix => "from_unix",
+    /// The fiscal year of a date, given the month that fiscal years start in.
+    FiscalYear => "fiscal_year",
+    /// The year of the Buddhist era.
+    BuddhistYear => "buddhist_year",
 }
 
 impl ScalarFn {

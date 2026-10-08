@@ -482,3 +482,32 @@ fn a_program_sees_its_arguments() {
     assert_eq!(String::from_utf8(output.stdout).unwrap(), shown);
     assert_eq!(output.status.code(), Some(0));
 }
+
+#[test]
+fn the_clock_can_be_set_for_a_run() {
+    let dir = scratch("clock");
+    let program = dir.join("clock.bgo");
+    std::fs::write(&program, "print(today(), now(), weekday(today()))\n").unwrap();
+    let run = |now: &str| {
+        let output = Command::new(env!("CARGO_BIN_EXE_biggo"))
+            .args(["run", program.to_str().unwrap()])
+            .env("BIGGO_NOW", now)
+            .output()
+            .unwrap();
+        (
+            String::from_utf8(output.stdout).unwrap(),
+            String::from_utf8(output.stderr).unwrap(),
+        )
+    };
+    assert_eq!(
+        run("2026-01-31T18:30:00").0,
+        "2026-01-31 2026-01-31T18:30:00 6\n"
+    );
+    assert_eq!(run("2026-02-02").0, "2026-02-02 2026-02-02T00:00:00 1\n");
+    let (stdout, stderr) = run("tomorrow");
+    assert_eq!(stdout, "");
+    assert!(
+        stderr.starts_with("error: BIGGO_NOW is \"tomorrow\"; it has to be a datetime"),
+        "{stderr}"
+    );
+}

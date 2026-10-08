@@ -74,6 +74,13 @@ number of cores):
 RAYON_NUM_THREADS=2 biggo run report.bgo
 ```
 
+`today()` and `now()` read the clock of the machine. To run a program as of another moment, for a
+report that should come out the same on a later day, set `BIGGO_NOW`:
+
+```sh
+BIGGO_NOW=2026-01-31T18:30:00 biggo run report.bgo
+```
+
 ## biggo check
 
 ```sh

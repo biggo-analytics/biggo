@@ -1,0 +1,76 @@
+// Calendar functions, on single values and on columns.
+
+let friday = @2026-10-09
+let moment = @2026-10-09T14:44:59
+
+// The clock: one moment for the whole run.
+print(today() == to_date(now()), now() == now(), years_between(today(), today()))
+
+print(weekday(friday), week(friday), quarter(friday), day_of_year(friday), weekday(moment))
+print(month_name(friday), day_name(friday), is_weekend(friday), is_weekend(@2026-10-10), buddhist_year(friday))
+print(week(@2027-01-01), week(@2027-01-04), weekday(@1969-12-29), day_of_year(@2024-12-31))
+print(start_of_week(friday), start_of_month(friday), start_of_quarter(moment), start_of_year(friday))
+print(end_of_month(@2024-02-10), end_of_month(@2026-02-10), end_of_month(@2026-12-31))
+
+// Adding to a date gives a date; a datetime keeps its time of friday.
+print(add_days(friday, 30), add_days(friday, -9), add_days(moment, 1))
+print(add_months(@2026-01-31, 1), add_months(@2024-01-31, 1), add_months(@2026-03-31, -1), add_months(moment, 12))
+print(add_years(@2024-02-29, 1), add_years(@2024-02-29, 4), add_years(friday, -26))
+
+print(days_between(@2026-01-01, friday), days_between(friday, @2026-01-01), days_between(@2026-01-01T12:00, @2026-01-03T11:00))
+print(months_between(@2026-01-15, @2026-02-15), months_between(@2026-01-15, @2026-02-14), months_between(@2026-01-31, @2026-02-28))
+print(years_between(@1990-05-20, friday), years_between(@2000-02-29, @2026-02-28), years_between(@2000-02-29, @2026-02-27))
+print(total_days(hours(36)), total_hours(minutes(90)), total_minutes(seconds(90)), total_days(friday - @2026-10-01))
+
+print(make_date(2024, 2, 29), make_datetime(2026, 1, 2, 3, 4, 5))
+print(format_date(friday, "%d/%m/%Y"), format_date(moment, "%Y%m%d %H:%M:%S"), format_date(friday, "%A %-d %B %Y"))
+print(format_date(friday, "%d/%m/%Y", era = "buddhist"), format_date(friday, "%d/%m/%y", era = "buddhist"))
+print(parse_date("09/10/2026", "%d/%m/%Y"), parse_date("9 Oct 2026", "%d %b %Y"), parse_datetime("20260105 10:30", "%Y%m%d %H:%M"))
+print(parse_date("29/02/2567", "%d/%m/%Y", era = "buddhist"), parse_datetime("05/01/2569", "%d/%m/%Y", era = "buddhist"))
+print(try_parse_date("31/02/2026", "%d/%m/%Y"), try_parse_date("29/02/2568", "%d/%m/%Y", era = "buddhist"), try_parse_datetime("x", "%Y"))
+
+print(time_bucket(moment, minutes(15)), time_bucket(moment, hours(1)), time_bucket(@1969-12-31T23:59, hours(6)))
+print(to_unix(moment), to_unix(@1970-01-01), from_unix(86400), from_unix(1.5), from_unix(-1))
+print(fiscal_year(friday, 10), fiscal_year(@2026-09-30, 10), fiscal_year(friday, 4), fiscal_year(friday, 1))
+
+// A null argument gives null.
+let none: date? = null
+let blank: string? = null
+print(weekday(none), add_months(none, 1), days_between(none, friday), format_date(none, "%Y"), parse_date(blank, "%Y"))
+print(format_date(friday, blank), make_date(2026, 1, to_int(blank)))
+
+// On columns.
+let rows = from_rows([
+  { day: @2026-01-31, text: "31/01/2569", at: @2026-01-31T23:59:59 },
+  { day: @2026-03-01, text: "bad", at: @2026-03-01T00:00:00 },
+  { day: null, text: null, at: null },
+])
+rows
+  |> select(
+    day,
+    weekday = weekday(day),
+    quarter = quarter(day),
+    next = add_months(day, 1),
+    last = end_of_month(day),
+    left = days_between(day, @2026-12-31),
+    shown = format_date(day, "%d %b %y"),
+  )
+  |> print()
+rows
+  |> select(
+    text,
+    read = try_parse_date(text, "%d/%m/%Y", era = "buddhist"),
+    slot = time_bucket(at, hours(6)),
+    monday = start_of_week(at),
+    later = add_days(at, 1),
+    name = day_name(day),
+  )
+  |> print()
+print(rows |> group(month = start_of_month(day)) |> agg(rows = count()))
+print(rows |> where(weekday(day) >= 6) |> count())
+// The pattern can be a value that the program works out.
+let pattern = "%Y" + "/" + "%m"
+print(rows |> select(month = format_date(day, pattern)))
+
+// A text that does not fit the pattern stops the program, unless `try_` is asked.
+print(rows |> select(read = parse_date(text, "%d/%m/%Y", era = "buddhist")))

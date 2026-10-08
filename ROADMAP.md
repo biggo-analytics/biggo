@@ -157,29 +157,24 @@ functions, `to_int` `to_float` `to_decimal` `to_string` `to_date` `to_datetime` 
 ### 2. Dates and times
 
 Exists: date and datetime literals, `year` `month` `day` `hour` `minute` `second`, `to_date`
-`to_datetime`, `days` `hours` `minutes` `seconds`, `total_seconds`, adding and subtracting dates
-and durations.
+`to_datetime`, `days` `hours` `minutes` `seconds`, `total_seconds` `total_minutes` `total_hours`
+`total_days`, adding and subtracting dates and durations, `today` `now`, `weekday` `week` `quarter`
+`day_of_year` `month_name` `day_name` `is_weekend`, `start_of_week` `start_of_month`
+`start_of_quarter` `start_of_year` `end_of_month`, `add_days` `add_months` `add_years`,
+`days_between` `months_between` `years_between`, `make_date` `make_datetime`, `format_date`
+`parse_date` `parse_datetime` and their `try_` forms (with Buddhist-era years), `time_bucket`,
+`to_unix` `from_unix`, `fiscal_year`, `buddhist_year`.
 
 | Feature | Result | What it does | Priority |
 | --- | --- | --- | --- |
-| `today()`, `now()` | `date`, `datetime` | The day and the moment the program started. The value is the same all through one run, so a query still gives one answer | Must |
-| `weekday(d)` | `int` | 1 for Monday to 7 for Sunday | Must |
-| `week(d)`, `quarter(d)`, `day_of_year(d)` | `int` | The ISO week number, the quarter from 1 to 4, the day from 1 to 366 | Must |
-| `start_of_week(d)`, `start_of_month(d)`, `start_of_quarter(d)`, `start_of_year(d)`, `end_of_month(d)` | `date` | The first or last day of the period, for grouping by period | Must |
-| `add_days(d, n)`, `add_months(d, n)`, `add_years(d, n)` | type of `d` | Calendar arithmetic. A day that the target month does not have becomes its last day: 31 January plus 1 month is 28 or 29 February | Must |
-| `days_between(a, b)`, `months_between(a, b)`, `years_between(a, b)` | `int` | Whole units from `a` to `b`. `years_between(born, today())` is an age | Must |
-| `total_days(x)`, `total_hours(x)`, `total_minutes(x)` | `float` | The length of a duration, beside `total_seconds` | Must |
-| `make_date(year, month, day)`, `make_datetime(year, month, day, hour, minute, second)` | `date`, `datetime` | A date from its parts, when they are in separate columns | Must |
-| `format_date(d, pattern)` | `string` | A date as text: `format_date(d, "%d/%m/%Y")` | Must |
-| `parse_date(s, pattern)`, `parse_datetime(s, pattern)` | `date`, `datetime` | Reads dates that are not written the ISO way. `try_parse_date` and `try_parse_datetime` give null for text that does not fit | Must |
-| `time_bucket(t, size)` | `datetime` | The start of the interval of that length that `t` falls in: `time_bucket(t, minutes(15))` | Should |
-| Buddhist-era years: `era = "buddhist"` on parsing and formatting, and `buddhist_year(d)` | | Thai data writes 2569 for 2026. Subtracting 543 after parsing is not enough: 29 February 2567 is a real day, but the year 2567 has no 29 February | Should |
-| `fiscal_year(d, first_month)` | `int` | The fiscal year a date belongs to, for years that start in October or April | Should |
-| `month_name(d)`, `day_name(d)` | `string` | `"January"`, `"Monday"` | Should |
-| `is_weekend(d)` | `bool` | Saturday or Sunday | Should |
-| `to_unix(t)`, `from_unix(seconds)` | `int`, `datetime` | Seconds since 1970, which logs and APIs use | Should |
 | time zones: `to_zone(t, "Asia/Bangkok")`, zones kept when reading | | Today a zone in a file is converted to UTC and dropped | Later |
 | `add_business_days(d, n)`, `business_days_between(a, b)`, with a table of holidays | | Working-day arithmetic | Later |
+
+- [x] `today` and `now`, the parts of a date (`weekday`, `week`, `quarter`, `day_of_year`, names),
+      the first and last days of periods, and `time_bucket`
+- [x] Calendar arithmetic: `add_days`, `add_months`, `add_years`, and the `_between` functions
+- [x] `make_date`, `make_datetime`, `format_date`, `parse_date`, `parse_datetime` and the `try_`
+      forms, with `era = "buddhist"` for Thai dates; `fiscal_year`, `to_unix`, `from_unix`
 
 ### 3. Strings and formatting
 

@@ -30,6 +30,8 @@ impl Cx<'_> {
             "between" => self.builtin_between(call),
             "clamp" => self.builtin_clamp(call),
             "pi" => self.builtin_pi(call),
+            "today" => self.builtin_clock(call, Builtin::Today, Type::Date),
+            "now" => self.builtin_clock(call, Builtin::Now, Type::DateTime),
             _ => return None,
         };
         Some(checked.unwrap_or_else(|| Expr::error(call.span)))
@@ -205,6 +207,12 @@ impl Cx<'_> {
         let [] = self.exactly(call, "no arguments")?;
         let kind = ExprKind::Float(std::f64::consts::PI);
         Some(Expr::new(kind, Type::Float, call.span))
+    }
+
+    /// `today()` and `now()`: the day and the moment the program started.
+    fn builtin_clock(&mut self, call: &Call, builtin: Builtin, ty: Type) -> Option<Expr> {
+        let [] = self.exactly(call, "no arguments")?;
+        self.builtin(call, builtin, Vec::new(), ty)
     }
 
     fn builtin_len(&mut self, call: &Call) -> Option<Expr> {

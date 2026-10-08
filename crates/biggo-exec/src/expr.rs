@@ -577,6 +577,42 @@ fn call(func: ScalarFn, mut args: Vec<Col>, dtype: DataType, rows: usize) -> Res
             args.insert(0, first);
             crate::text::call(func, &args, dtype, rows)
         }
+        ScalarFn::Weekday
+        | ScalarFn::Week
+        | ScalarFn::Quarter
+        | ScalarFn::DayOfYear
+        | ScalarFn::StartOfWeek
+        | ScalarFn::StartOfMonth
+        | ScalarFn::StartOfQuarter
+        | ScalarFn::StartOfYear
+        | ScalarFn::EndOfMonth
+        | ScalarFn::AddDays
+        | ScalarFn::AddMonths
+        | ScalarFn::AddYears
+        | ScalarFn::DaysBetween
+        | ScalarFn::MonthsBetween
+        | ScalarFn::YearsBetween
+        | ScalarFn::TotalDays
+        | ScalarFn::TotalHours
+        | ScalarFn::TotalMinutes
+        | ScalarFn::MakeDate
+        | ScalarFn::MakeDateTime
+        | ScalarFn::FormatDate
+        | ScalarFn::ParseDate
+        | ScalarFn::ParseDateTime
+        | ScalarFn::TryParseDate
+        | ScalarFn::TryParseDateTime
+        | ScalarFn::TimeBucket
+        | ScalarFn::MonthName
+        | ScalarFn::DayName
+        | ScalarFn::IsWeekend
+        | ScalarFn::ToUnix
+        | ScalarFn::FromUnix
+        | ScalarFn::FiscalYear
+        | ScalarFn::BuddhistYear => {
+            args.insert(0, first);
+            crate::dates::call(func, &args, dtype, rows)
+        }
         _ => {
             args.insert(0, first);
             crate::math::call(func, &args, dtype, rows)

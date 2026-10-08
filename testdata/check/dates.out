@@ -1,0 +1,221 @@
+error: `today` takes no arguments
+ --> check/dates.bgo:5:1
+  |
+5 | today(1)
+  | ^^^^^^^^
+
+error: `now` takes no arguments
+ --> check/dates.bgo:6:1
+  |
+6 | now("x")
+  | ^^^^^^^^
+
+error: `weekday` expects a date or a datetime, found string
+ --> check/dates.bgo:7:9
+  |
+7 | weekday("monday")
+  |         ^^^^^^^^
+
+error: `weekday` expects a date or a datetime, found int
+ --> check/dates.bgo:8:9
+  |
+8 | weekday(1)
+  |         ^
+
+error: `quarter` takes 1 argument
+ --> check/dates.bgo:9:1
+  |
+9 | quarter()
+  | ^^^^^^^^^
+
+error: `start_of_month` expects a date or a datetime, found int
+  --> check/dates.bgo:10:16
+   |
+10 | start_of_month(5)
+   |                ^
+
+error: `add_days` expects an int, found float
+  --> check/dates.bgo:11:23
+   |
+11 | add_days(@2026-01-01, 1.5)
+   |                       ^^^
+
+error: `add_months` takes 2 arguments
+  --> check/dates.bgo:12:1
+   |
+12 | add_months(@2026-01-01)
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `add_years` expects a date or a datetime, found string
+  --> check/dates.bgo:13:11
+   |
+13 | add_years("2026", 1)
+   |           ^^^^^^
+
+error: `days_between` expects a date or a datetime, found int
+  --> check/dates.bgo:14:27
+   |
+14 | days_between(@2026-01-01, 5)
+   |                           ^
+
+error: `months_between` takes 2 arguments
+  --> check/dates.bgo:15:1
+   |
+15 | months_between(@2026-01-01)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `total_days` expects a duration, found int
+  --> check/dates.bgo:16:12
+   |
+16 | total_days(5)
+   |            ^
+
+error: `total_hours` expects a duration, found date
+  --> check/dates.bgo:17:13
+   |
+17 | total_hours(@2026-01-01)
+   |             ^^^^^^^^^^^
+
+error: `make_date` takes 3 arguments
+  --> check/dates.bgo:18:1
+   |
+18 | make_date(2026, 1)
+   | ^^^^^^^^^^^^^^^^^^
+
+error: `make_date` expects an int, found string
+  --> check/dates.bgo:19:17
+   |
+19 | make_date(2026, "1", 1)
+   |                 ^^^
+
+error: `make_datetime` takes 6 arguments
+  --> check/dates.bgo:20:1
+   |
+20 | make_datetime(2026, 1, 1)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `format_date` takes a date and a pattern, and can take `era` by name
+  --> check/dates.bgo:21:1
+   |
+21 | format_date(@2026-01-01)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `%Q` is not a date pattern; one looks like `%d/%m/%Y`
+  --> check/dates.bgo:22:26
+   |
+22 | format_date(@2026-01-01, "%Q")
+   |                          ^^^^
+
+error: `%Y %Z` asks for a part that a date does not have, such as a time zone
+  --> check/dates.bgo:23:26
+   |
+23 | format_date(@2026-01-01, "%Y %Z")
+   |                          ^^^^^^^
+
+error: `format_date` expects a date or a datetime, found string
+  --> check/dates.bgo:24:13
+   |
+24 | format_date("2026-01-01", "%Y")
+   |             ^^^^^^^^^^^^
+
+error: the era is "common" or "buddhist", not "be"
+  --> check/dates.bgo:25:38
+   |
+25 | format_date(@2026-01-01, "%Y", era = "be")
+   |                                      ^^^^
+
+error: `format_date` has no argument `calendar`; the one it takes by name is `era`
+  --> check/dates.bgo:26:32
+   |
+26 | format_date(@2026-01-01, "%Y", calendar = "buddhist")
+   |                                ^^^^^^^^
+
+error: `format_date` takes a date and a pattern, and can take `era` by name
+  --> check/dates.bgo:27:1
+   |
+27 | format_date(@2026-01-01, "%Y", "buddhist")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `parse_date` expects a string, found int
+  --> check/dates.bgo:28:20
+   |
+28 | parse_date("2026", 2026)
+   |                    ^^^^
+
+error: `parse_date` expects a string, found int
+  --> check/dates.bgo:29:12
+   |
+29 | parse_date(2026, "%Y")
+   |            ^^^^
+
+error: `parse_datetime` takes a string and a pattern, and can take `era` by name
+  --> check/dates.bgo:30:1
+   |
+30 | parse_datetime("2026")
+   | ^^^^^^^^^^^^^^^^^^^^^^
+
+error: `%` is not a date pattern; one looks like `%d/%m/%Y`
+  --> check/dates.bgo:31:24
+   |
+31 | try_parse_date("2026", "%")
+   |                        ^^^
+
+error: the pattern of `format_date` cannot depend on a column
+  --> check/dates.bgo:32:26
+   |
+32 | events |> derive(shown = format_date(day, text))
+   |                          ^^^^^^^^^^^^^^^^^^^^^^
+
+error: the era of `parse_date` cannot depend on a column
+  --> check/dates.bgo:33:25
+   |
+33 | events |> derive(read = parse_date(text, "%Y", era = text))
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `time_bucket` expects a duration, found int
+  --> check/dates.bgo:34:26
+   |
+34 | time_bucket(@2026-01-01, 15)
+   |                          ^^
+
+error: `time_bucket` expects a datetime, found string
+  --> check/dates.bgo:35:13
+   |
+35 | time_bucket("2026", minutes(15))
+   |             ^^^^^^
+
+error: `to_unix` expects a datetime, found int
+  --> check/dates.bgo:36:9
+   |
+36 | to_unix(5)
+   |         ^
+
+error: `from_unix` expects a number, found string
+  --> check/dates.bgo:37:11
+   |
+37 | from_unix("5")
+   |           ^^^
+
+error: `fiscal_year` takes 2 arguments
+  --> check/dates.bgo:38:1
+   |
+38 | fiscal_year(@2026-01-01)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `fiscal_year` expects an int, found string
+  --> check/dates.bgo:39:26
+   |
+39 | fiscal_year(@2026-01-01, "10")
+   |                          ^^^^
+
+error: `buddhist_year` expects a date or a datetime, found int
+  --> check/dates.bgo:40:15
+   |
+40 | buddhist_year(2569)
+   |               ^^^^
+
+error: `weekday` does not take named arguments
+  --> check/dates.bgo:41:22
+   |
+41 | weekday(@2026-01-01, era = "buddhist")
+   |                      ^^^

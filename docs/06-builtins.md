@@ -193,7 +193,29 @@ error: `([a-z]+-` is not a regular expression: unclosed group
 | `year(d)` `month(d)` `day(d)` | moment | `int` | Year, month (1–12), day of the month |
 | `hour(t)` `minute(t)` `second(t)` | moment | `int` | Hour (0–23), minute, second; for a `date` these are 0 |
 | `days(n)` `hours(n)` `minutes(n)` `seconds(n)` | `int` or `float` | `duration` | A span of time `n` units long |
-| `total_seconds(d)` | `duration` | `float` | Length in seconds |
+| `total_seconds(d)`, `total_minutes(d)`, `total_hours(d)`, `total_days(d)` | `duration` | `float` | Length in that unit |
+| `today()`, `now()` | | `date`, `datetime` | The day and the moment the program started |
+| `weekday(d)` | moment | `int` | 1 for Monday to 7 for Sunday |
+| `week(d)` | moment | `int` | The ISO week number: weeks start on Monday, and week 1 holds the year's first Thursday |
+| `quarter(d)`, `day_of_year(d)` | moment | `int` | The quarter (1–4), and the day of the year (1–366) |
+| `month_name(d)`, `day_name(d)` | moment | `string` | `"January"`, `"Monday"` |
+| `is_weekend(d)` | moment | `bool` | Saturday or Sunday |
+| `start_of_week(d)`, `start_of_month(d)`, `start_of_quarter(d)`, `start_of_year(d)` | moment | `date` | The first day of the period that `d` is in. A week starts on Monday |
+| `end_of_month(d)` | moment | `date` | The last day of the month |
+| `add_days(d, n)`, `add_months(d, n)`, `add_years(d, n)` | moment, `int` | type of `d` | `n` days, months or years later, or earlier when `n` is negative |
+| `days_between(a, b)`, `months_between(a, b)`, `years_between(a, b)` | two moments | `int` | The whole days, months or years from `a` to `b` |
+| `make_date(year, month, day)` | `int`s | `date` | A date from its parts |
+| `make_datetime(year, month, day, hour, minute, second)` | `int`s | `datetime` | A datetime from its parts |
+| `format_date(d, pattern)` | moment, `string` | `string` | A date or a datetime as text |
+| `parse_date(s, pattern)`, `parse_datetime(s, pattern)` | `string`s | `date`, `datetime` | Text in a pattern as a date or a datetime |
+| `try_parse_date(s, pattern)`, `try_parse_datetime(s, pattern)` | `string`s | `date?`, `datetime?` | The same, with null for text that does not fit |
+| `time_bucket(t, size)` | moment, `duration` | `datetime` | The start of the interval of length `size` that `t` falls in |
+| `to_unix(t)` | moment | `int` | Seconds since 1970-01-01T00:00:00 |
+| `from_unix(n)` | `int` or `float` | `datetime` | The moment `n` seconds after 1970-01-01T00:00:00 |
+| `fiscal_year(d, first_month)` | moment, `int` | `int` | The fiscal year that `d` belongs to |
+| `buddhist_year(d)` | moment | `int` | The year of the Buddhist era, 543 more than `year(d)` |
+
+A *moment* is a `date` or a `datetime`.
 
 ```biggo
 let t = @2026-12-25T18:30:45
@@ -207,6 +229,89 @@ print(t + days(7), t - @2026-01-01, total_seconds(t - @2026-12-25) / 3600)
 2d 00:00:00 01:30:00 01:30:00 00:00:00.25 86400.0
 2027-01-01T18:30:45 358d 18:30:45 18.5125
 ```
+
+Parts of the calendar, and periods:
+
+```biggo
+let day = @2026-10-09
+print(weekday(day), day_name(day), week(day), quarter(day), day_of_year(day), is_weekend(day))
+print(start_of_week(day), start_of_month(day), start_of_quarter(day), start_of_year(day), end_of_month(day))
+print(add_days(day, 30), add_months(@2026-01-31, 1), add_years(@2024-02-29, 1), add_months(@2026-01-31T09:30, 1))
+print(days_between(@2026-01-01, day), months_between(@2026-01-15, day), years_between(@1990-05-20, day))
+print(make_date(2026, 2, 28), time_bucket(@2026-10-09T14:44:59, minutes(15)), fiscal_year(day, 10))
+```
+
+```text output
+5 Friday 41 4 282 false
+2026-10-05 2026-10-01 2026-10-01 2026-01-01 2026-10-31
+2026-11-08 2026-02-28 2025-02-28 2026-02-28T09:30:00
+281 8 36
+2026-02-28 2026-10-09T14:30:00 2027
+```
+
+- `add_days`, `add_months` and `add_years` give a `date` for a `date`, and for a `datetime` a
+  `datetime` at the same time of day. (`d + days(1)` gives a `datetime` even for a `date`.)
+- A day that the new month does not have becomes that month's last day: one month after 31
+  January is 28 or 29 February, and one year after 29 February is 28 February.
+- The `_between` functions count whole units, so they round toward zero:
+  `months_between(@2026-01-15, @2026-02-14)` is 0. They are negative when `b` is before `a`.
+  `years_between(born, today())` is an age.
+- `time_bucket` counts intervals from 1970-01-01T00:00:00. Use it to group readings by the hour
+  or by the quarter of an hour: `group(slot = time_bucket(at, minutes(15)))`.
+- `fiscal_year(d, first_month)` names a fiscal year for the calendar year it ends in. With years
+  that start in October, `fiscal_year(@2026-10-09, 10)` is 2027.
+- `make_date` and `make_datetime` stop the program for parts that are no date, such as day 30 of
+  month 2. No date is earlier than the year 0 or later than the year 9999.
+- `today()` and `now()` read the clock of the machine, in its own time zone, the first time the
+  program asks, and give that same moment for the rest of the run. Set the environment variable
+  `BIGGO_NOW` to run a program as of another moment: `BIGGO_NOW=2026-01-31T18:30:00 biggo run report.bgo`.
+
+Dates as text, in other forms than `2026-10-09`:
+
+```biggo
+let day = @2026-10-09
+print(format_date(day, "%d/%m/%Y"), format_date(day, "%A %-d %B %Y"), format_date(@2026-10-09T14:05, "%H:%M on %d %b"))
+print(parse_date("09/10/2026", "%d/%m/%Y"), parse_datetime("20261009 1405", "%Y%m%d %H%M"))
+print(try_parse_date("31/02/2026", "%d/%m/%Y"), try_parse_date("9 Oct 2026", "%d %b %Y"))
+
+// Thai dates count years in the Buddhist era.
+print(format_date(day, "%d/%m/%Y", era = "buddhist"), parse_date("29/02/2567", "%d/%m/%Y", era = "buddhist"))
+```
+
+```text output
+09/10/2026 Friday 9 October 2026 14:05 on 09 Oct
+2026-10-09 2026-10-09T14:05:00
+null 2026-10-09
+09/10/2569 2024-02-29
+```
+
+A pattern is text in which each `%` code stands for a part of the date:
+
+| Code | Part | Code | Part |
+| --- | --- | --- | --- |
+| `%Y` | year, 4 digits | `%H` | hour, 00–23 |
+| `%y` | year, 2 digits | `%I` | hour, 01–12 |
+| `%m` | month, 01–12 | `%p` | `AM` or `PM` |
+| `%B`, `%b` | month name, full and short | `%M` | minute |
+| `%d` | day, 01–31 | `%S` | second |
+| `%e` | day, padded with a space | `%f` | fraction of a second, 9 digits |
+| `%j` | day of the year | `%A`, `%a` | weekday name, full and short |
+| `%F` | the same as `%Y-%m-%d` | `%T` | the same as `%H:%M:%S` |
+| `%-d`, `%-m`, `%-H` | the part with no padding | `%%` | a percent sign |
+
+- The codes are those of `strftime`. The full list is in the documentation of the
+  [chrono library](https://docs.rs/chrono/latest/chrono/format/strftime/index.html), which biggo
+  uses. Codes for a time zone are refused, because a `datetime` has none.
+- Names of months and days are in English.
+- Reading is lenient about padding: `%d/%m/%Y` reads both `09/10/2026` and `9/10/2026`.
+- `parse_date` and `parse_datetime` stop the program for text that does not fit the pattern or
+  that is no real date. The `try_` forms give null instead.
+- `parse_datetime` with a pattern that has no time of day gives the start of the day.
+- `era = "buddhist"` writes and reads years 543 ahead, as Thai dates have them: 2569 for 2026.
+  Subtracting 543 after reading would not be enough, because 29 February 2567 is a real day but
+  the year 2567 has no 29 February.
+- The pattern and the era cannot depend on a column. A pattern that is written out as a string is
+  checked before the program runs.
 
 ### Conversions
 

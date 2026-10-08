@@ -1,6 +1,7 @@
 //! Table schemas, column expressions, logical plans, and the plan optimizer.
 
 mod csv;
+pub mod dates;
 mod expr;
 mod optimize;
 mod plan;

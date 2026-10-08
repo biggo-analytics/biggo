@@ -1,0 +1,4 @@
+// A date that the calendar does not have, and a date past the last one.
+print(add_days(@9999-12-31, -1))
+print(try_parse_date("2026-02-30", "%Y-%m-%d"))
+print(from_rows([{ y: 2026, m: 2, d: 30 }]) |> select(made = make_date(y, m, d)))

@@ -1,0 +1,143 @@
+(let friday @2026-10-09)
+(let moment @2026-10-09T14:44:59)
+(call print
+  (== (call today) (call to_date (call now)))
+  (== (call now) (call now))
+  (call years_between (call today) (call today)))
+(call print
+  (call weekday friday)
+  (call week friday)
+  (call quarter friday)
+  (call day_of_year friday)
+  (call weekday moment))
+(call print
+  (call month_name friday)
+  (call day_name friday)
+  (call is_weekend friday)
+  (call is_weekend @2026-10-10)
+  (call buddhist_year friday))
+(call print
+  (call week @2027-01-01)
+  (call week @2027-01-04)
+  (call weekday @1969-12-29)
+  (call day_of_year @2024-12-31))
+(call print
+  (call start_of_week friday)
+  (call start_of_month friday)
+  (call start_of_quarter moment)
+  (call start_of_year friday))
+(call print
+  (call end_of_month @2024-02-10)
+  (call end_of_month @2026-02-10)
+  (call end_of_month @2026-12-31))
+(call print
+  (call add_days friday 30)
+  (call add_days friday (- 9))
+  (call add_days moment 1))
+(call print
+  (call add_months @2026-01-31 1)
+  (call add_months @2024-01-31 1)
+  (call add_months @2026-03-31 (- 1))
+  (call add_months moment 12))
+(call print
+  (call add_years @2024-02-29 1)
+  (call add_years @2024-02-29 4)
+  (call add_years friday (- 26)))
+(call print
+  (call days_between @2026-01-01 friday)
+  (call days_between friday @2026-01-01)
+  (call days_between @2026-01-01T12:00:00 @2026-01-03T11:00:00))
+(call print
+  (call months_between @2026-01-15 @2026-02-15)
+  (call months_between @2026-01-15 @2026-02-14)
+  (call months_between @2026-01-31 @2026-02-28))
+(call print
+  (call years_between @1990-05-20 friday)
+  (call years_between @2000-02-29 @2026-02-28)
+  (call years_between @2000-02-29 @2026-02-27))
+(call print
+  (call total_days (call hours 36))
+  (call total_hours (call minutes 90))
+  (call total_minutes (call seconds 90))
+  (call total_days (- friday @2026-10-01)))
+(call print (call make_date 2024 2 29) (call make_datetime 2026 1 2 3 4 5))
+(call print
+  (call format_date friday "%d/%m/%Y")
+  (call format_date moment "%Y%m%d %H:%M:%S")
+  (call format_date friday "%A %-d %B %Y"))
+(call print
+  (call format_date friday "%d/%m/%Y" (era: "buddhist"))
+  (call format_date friday "%d/%m/%y" (era: "buddhist")))
+(call print
+  (call parse_date "09/10/2026" "%d/%m/%Y")
+  (call parse_date "9 Oct 2026" "%d %b %Y")
+  (call parse_datetime "20260105 10:30" "%Y%m%d %H:%M"))
+(call print
+  (call parse_date "29/02/2567" "%d/%m/%Y" (era: "buddhist"))
+  (call parse_datetime "05/01/2569" "%d/%m/%Y" (era: "buddhist")))
+(call print
+  (call try_parse_date "31/02/2026" "%d/%m/%Y")
+  (call try_parse_date "29/02/2568" "%d/%m/%Y" (era: "buddhist"))
+  (call try_parse_datetime "x" "%Y"))
+(call print
+  (call time_bucket moment (call minutes 15))
+  (call time_bucket moment (call hours 1))
+  (call time_bucket @1969-12-31T23:59:00 (call hours 6)))
+(call print
+  (call to_unix moment)
+  (call to_unix @1970-01-01)
+  (call from_unix 86400)
+  (call from_unix 1.5)
+  (call from_unix (- 1)))
+(call print
+  (call fiscal_year friday 10)
+  (call fiscal_year @2026-09-30 10)
+  (call fiscal_year friday 4)
+  (call fiscal_year friday 1))
+(let none: date? null)
+(let blank: string? null)
+(call print
+  (call weekday none)
+  (call add_months none 1)
+  (call days_between none friday)
+  (call format_date none "%Y")
+  (call parse_date blank "%Y"))
+(call print
+  (call format_date friday blank)
+  (call make_date 2026 1 (call to_int blank)))
+(let rows
+  (call from_rows
+    (list
+      (record
+        (day: @2026-01-31)
+        (text: "31/01/2569")
+        (at: @2026-01-31T23:59:59))
+      (record (day: @2026-03-01) (text: "bad") (at: @2026-03-01T00:00:00))
+      (record (day: null) (text: null) (at: null)))))
+(|> rows
+  (call select day
+    (weekday: (call weekday day))
+    (quarter: (call quarter day))
+    (next: (call add_months day 1))
+    (last: (call end_of_month day))
+    (left: (call days_between day @2026-12-31))
+    (shown: (call format_date day "%d %b %y")))
+  (call print))
+(|> rows
+  (call select text
+    (read: (call try_parse_date text "%d/%m/%Y" (era: "buddhist")))
+    (slot: (call time_bucket at (call hours 6)))
+    (monday: (call start_of_week at))
+    (later: (call add_days at 1))
+    (name: (call day_name day)))
+  (call print))
+(call print
+  (|> rows
+    (call group (month: (call start_of_month day)))
+    (call agg (rows: (call count)))))
+(call print (|> rows (call where (>= (call weekday day) 6)) (call count)))
+(let pattern (+ (+ "%Y" "/") "%m"))
+(call print (|> rows (call select (month: (call format_date day pattern)))))
+(call print
+  (|> rows
+    (call select (read: (call parse_date text "%d/%m/%Y" (era: "buddhist"))))))

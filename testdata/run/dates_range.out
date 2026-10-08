@@ -1,0 +1,5 @@
+error: the date is out of range
+ --> run/dates_range.bgo:2:7
+  |
+2 | print(add_months(@9999-12-01, 1))
+  |       ^^^^^^^^^^^^^^^^^^^^^^^^^^

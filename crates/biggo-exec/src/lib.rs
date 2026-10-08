@@ -3,6 +3,7 @@
 
 mod aggregate;
 mod convert;
+mod dates;
 mod expr;
 mod join;
 mod math;
