@@ -14,7 +14,7 @@ in which that will be built.
 
 ## Contents
 
-- [Where things stand](#where-things-stand-010)
+- [Where things stand](#where-things-stand)
 - [Principles](#principles)
 - [Releases at a glance](#releases-at-a-glance)
 - [Order of work](#order-of-work)
@@ -35,36 +35,41 @@ in which that will be built.
 - [Not planned for now](#not-planned-for-now)
 - [Feedback](#feedback)
 
-## Where things stand (0.1.0)
+## Where things stand
 
-| Area | What exists |
+0.1.0 is the released version. The `main` branch has since gained most of what was planned for
+0.2 and 0.3 and the first part of 0.4: in the catalog below, a line that starts with `[x]` is
+done on `main`, and a row of a table is still to do.
+
+| Area | What exists on `main` |
 | --- | --- |
-| Language | Static typing throughout, functions, lambdas, `match`, lists, records, maps, `import`, string functions and regular expressions, program arguments |
+| Language | Static typing throughout, functions, lambdas, `match`, lists, records, maps, `import`, functions of the program on columns, functions over any table that has the columns they name |
 | Types | `int` `float` `bool` `string` `date` `datetime` `duration` `decimal`, and a nullable form of each |
-| Tables | `where` `select` `derive` `group` + `agg` `join` (6 kinds) `sort` `window` `pivot` `unpivot` `explode` `union` `distinct`, and statistics (`corr` `linreg` `describe` `histogram`) |
-| Data sources | CSV (any delimiter, and encodings other than UTF-8), Parquet, JSON Lines, SQLite, for both reading and writing |
-| Engine | Column-at-a-time execution on Apache Arrow, a rule-based optimizer, every stage in parallel, the same result for any number of threads |
-| Tools | `run` `repl` `check` `explain` `test` `fmt` `build` `lsp`, and a VS Code extension |
-| Testing | 133 automated tests, one of which runs all 99 example programs in the documentation and compares their output with what the documentation shows |
+| Library | About 240 built-in functions: math, safe conversion, dates and calendars, strings and regular expressions, aggregates, window functions, lists and maps |
+| Tables | `where` `select` `derive` `group` + `agg` `join` (7 kinds) `sort` `window` `pivot` `unpivot` `explode` `union` `intersect` `except` `distinct` `sample`, and statistics (`corr` `linreg` `describe` `histogram`) |
+| Data sources | CSV (any delimiter and encoding, titles, no header, texts for null), Excel, Parquet, JSON (lines or one array), SQLite, PostgreSQL, many files by a pattern; `biggo infer` writes the row type of a file |
+| Output | `print`, Markdown and HTML, and a `write_` function for CSV, Excel, Parquet, JSON Lines, SQLite and PostgreSQL |
+| Engine | Column-at-a-time execution on Apache Arrow, a rule-based optimizer, every stage in parallel, the same result and the same errors for any number of threads |
+| Tools | `run` `repl` `check` `explain` `test` `fmt` `build` `infer` `help` `lsp` (errors, hover, completion, formatting), and a VS Code extension |
+| Testing | 194 automated tests. One runs all 119 example programs in the documentation and compares their output with what the documentation shows; 64 more programs are compared with recorded output; one reads and writes a real PostgreSQL server in CI |
 
-The main limitations of this release, which the plan below comes from:
+The main limitations today, which the rest of the plan comes from:
 
-- The function library is thin next to SQL, pandas or Polars: there is no `in`, no power or
-  logarithm, little for dates beyond their parts, no quantile, few window functions, and one
-  value that cannot be converted stops the whole query.
-- Every file needs its row type written by hand, and Excel files cannot be read.
-- A user-defined function cannot be used on a column.
-- It has been tested on macOS (Apple Silicon) only. There is no CI and there are no prebuilt
-  binaries: you build it yourself with Rust.
-- The VS Code extension has been packaged and its grammar tested, but it has never been run
-  inside VS Code.
-- SQLite is the only database.
 - The data of a `sort`, a `window`, the right side of a `join`, or a `group` with many groups has
   to fit in RAM.
 - Some work is slower than in other engines: reading Parquet is 2.6 times slower than DuckDB and
   Polars, grouping into 1 million groups is 2.7 times slower than Polars, and reading JSON is 2.2
   times slower than DuckDB (the numbers and the method are in
   [docs/09-performance.md](docs/09-performance.md)).
+- A function cannot pass through columns of a table that it does not name, there are no
+  generic functions, and the names of every imported file share one namespace.
+- MySQL and SQL Server cannot be read. A `where` in biggo is not made part of the SQL that a
+  database runs.
+- CI and the release build are written but have not run on GitHub yet. The tests pass on macOS
+  (Apple Silicon) and on Linux (arm64, in a container); nothing has been tried on Windows, and
+  there are no prebuilt binaries until the first release is tagged.
+- The VS Code extension has been packaged and its grammar tested, but it has never been run
+  inside VS Code.
 
 ## Principles
 

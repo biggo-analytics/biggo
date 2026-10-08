@@ -296,13 +296,15 @@ python3 bench/run.py           # benchmarks (build with --release and generate t
 
 - The data of a query that sorts a whole table, uses `window`, is the right side of a `join`, or
   groups into many groups has to fit in RAM (nothing spills to disk yet).
-- SQLite is the only database. A CSV file needs a header line. JSON has to be one object per
-  line.
+- Of the database servers, only PostgreSQL can be read and written. A `where` in biggo is not
+  made part of the SQL that a database runs.
 - There are no `for` or `while` loops (use `map`, `filter`, `fold`, `each`, or recursion), and a
   variable cannot be assigned a new value.
+- A function cannot pass through columns of a table that it does not name, and there are no
+  generic functions.
 - The language server has no go-to-definition or rename yet. The VS Code extension has been
   packaged and its grammar tested, but it has not been run inside VS Code.
-- Tested on macOS (Apple Silicon) only.
+- Tested on macOS (Apple Silicon) and on Linux. Nothing has been tried on Windows.
 
 ## Roadmap
 
