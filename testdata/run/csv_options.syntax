@@ -1,0 +1,44 @@
+(type Person {id: int, name: string, note: string?})
+(let people (call read_csv <Person> "data/people.tsv" (delimiter: "\t")))
+(call print people)
+(call print (|> people (call where (> id 1)) (call select name)))
+(type Amount {id: int, amount: string})
+(call print (call read_csv <Amount> "data/amounts.csv" (delimiter: ";")))
+(type Row {รหัส: int, ชื่อ: string, จังหวัด: string})
+(let thai (call read_csv <Row> "data/thai_tis620.csv" (encoding: "tis-620")))
+(call print thai)
+(call print
+  (|> thai (call where (== จังหวัด "เช\u{e35}ยงใหม\u{e48}")) (call select ชื่อ)))
+(call print
+  (call count
+    (call read_csv <Row> "data/thai_tis620.csv" (encoding: "windows-874"))))
+(type Named {id: int, name: string})
+(call print
+  (call read_csv <Named> "data/latin1.csv" (encoding: "windows-1252")))
+(call print (call read_csv <Named> "data/utf16.csv" (encoding: "utf-16le")))
+(call print (call read_csv <Named> "data/utf16.csv" (encoding: "utf-16be")))
+(call write_csv thai "out/thai.txt" (delimiter: "|") (encoding: "tis-620"))
+(let back
+  (call read_csv <Row> "out/thai.txt" (delimiter: "|") (encoding: "tis-620")))
+(call assert_eq back thai)
+(call write_csv people "out/people.tsv" (delimiter: "\t"))
+(call assert_eq
+  (call read_csv <Person> "out/people.tsv" (delimiter: "\t"))
+  people)
+(call write_csv
+  (|> thai (call where false))
+  "out/empty.csv"
+  (encoding: "tis-620"))
+(call print
+  (call count (call read_csv <Row> "out/empty.csv" (encoding: "tis-620"))))
+(fn load(path: string, delimiter: string) -> table<Person>
+  (block (call read_csv <Person> path (delimiter: delimiter))))
+(call print (call count (call load "data/people.tsv" "\t")))
+(call explain
+  (|>
+    (call read_csv <Row> "data/thai_tis620.csv"
+      (encoding: "tis-620")
+      (delimiter: ","))
+    (call take 1)))
+(call explain (call load "data/people.tsv" "\t"))
+(call print (call read_csv <Person> "data/people.tsv"))

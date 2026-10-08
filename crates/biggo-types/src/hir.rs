@@ -185,6 +185,10 @@ pub enum Builtin {
     Assert,
     /// Stops the program unless its two arguments are equal.
     AssertEq,
+    /// The arguments the program was started with, as a list of strings.
+    Args,
+    /// The pieces of a string between its separators, as a list.
+    Split,
 }
 
 impl Expr {

@@ -1,0 +1,5 @@
+error: the delimiter must be one ASCII character other than a quote or a line break, such as ",", ";" or "\t"; found "::"
+ --> run/bad_delimiter.bgo:4:46
+  |
+4 | fn load(delimiter: string) -> table<Named> { read_csv<Named>("data/latin1.csv", delimiter = delimiter) }
+  |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

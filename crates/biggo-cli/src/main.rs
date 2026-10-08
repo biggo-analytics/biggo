@@ -13,10 +13,10 @@ const USAGE: &str = "\
 usage: biggo <command> [args]
 
 commands:
-  run <file>               run a program
+  run <file> [<arg>...]    run a program; `args()` gives it the arguments
   repl                     evaluate code interactively
   check <file>             report the syntax and type errors of a program
-  explain <file>           show the query plans of a program without running them
+  explain <file> [<arg>...]  show the query plans of a program without running them
   test [<path>...]         run the tests in the `*_test.bgo` files under the paths
   fmt [--check] <file>...  format programs in place, or list those that need it
   build <file> [-o <out>]  make a standalone executable of a program
@@ -44,10 +44,11 @@ fn main() -> ExitCode {
 }
 
 fn command(args: &[&str]) -> u8 {
-    // An executable made by `biggo build` runs its program, whatever its arguments.
+    // An executable made by `biggo build` runs its program, and all of its arguments are
+    // the program's.
     if let Some(files) = build::embedded() {
         let (name, source) = files[0];
-        return run_source(name, source, Path::new(""), false, &files[1..]);
+        return run_source(name, source, Path::new(""), false, &files[1..], args);
     }
     match *args {
         ["version" | "--version" | "-V"] => {
@@ -58,8 +59,8 @@ fn command(args: &[&str]) -> u8 {
             print!("{USAGE}");
             0
         }
-        ["run", path] => run(path, false),
-        ["explain", path] => run(path, true),
+        ["run", path, ref rest @ ..] => run(path, false, rest),
+        ["explain", path, ref rest @ ..] => run(path, true, rest),
         ["repl"] => repl::repl(),
         ["check", path] => check(path),
         ["test", ref paths @ ..] => test::test(paths),
@@ -88,7 +89,11 @@ fn command(args: &[&str]) -> u8 {
                 1
             }
         },
-        [command @ ("run" | "explain" | "check" | "parse"), ..] => {
+        [command @ ("run" | "explain")] => {
+            eprintln!("biggo {command}: expected a file\n\n{USAGE}");
+            2
+        }
+        [command @ ("check" | "parse"), ..] => {
             eprintln!("biggo {command}: expected exactly one file\n\n{USAGE}");
             2
         }
@@ -204,13 +209,13 @@ fn base_dir(path: &str) -> &Path {
     Path::new(path).parent().unwrap_or(Path::new(""))
 }
 
-/// Runs the program in a file. With `explain`, its queries print their plans instead of
-/// running.
-fn run(path: &str, explain: bool) -> u8 {
+/// Runs the program in a file, which sees `args` as `args()`. With `explain`, its queries
+/// print their plans instead of running.
+fn run(path: &str, explain: bool, args: &[&str]) -> u8 {
     let Some(source) = read(path) else {
         return 1;
     };
-    run_source(path, &source, base_dir(path), explain, &[])
+    run_source(path, &source, base_dir(path), explain, &[], args)
 }
 
 /// Runs a program. `bundled` are the files it imports, when they come with it and are not
@@ -221,10 +226,14 @@ fn run_source(
     base_dir: &Path,
     explain: bool,
     bundled: &[(&str, &str)],
+    args: &[&str],
 ) -> u8 {
     let mut session = Session::new(BufWriter::new(io::stdout().lock()));
     session.vm().set_base_dir(base_dir);
     session.vm().set_explain(explain);
+    session
+        .vm()
+        .set_args(args.iter().map(|arg| arg.to_string()));
     for (path, source) in bundled {
         session.provide(&base_dir.join(path), source.to_string());
     }

@@ -7,3 +7,5 @@ repository.workspace = true
 
 [dependencies]
 biggo-syntax.workspace = true
+encoding_rs = "0.8.42"
+regex = "1.13.1"

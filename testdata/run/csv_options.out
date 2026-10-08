@@ -1,0 +1,69 @@
++----+------+----------+
+| id | name | note     |
++----+------+----------+
+| 1  | Ann  | a, b     |
+| 2  | Bo   | tab	here |
+| 3  | Cy   | null     |
++----+------+----------+
++------+
+| name |
++------+
+| Bo   |
+| Cy   |
++------+
++----+--------+
+| id | amount |
++----+--------+
+| 1  | 10,5   |
+| 2  | 7      |
++----+--------+
++-----+-------+---------+
+| รหัส | ชื่อ    | จังหวัด   |
++-----+-------+---------+
+| 1   | สมชาย | กรุงเทพ  |
+| 2   | สมหญิง | เชียงใหม่ |
+| 3   | Anna  | ภูเก็ต    |
++-----+-------+---------+
++-------+
+| ชื่อ    |
++-------+
+| สมหญิง |
++-------+
+3
++----+-------+
+| id | name  |
++----+-------+
+| 1  | café  |
+| 2  | naïve |
++----+-------+
++----+-------+
+| id | name  |
++----+-------+
+| 1  | สมชาย |
+| 2  | Bo    |
++----+-------+
++----+-------+
+| id | name  |
++----+-------+
+| 1  | สมชาย |
+| 2  | Bo    |
++----+-------+
+0
+3
+plan:
+  Limit: take 1
+    Scan csv "data/thai_tis620.csv" encoding windows-874: รหัส, ชื่อ, จังหวัด
+optimized plan:
+  Limit: take 1
+    Scan csv "data/thai_tis620.csv" encoding windows-874: รหัส, ชื่อ, จังหวัด limit 1
+
+plan:
+  Scan csv "data/people.tsv" delimiter '\t': id, name, note
+optimized plan:
+  Scan csv "data/people.tsv" delimiter '\t': id, name, note
+
+error: data/people.tsv has no column `id`; its columns are id	name	note; if the file separates its columns with another character, name it, as in `delimiter = "\t"`
+  --> run/csv_options.bgo:42:1
+   |
+42 | print(read_csv<Person>("data/people.tsv"))
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,0 +1,5 @@
+error: data/latin1.csv is not UTF-8 text; if it is in another encoding, name it, as in `encoding = "tis-620"`
+ --> run/bad_encoding.bgo:4:7
+  |
+4 | print(count(read_csv<Named>("data/latin1.csv")))
+  |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

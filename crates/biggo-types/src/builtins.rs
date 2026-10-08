@@ -24,6 +24,8 @@ impl Cx<'_> {
             "from_rows" => self.builtin_from_rows(call),
             "assert" => self.builtin_assert(call),
             "assert_eq" => self.builtin_assert_eq(call),
+            "args" => self.builtin_args(call),
+            "split" => self.builtin_split(call),
             _ => return None,
         };
         Some(checked.unwrap_or_else(|| Expr::error(call.span)))
@@ -128,6 +130,40 @@ impl Cx<'_> {
 
     fn builtin(&self, call: &Call, builtin: Builtin, args: Vec<Expr>, ty: Type) -> Option<Expr> {
         Some(Expr::new(ExprKind::Builtin(builtin, args), ty, call.span))
+    }
+
+    /// `args()` is the list of arguments that followed the program on the command line.
+    fn builtin_args(&mut self, call: &Call) -> Option<Expr> {
+        let [] = self.exactly(call, "no arguments")?;
+        let ty = Type::List(Box::new(Type::Str));
+        self.builtin(call, Builtin::Args, Vec::new(), ty)
+    }
+
+    /// `split(text, separator)` is the list of the pieces of `text`.
+    fn builtin_split(&mut self, call: &Call) -> Option<Expr> {
+        let [text, separator] = self.exactly(call, "a string and a separator")?;
+        // Looked at as part of a column expression if it is in one, to say why it cannot be.
+        let text = self.expr(text);
+        if text.ty.is_error() {
+            return None;
+        }
+        if let Some(column) = text.find_column_use() {
+            let message = "`split` gives a list, which a column cannot hold; \
+                           `split_part` gives one piece, and `explode` a row for each piece";
+            self.error(column.span, message);
+            return None;
+        }
+        let text = match coerce(text, &Type::Str) {
+            Ok(text) => text,
+            Err(text) => {
+                let message = format!("the string to split must be string, found {}", text.ty);
+                self.error(text.span, message);
+                return None;
+            }
+        };
+        let separator = self.scalar_arg(separator, Type::Str, "the separator")?;
+        let ty = Type::List(Box::new(Type::Str));
+        self.builtin(call, Builtin::Split, vec![text, separator], ty)
     }
 
     fn builtin_len(&mut self, call: &Call) -> Option<Expr> {

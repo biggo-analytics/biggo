@@ -43,8 +43,10 @@ read_csv<Sale>("docs/data/sales.csv")
   runs every stage in parallel.
 - **Reproducible results.** The result is identical bit for bit, however many threads are used.
 - **A small but complete language.** Functions, lambdas, `match`, records, maps, lists, `import`,
-  `decimal` for money, `datetime` and `duration` for time.
-- **Reads and writes several formats.** CSV, Parquet, JSON Lines, SQLite.
+  `decimal` for money, `datetime` and `duration` for time, regular expressions, and program
+  arguments.
+- **Reads and writes several formats.** CSV (any delimiter, and encodings such as TIS-620), Parquet,
+  JSON Lines, SQLite.
 - **All the tools in one executable.** A runner, a REPL, a formatter, a test runner, a language
   server, and a builder of standalone executables. A VS Code extension is in this repository.
 
@@ -282,29 +284,27 @@ python3 bench/run.py           # benchmarks (build with --release and generate t
 
 - The data of a query that sorts a whole table, uses `window`, is the right side of a `join`, or
   groups into many groups has to fit in RAM (nothing spills to disk yet).
-- SQLite is the only database. CSV files are comma-separated only. JSON has to be one object per
+- SQLite is the only database. A CSV file needs a header line. JSON has to be one object per
   line.
 - There are no `for` or `while` loops (use `map`, `filter`, `fold`, `each`, or recursion), and a
   variable cannot be assigned a new value.
 - A user-defined function cannot take a column: a column expression can use only operators and
   built-in functions.
-- There are few string functions (no regular expressions, substring, or replace).
-- A program cannot take command-line arguments.
 - The language server has no autocomplete or go-to-definition yet. The VS Code extension has been
   packaged and its grammar tested, but it has not been run inside VS Code.
 - Tested on macOS (Apple Silicon) only.
 
 ## Roadmap
 
-What comes next, in order of priority and with no dates. The details, the reasons, and what
-"done" means for each release are in [ROADMAP.md](ROADMAP.md).
+What comes next, in the order it will be built and with no dates. [ROADMAP.md](ROADMAP.md) lists
+every function and feature that is planned, with its priority.
 
 | Release | Goal | Main work |
 | --- | --- | --- |
-| 0.2 | Easy to install, works everywhere | CI on Linux / macOS / Windows, prebuilt binaries, the extension in the Marketplace, program arguments, string functions and regular expressions, CSV options |
-| 0.3 | More data sources | PostgreSQL and MySQL, Excel, many files with `*`, compressed files, `https://` and S3, nested columns |
-| 0.4 | A faster engine, and data larger than memory | Parquet row-group skipping, grouping into many groups, parallel `join`, spilling to disk |
-| 0.5 | A language with more reuse | User-defined functions on columns, functions that accept more than one table shape, generics, `import ... as` |
+| 0.2 | The standard library | `in`, math, safe conversion, date functions, quantiles and other aggregates, more window functions, `count_by`, sampling, list functions, number formatting; CI and prebuilt binaries |
+| 0.3 | Data in and out | `biggo infer`, Excel, files without a header, many files with `*`, PostgreSQL and MySQL, Markdown and HTML output |
+| 0.4 | A language with more reuse | User-defined functions on columns, functions that accept more than one table shape, generics, `import ... as` |
+| 0.5 | A faster engine, and data larger than memory | Parquet row-group skipping, grouping into many groups, parallel `join`, spilling to disk |
 | 1.0 | Stable | A frozen language, fuzzing, checking results against DuckDB |
 
 Found a bug, or want to propose a feature? Open an issue at

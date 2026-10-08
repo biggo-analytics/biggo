@@ -1,0 +1,5 @@
+// Text that the encoding asked for cannot hold.
+type Row = { `รหัส`: int, `ชื่อ`: string, `จังหวัด`: string }
+
+let thai = read_csv<Row>("data/thai_tis620.csv", encoding = "tis-620")
+write_csv(thai, "out/not_latin.csv", encoding = "windows-1252")

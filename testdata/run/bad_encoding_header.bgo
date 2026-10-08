@@ -1,0 +1,4 @@
+// The same, where the header already shows it.
+type Row = { `รหัส`: int }
+
+print(read_csv<Row>("data/thai_tis620.csv"))

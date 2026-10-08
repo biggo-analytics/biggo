@@ -114,8 +114,11 @@ error: division by zero
 #[test]
 fn rejects_bad_usage() {
     let (_, stderr, code) = biggo(&["run"], "");
+    assert!(stderr.starts_with("biggo run: expected a file"), "{stderr}");
+    assert_eq!(code, Some(2));
+    let (_, stderr, code) = biggo(&["check", "a.bgo", "b.bgo"], "");
     assert!(
-        stderr.starts_with("biggo run: expected exactly one file"),
+        stderr.starts_with("biggo check: expected exactly one file"),
         "{stderr}"
     );
     assert_eq!(code, Some(2));
@@ -436,11 +439,46 @@ fn build_takes_imported_files_along() {
 
 #[test]
 fn run_executes_the_newer_features() {
-    for name in ["lambdas", "match", "records", "reshape", "stats"] {
+    for name in ["lambdas", "match", "records", "reshape", "stats", "strings"] {
         let (stdout, stderr, _) = biggo(&["run", &format!("testdata/run/{name}.bgo")], "");
         // The snapshot holds the output followed by the error, if the program ends in one.
         let expected = snapshot(&format!("testdata/run/{name}.out"));
         let both = format!("{stdout}{stderr}");
         assert_eq!(both.replace("testdata/run/", "run/"), expected, "{name}");
     }
+}
+
+#[test]
+fn a_program_sees_its_arguments() {
+    let dir = scratch("args");
+    let program = dir.join("report.bgo");
+    std::fs::write(&program, "print(args())\nprint(len(args()))\n").unwrap();
+    let path = program.to_str().unwrap();
+
+    // Everything after the file is the program's, whatever it looks like.
+    let given = ["2026-01", "two words", "--check", "-o"];
+    let shown = "[\"2026-01\", \"two words\", \"--check\", \"-o\"]\n4\n";
+    for command in ["run", "explain"] {
+        let mut line = vec![command, path];
+        line.extend(given);
+        let (stdout, stderr, code) = biggo(&line, "");
+        assert_eq!(
+            (stdout.as_str(), stderr.as_str(), code),
+            (shown, "", Some(0)),
+            "{command}"
+        );
+    }
+    let (stdout, stderr, code) = biggo(&["run", path], "");
+    assert_eq!(
+        (stdout.as_str(), stderr.as_str(), code),
+        ("[]\n0\n", "", Some(0))
+    );
+
+    // A built program takes its whole command line.
+    let app = dir.join("report");
+    let (_, stderr, code) = biggo(&["build", path, "-o", app.to_str().unwrap()], "");
+    assert_eq!((stderr.as_str(), code), ("", Some(0)));
+    let output = Command::new(&app).args(given).output().unwrap();
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), shown);
+    assert_eq!(output.status.code(), Some(0));
 }

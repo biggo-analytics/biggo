@@ -1,0 +1,281 @@
+error: `substring` takes 2 or 3 arguments
+ --> check/text.bgo:5:1
+  |
+5 | substring("abc")
+  | ^^^^^^^^^^^^^^^^
+
+error: `substring` takes 2 or 3 arguments
+ --> check/text.bgo:6:1
+  |
+6 | substring("abc", 1, 2, 3)
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `substring` expects an int, found string
+ --> check/text.bgo:7:18
+  |
+7 | substring("abc", "1")
+  |                  ^^^
+
+error: `substring` expects a string, found int
+ --> check/text.bgo:8:11
+  |
+8 | substring(1, 1)
+  |           ^
+
+error: `replace` takes 3 arguments
+ --> check/text.bgo:9:1
+  |
+9 | replace("abc", "a")
+  | ^^^^^^^^^^^^^^^^^^^
+
+error: `split_part` takes 3 arguments
+  --> check/text.bgo:10:1
+   |
+10 | split_part("a,b", ",")
+   | ^^^^^^^^^^^^^^^^^^^^^^
+
+error: `split_part` expects an int, found string
+  --> check/text.bgo:11:24
+   |
+11 | split_part("a,b", ",", "0")
+   |                        ^^^
+
+error: `pad_left` takes 2 or 3 arguments
+  --> check/text.bgo:12:1
+   |
+12 | pad_left("a")
+   | ^^^^^^^^^^^^^
+
+error: `pad_right` expects a string, found int
+  --> check/text.bgo:13:19
+   |
+13 | pad_right("a", 3, 4)
+   |                   ^
+
+error: `index_of` takes 2 arguments
+  --> check/text.bgo:14:1
+   |
+14 | index_of("abc")
+   | ^^^^^^^^^^^^^^^
+
+error: `index_of` expects a string, found int
+  --> check/text.bgo:15:17
+   |
+15 | index_of("abc", 1)
+   |                 ^
+
+error: `a(b` is not a regular expression: unclosed group
+  --> check/text.bgo:16:20
+   |
+16 | regex_match("abc", "a(b")
+   |                    ^^^^^
+
+error: `regex_match` expects a string, found int
+  --> check/text.bgo:17:20
+   |
+17 | regex_match("abc", 1)
+   |                    ^
+
+error: `[a-` is not a regular expression: unclosed character class
+  --> check/text.bgo:18:22
+   |
+18 | regex_extract("abc", "[a-")
+   |                      ^^^^^
+
+error: there is no group 3: `(a)(b)` has 2 groups
+  --> check/text.bgo:19:32
+   |
+19 | regex_extract("abc", "(a)(b)", 3)
+   |                                ^
+
+error: there is no group 1: `abc` has no groups
+  --> check/text.bgo:20:29
+   |
+20 | regex_extract("abc", "abc", 1)
+   |                             ^
+
+error: there is no group -1: `(a)` has 1 group
+  --> check/text.bgo:21:29
+   |
+21 | regex_extract("abc", "(a)", -1)
+   |                             ^^
+
+error: `*` is not a regular expression: repetition operator missing expression
+  --> check/text.bgo:22:22
+   |
+22 | regex_replace("abc", "*", "x")
+   |                      ^^^
+
+error: `regex_replace` takes 3 arguments
+  --> check/text.bgo:23:1
+   |
+23 | regex_replace("abc", "a")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the pattern of `regex_match` cannot depend on a column
+  --> check/text.bgo:24:25
+   |
+24 | sales |> derive(found = regex_match(region, note))
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the group of `regex_extract` cannot depend on a column
+  --> check/text.bgo:25:24
+   |
+25 | sales |> derive(part = regex_extract(region, "(a)(b)", qty))
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the pattern of `regex_replace` cannot depend on a column
+  --> check/text.bgo:26:24
+   |
+26 | sales |> derive(part = regex_replace(note, region, "x"))
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `split` gives a list, which a column cannot hold; `split_part` gives one piece, and `explode` a row for each piece
+  --> check/text.bgo:27:31
+   |
+27 | sales |> derive(parts = split(region, ","))
+   |                               ^^^^^^
+
+error: `split` takes a string and a separator
+  --> check/text.bgo:28:1
+   |
+28 | split("a,b")
+   | ^^^^^^^^^^^^
+
+error: the string to split must be string, found int
+  --> check/text.bgo:29:7
+   |
+29 | split(1, ",")
+   |       ^
+
+error: the separator must be string, found int
+  --> check/text.bgo:30:14
+   |
+30 | split("a,b", 1)
+   |              ^
+
+error: `args` takes no arguments
+  --> check/text.bgo:31:1
+   |
+31 | args(1)
+   | ^^^^^^^
+
+error: cannot apply `+` to list<string> and int
+  --> check/text.bgo:32:1
+   |
+32 | args() + 1
+   | ^^^^^^^^^^
+
+error: expected int, found string
+  --> check/text.bgo:33:18
+   |
+33 | let first: int = args()[0]
+   |                  ^^^^^^^^^
+
+error: the delimiter must be one ASCII character other than a quote or a line break, such as ",", ";" or "\t"; found "ab"
+  --> check/text.bgo:34:41
+   |
+34 | read_csv<Sale>("sales.csv", delimiter = "ab")
+   |                                         ^^^^
+
+error: the delimiter must be one ASCII character other than a quote or a line break, such as ",", ";" or "\t"; found ""
+  --> check/text.bgo:35:41
+   |
+35 | read_csv<Sale>("sales.csv", delimiter = "")
+   |                                         ^^
+
+error: the delimiter must be one ASCII character other than a quote or a line break, such as ",", ";" or "\t"; found "\""
+  --> check/text.bgo:36:41
+   |
+36 | read_csv<Sale>("sales.csv", delimiter = "\"")
+   |                                         ^^^^
+
+error: the delimiter must be string, found int
+  --> check/text.bgo:37:41
+   |
+37 | read_csv<Sale>("sales.csv", delimiter = 1)
+   |                                         ^
+
+error: unknown encoding "klingon"; some that are known are "utf-8", "tis-620", "windows-874", "windows-1252" and "utf-16le"
+  --> check/text.bgo:38:40
+   |
+38 | read_csv<Sale>("sales.csv", encoding = "klingon")
+   |                                        ^^^^^^^^^
+
+error: `read_csv` has no argument `separator`; it takes `delimiter` and `encoding`
+  --> check/text.bgo:39:29
+   |
+39 | read_csv<Sale>("sales.csv", separator = ";")
+   |                             ^^^^^^^^^
+
+error: `delimiter` is given twice
+  --> check/text.bgo:40:46
+   |
+40 | read_csv<Sale>("sales.csv", delimiter = ";", delimiter = ",")
+   |                                              ^^^^^^^^^
+
+error: positional arguments must come before named arguments
+  --> check/text.bgo:41:46
+   |
+41 | read_csv<Sale>("sales.csv", delimiter = ";", "x")
+   |                                              ^^^
+
+error: `read_csv` takes the file path, and can take `delimiter` and `encoding` by name
+  --> check/text.bgo:42:1
+   |
+42 | read_csv<Sale>(delimiter = ";")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `read_csv` takes the file path, and can take `delimiter` and `encoding` by name
+  --> check/text.bgo:43:1
+   |
+43 | read_csv<Sale>("a.csv", "b.csv")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `read_json` does not take named arguments
+  --> check/text.bgo:44:31
+   |
+44 | read_json<Sale>("sales.json", encoding = "tis-620")
+   |                               ^^^^^^^^
+
+error: `read_parquet` does not take named arguments
+  --> check/text.bgo:45:37
+   |
+45 | read_parquet<Sale>("sales.parquet", delimiter = ";")
+   |                                     ^^^^^^^^^
+
+error: cannot write a file as utf-16le; it can only be read
+  --> check/text.bgo:46:40
+   |
+46 | write_csv(sales, "out.csv", encoding = "utf-16")
+   |                                        ^^^^^^^^
+
+error: unknown encoding "nope"; some that are known are "utf-8", "tis-620", "windows-874", "windows-1252" and "utf-16le"
+  --> check/text.bgo:47:40
+   |
+47 | write_csv(sales, "out.csv", encoding = "nope")
+   |                                        ^^^^^^
+
+error: the delimiter must be one ASCII character other than a quote or a line break, such as ",", ";" or "\t"; found "::"
+  --> check/text.bgo:48:41
+   |
+48 | write_csv(sales, "out.csv", delimiter = "::")
+   |                                         ^^^^
+
+error: `write_csv` has no argument `header`; it takes `delimiter` and `encoding`
+  --> check/text.bgo:49:29
+   |
+49 | write_csv(sales, "out.csv", header = false)
+   |                             ^^^^^^
+
+error: `write_csv` takes a table and a file path, and can take `delimiter` and `encoding` by name
+  --> check/text.bgo:50:1
+   |
+50 | write_csv(sales, delimiter = ";")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `write_json` does not take named arguments
+  --> check/text.bgo:51:31
+   |
+51 | write_json(sales, "out.json", delimiter = ";")
+   |                               ^^^^^^^^^

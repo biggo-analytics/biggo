@@ -4,7 +4,7 @@
 //! therefore computed here, in the same way the engine computes them, and the rest go to
 //! the engine. A test holds the two to the same answers.
 
-use biggo_plan::{Date, ScalarFn, scalar};
+use biggo_plan::{Date, ScalarFn, scalar, text as strings};
 
 use crate::value::{Decimal, Value};
 
@@ -89,6 +89,36 @@ pub fn call(func: ScalarFn, args: &[Value]) -> Option<Result<Value, String>> {
             Value::Bool(value.starts_with(&**part))
         }
         (EndsWith, [Value::Str(value), Value::Str(part)]) => Value::Bool(value.ends_with(&**part)),
+        (Substring, [Value::Str(value), Value::Int(start)]) => {
+            text(strings::substring(value, *start, None).to_string())
+        }
+        (Substring, [Value::Str(value), Value::Int(start), Value::Int(length)]) => {
+            text(strings::substring(value, *start, Some(*length)).to_string())
+        }
+        (Replace, [Value::Str(value), Value::Str(from), Value::Str(to)]) => {
+            text(strings::replace(value, from, to))
+        }
+        (SplitPart, [Value::Str(value), Value::Str(separator), Value::Int(index)]) => {
+            match strings::split_part(value, separator, *index) {
+                Some(piece) => text(piece.to_string()),
+                None => Value::Null,
+            }
+        }
+        (PadLeft | PadRight, [Value::Str(value), Value::Int(width), fill @ ..]) => {
+            let fill = match fill {
+                [] => " ",
+                [Value::Str(fill)] => fill,
+                _ => return None,
+            };
+            match strings::pad(value, *width, fill, func == PadLeft) {
+                Ok(padded) => text(padded),
+                Err(message) => return Some(Err(message)),
+            }
+        }
+        (IndexOf, [Value::Str(value), Value::Str(part)]) => match strings::index_of(value, part) {
+            Some(position) => Value::Int(position),
+            None => Value::Null,
+        },
 
         (Year, [Value::Date(days)]) => Value::Int(i64::from(Date::from_days(*days)?.year)),
         (Month, [Value::Date(days)]) => Value::Int(i64::from(Date::from_days(*days)?.month)),

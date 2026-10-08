@@ -40,6 +40,33 @@ a program with a type error can never run halfway and leave a half-written file 
 Paths to data files in a program are relative to the folder of the `.bgo` file, not the folder you
 run the command from.
 
+Whatever follows the file name is passed to the program, which reads it with `args()`:
+
+```sh
+biggo run report.bgo 2026-01 north
+```
+
+```biggo
+let given = args()
+let month = if len(given) > 0 { given[0] } else { "2026-01" }
+let region = if len(given) > 1 { given[1] } else { "all regions" }
+print("report for", month, "in", region)
+```
+
+```text output
+report for 2026-01 in all regions
+```
+
+- `args()` is a `list<string>`: here it is `["2026-01", "north"]`. Run without arguments, as the
+  example above is, it is the empty list. Use `to_int`, `to_float` or `to_date` to turn an
+  argument into another type.
+- Nothing after the file name is taken as an option of `biggo` itself:
+  `biggo run report.bgo --help` passes `--help` to the program.
+- Asking for an argument that was not given is an error at run time
+  (`index 0 is out of range for a list of 0 items`), so look at `len(args())` first.
+- `biggo explain` and an executable made by `biggo build` take arguments the same way. In the REPL
+  and under `biggo test`, `args()` is empty.
+
 The number of threads the engine uses is set with `RAYON_NUM_THREADS` (the default is the total
 number of cores):
 
@@ -291,6 +318,7 @@ tables.
 biggo build report.bgo             # produces an executable named report
 biggo build report.bgo -o bin/app  # choose the name yourself
 ./report
+./report 2026-01 north             # its arguments reach the program as args()
 ```
 
 Builds an executable that runs the program on its own, with no need for `biggo` or the `.bgo` file
@@ -303,7 +331,7 @@ on the target machine.
 - At run time, the source is compiled to bytecode again every time, which takes milliseconds.
 - Paths to data files in the executable are relative to **the folder you run it from** (there is
   no `.bgo` file to be relative to anymore).
-- Command-line arguments are ignored: programs cannot take arguments yet.
+- The whole command line of the executable goes to the program, as `args()`.
 - The total size of the embedded source is limited to about 256 KiB.
 - On macOS, the executable is ad-hoc signed with `codesign` (requires the Xcode Command Line Tools).
 - The executable works on the same operating system and CPU as the `biggo` that built it (no

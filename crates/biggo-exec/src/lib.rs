@@ -7,10 +7,12 @@ mod expr;
 mod join;
 mod ops;
 mod scan;
+mod text;
 mod window;
 
 use std::fmt;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -23,9 +25,10 @@ use arrow::error::ArrowError;
 use arrow::util::display::FormatOptions;
 use arrow::util::pretty::pretty_format_batches_with_options;
 use biggo_plan::{
-    AggCall, AggFn, ColType, DataType, Expr, ExprKind, Field, Memory, Plan, Scalar, ScalarFn,
-    Schema, describe_schema, histogram_schema,
+    AggCall, AggFn, ColType, CsvOptions, DataType, Expr, ExprKind, Field, Memory, Plan, Scalar,
+    ScalarFn, Schema, describe_schema, histogram_schema,
 };
+use encoding_rs::{EncoderResult, Encoding};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
 use parquet::errors::ParquetError;
@@ -271,22 +274,90 @@ fn for_text_file(batch: &RecordBatch) -> Result<RecordBatch> {
     )?)
 }
 
-pub fn write_csv(plan: &Arc<Plan>, path: &Path) -> Result<()> {
+pub fn write_csv(plan: &Arc<Plan>, path: &Path, options: CsvOptions) -> Result<()> {
     let batches = execute(&optimize(plan))?;
-    let mut writer = arrow::csv::WriterBuilder::new()
+    let builder = arrow::csv::WriterBuilder::new()
         .with_header(true)
-        .build(create(path)?);
+        .with_delimiter(options.delimiter);
+    let file = create(path)?;
+    // The writer produces UTF-8. For another encoding it writes each batch to memory, and
+    // the batch goes to the file converted.
+    let (mut writer, mut encoded) = match options.encoding {
+        None => (builder.build(CsvOutput::File(file)), None),
+        Some(encoding) => {
+            let text = Arc::<std::sync::Mutex<Vec<u8>>>::default();
+            let writer = builder.build(CsvOutput::Memory(text.clone()));
+            (writer, Some((encoding, file, text)))
+        }
+    };
+    let mut write = |batch: &RecordBatch| -> Result<()> {
+        writer.write(&for_text_file(batch)?)?;
+        if let Some((encoding, file, text)) = &mut encoded {
+            let mut text = text.lock().expect("the writer does not panic");
+            let bytes = encode(&String::from_utf8_lossy(&text), encoding).map_err(|c| {
+                let name = encoding.name().to_ascii_lowercase();
+                Error(format!("{c:?} cannot be written as {name}"))
+            })?;
+            let written = file.write_all(&bytes);
+            written.map_err(|err| Error(format!("cannot write {}: {err}", path.display())))?;
+            text.clear();
+        }
+        Ok(())
+    };
     let mut wrote = false;
     for batch in batches {
-        writer.write(&for_text_file(&batch?)?)?;
+        write(&batch?)?;
         wrote = true;
     }
     // The header is written with the first batch, so an empty result still needs one.
     if !wrote {
-        let empty = RecordBatch::new_empty(convert::arrow_schema(&plan.schema()));
-        writer.write(&for_text_file(&empty)?)?;
+        write(&RecordBatch::new_empty(convert::arrow_schema(
+            &plan.schema(),
+        )))?;
     }
     Ok(())
+}
+
+/// Where the CSV writer puts its text: straight into the file, or into memory on the way to
+/// another encoding.
+enum CsvOutput {
+    File(File),
+    Memory(Arc<std::sync::Mutex<Vec<u8>>>),
+}
+
+impl Write for CsvOutput {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        match self {
+            CsvOutput::File(file) => file.write(bytes),
+            CsvOutput::Memory(text) => text.lock().expect("the writer does not panic").write(bytes),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            CsvOutput::File(file) => file.flush(),
+            CsvOutput::Memory(_) => Ok(()),
+        }
+    }
+}
+
+/// `text` in `encoding`, or the first character that the encoding does not have.
+fn encode(text: &str, encoding: &'static Encoding) -> std::result::Result<Vec<u8>, char> {
+    let mut encoder = encoding.new_encoder();
+    let mut bytes = Vec::new();
+    let mut rest = text;
+    loop {
+        let room = encoder.max_buffer_length_from_utf8_without_replacement(rest.len());
+        bytes.reserve(room.unwrap_or(rest.len()).max(16));
+        let (result, read) =
+            encoder.encode_from_utf8_to_vec_without_replacement(rest, &mut bytes, true);
+        rest = &rest[read..];
+        match result {
+            EncoderResult::InputEmpty => return Ok(bytes),
+            EncoderResult::OutputFull => {}
+            EncoderResult::Unmappable(c) => return Err(c),
+        }
+    }
 }
 
 /// Writes one JSON object per row, a row per line.

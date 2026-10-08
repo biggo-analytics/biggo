@@ -57,6 +57,12 @@ The `digits` argument of `round` must be a program value, not a column.
 | `contains(s, part)` | `bool` | `s` has `part` inside it |
 | `starts_with(s, part)` | `bool` | `s` starts with `part` |
 | `ends_with(s, part)` | `bool` | `s` ends with `part` |
+| `index_of(s, part)` | `int?` | Position of the first `part` in `s`, counted from 0; null if `s` does not have it |
+| `substring(s, start)`, `substring(s, start, length)` | `string` | The part of `s` that starts at position `start` and runs to the end, or for `length` characters |
+| `replace(s, from, to)` | `string` | `s` with every `from` replaced by `to` |
+| `split_part(s, separator, n)` | `string?` | Piece number `n` of `s` when it is cut at every `separator`, counted from 0; null if there are not that many pieces |
+| `pad_left(s, width)`, `pad_left(s, width, fill)` | `string` | `s` made `width` characters long by putting `fill` in front of it (a space, unless `fill` is given) |
+| `pad_right(s, width)`, `pad_right(s, width, fill)` | `string` | The same, with `fill` put after it |
 | `a + b` | `string` | (operator) Concatenates strings |
 
 ```biggo
@@ -70,7 +76,76 @@ true true false
 ```
 
 The second `length` call in the example takes Thai text, which has 7 characters. Search is literal
-and case-sensitive. There are no regular expressions, substring extraction or replacement yet.
+and case-sensitive.
+
+```biggo
+print(substring("2026-01-05", 0, 4), substring("2026-01-05", 5), substring("2026-01-05", -2))
+print(replace("a-b-c", "-", "/"), split_part("a-b-c", "-", 1), split_part("a-b-c", "-", -1))
+print(pad_left("7", 3, "0"), pad_right("ab", 5) + "|", index_of("hello", "l"), index_of("hello", "z"))
+```
+
+```text output
+2026 01-05 05
+a/b/c b c
+007 ab   | 2 null
+```
+
+- Positions count characters from 0. A negative `start` or `n` counts from the end: `-1` is the
+  last character, or the last piece.
+- A position outside the string is not an error. `substring` gives what there is, so
+  `substring("abc", 1, 99)` is `"bc"` and `substring("abc", 5)` is `""`; `split_part` gives null.
+- An empty `from` or `separator` matches nothing: `replace` gives `s` back, and `s` is its own
+  only piece.
+- Padding never cuts: a string that is already `width` characters long comes back as it is. A
+  `fill` of several characters is repeated and cut to fit, and `width` can be at most 1,000,000.
+- `split(s, separator)` gives all the pieces at once, as a list. It is under
+  [Lists and maps](#lists-and-maps), because a column cannot hold a list.
+
+### Regular expressions
+
+| Function | Returns | Meaning |
+| --- | --- | --- |
+| `regex_match(s, pattern)` | `bool` | Whether `pattern` matches anywhere in `s` |
+| `regex_extract(s, pattern)`, `regex_extract(s, pattern, group)` | `string?` | The first match of `pattern` in `s`, or the part of it that group number `group` matched; null if there is no match |
+| `regex_replace(s, pattern, to)` | `string` | `s` with every match of `pattern` replaced by `to` |
+
+```biggo
+print(regex_match("order-123", "[0-9]+"), regex_match("order-123", "^[0-9]+$"))
+print(regex_extract("order-123", "[0-9]+"), regex_extract("order-123", "([a-z]+)-([0-9]+)", 1))
+print(regex_replace("2026-01-05", "(\\d+)-(\\d+)-(\\d+)", "$3/$2/$1"))
+```
+
+```text output
+true false
+123 order
+05/01/2026
+```
+
+- A pattern matches anywhere in the string. Put `^` and `$` around it to match the whole string.
+- Patterns have the [syntax of the Rust `regex` library](https://docs.rs/regex/latest/regex/#syntax):
+  character classes, repetition, groups, alternation, anchors and Unicode classes. There is no
+  look-around and there are no backreferences, which is what lets every pattern run in time
+  proportional to the length of the text.
+- A backslash is written twice in a string: the pattern `\d+` is the string `"\\d+"`.
+- Groups are numbered from 1 by their opening parenthesis, and group 0 is the whole match. A group
+  that took no part in the match gives null.
+- In `to`, `$1` stands for what group 1 matched (write `${1}` when a letter or digit follows),
+  `$name` for a group written `(?P<name>...)`, and `$$` for a dollar sign.
+- The pattern and the group cannot depend on a column: the pattern is compiled once for the whole
+  query. They can be any other value of the program.
+- A pattern that is written out as a string is checked before the program runs:
+
+```biggo error
+print(regex_extract("order-123", "([a-z]+-", 1))
+```
+
+```text output
+error: `([a-z]+-` is not a regular expression: unclosed group
+ --> example.bgo:1:34
+  |
+1 | print(regex_extract("order-123", "([a-z]+-", 1))
+  |                                  ^^^^^^^^^^
+```
 
 ### Dates and times
 
@@ -216,11 +291,11 @@ Details: [Working with tables](04-tables.md)
 
 | Function | Meaning |
 | --- | --- |
-| `read_csv<T>(path)` | A table from a CSV file |
+| `read_csv<T>(path)`, `read_csv<T>(path, delimiter = d, encoding = e)` | A table from a CSV file, which can have another delimiter than `,` and another encoding than UTF-8 |
 | `read_parquet<T>(path)` | A table from a Parquet file |
 | `read_json<T>(path)` | A table from a JSON Lines file |
 | `read_sql<T>(path, query)` | The result of a query on a SQLite database |
-| `write_csv(t, path)` | Writes a table as CSV |
+| `write_csv(t, path)`, `write_csv(t, path, delimiter = d, encoding = e)` | Writes a table as CSV |
 | `write_parquet(t, path)` | Writes a table as Parquet |
 | `write_json(t, path)` | Writes a table as JSON Lines |
 | `write_sql(t, path, name)` | Writes a table to a SQLite database, as the table named `name` |
@@ -238,6 +313,7 @@ Details: [Working with tables](04-tables.md)
 | `filter(xs, f)` | `list<T>` | The elements for which `f(x)` is `true` |
 | `fold(xs, start, f)` | type of `start` | Accumulates a value with `f(acc, x)` |
 | `each(xs, f)` | — | Calls `f(x)` on each element in turn; returns no value |
+| `split(s, separator)` | `list<string>` | The pieces of the string `s` between its separators; an empty separator splits nothing |
 | `keys(m)` | `list<K>` | The keys, in the order they were inserted |
 | `values(m)` | `list<V>` | The values, in the same order |
 | `put(m, k, v)` | `map<K, V>` | A new map in which `k` has the value `v` |
@@ -265,6 +341,14 @@ ab ["a", "b"] [1, 2]
 
 Details: [list](02-language.md#list), [map](02-language.md#map),
 [tables and lists of records](04-tables.md#tables-and-lists-of-records)
+
+## Program arguments
+
+| Function | Returns | Meaning |
+| --- | --- | --- |
+| `args()` | `list<string>` | The arguments that follow the program on the command line: `biggo run report.bgo 2026-01 north` gives `["2026-01", "north"]`. The list is empty when there are none |
+
+Details: [biggo run](07-tools.md#biggo-run)
 
 ## Summaries and statistics
 

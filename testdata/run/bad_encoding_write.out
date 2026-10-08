@@ -1,0 +1,5 @@
+error: 'ร' cannot be written as windows-1252
+ --> run/bad_encoding_write.bgo:5:1
+  |
+5 | write_csv(thai, "out/not_latin.csv", encoding = "windows-1252")
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

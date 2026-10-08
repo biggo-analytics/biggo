@@ -1,0 +1,42 @@
+// CSV files with another delimiter or another encoding than UTF-8.
+
+type Person = { id: int, name: string, note: string? }
+let people = read_csv<Person>("data/people.tsv", delimiter = "\t")
+print(people)
+print(people |> where(id > 1) |> select(name))
+
+type Amount = { id: int, amount: string }
+print(read_csv<Amount>("data/amounts.csv", delimiter = ";"))
+
+// A file in TIS-620, with Thai column names.
+type Row = { `รหัส`: int, `ชื่อ`: string, `จังหวัด`: string }
+let thai = read_csv<Row>("data/thai_tis620.csv", encoding = "tis-620")
+print(thai)
+print(thai |> where(`จังหวัด` == "เชียงใหม่") |> select(`ชื่อ`))
+print(count(read_csv<Row>("data/thai_tis620.csv", encoding = "windows-874")))
+
+type Named = { id: int, name: string }
+print(read_csv<Named>("data/latin1.csv", encoding = "windows-1252"))
+// A byte order mark at the start of a file says which UTF-16 it is.
+print(read_csv<Named>("data/utf16.csv", encoding = "utf-16le"))
+print(read_csv<Named>("data/utf16.csv", encoding = "utf-16be"))
+
+// Written with the same options and read back.
+write_csv(thai, "out/thai.txt", delimiter = "|", encoding = "tis-620")
+let back = read_csv<Row>("out/thai.txt", delimiter = "|", encoding = "tis-620")
+assert_eq(back, thai)
+write_csv(people, "out/people.tsv", delimiter = "\t")
+assert_eq(read_csv<Person>("out/people.tsv", delimiter = "\t"), people)
+write_csv(thai |> where(false), "out/empty.csv", encoding = "tis-620")
+print(count(read_csv<Row>("out/empty.csv", encoding = "tis-620")))
+
+// The options can come from the program.
+fn load(path: string, delimiter: string) -> table<Person> {
+  read_csv<Person>(path, delimiter = delimiter)
+}
+print(count(load("data/people.tsv", "\t")))
+explain(read_csv<Row>("data/thai_tis620.csv", encoding = "tis-620", delimiter = ",") |> take(1))
+explain(load("data/people.tsv", "\t"))
+
+// Read with the wrong delimiter, the header is one column.
+print(read_csv<Person>("data/people.tsv"))

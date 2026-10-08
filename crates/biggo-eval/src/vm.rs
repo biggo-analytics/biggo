@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use biggo_plan::{BinaryOp, Plan, Scalar, scalar};
+use biggo_plan::{BinaryOp, CsvOptions, Plan, Scalar, scalar};
 use biggo_syntax::{Diagnostic, SourceFile, Span};
 use biggo_types::hir::{Builtin, Conversion, Program};
 
@@ -99,6 +99,8 @@ pub struct Vm<W> {
     explain: bool,
     /// Whether scalar functions of single values are computed here where they can be.
     own_scalars: bool,
+    /// What `args()` gives: the arguments the program was started with.
+    args: Rc<[Value]>,
 }
 
 impl<W: Write> Vm<W> {
@@ -113,6 +115,7 @@ impl<W: Write> Vm<W> {
             base_dir: PathBuf::new(),
             explain: false,
             own_scalars: true,
+            args: Rc::new([]),
         }
     }
 
@@ -128,6 +131,11 @@ impl<W: Write> Vm<W> {
 
     pub fn base_dir(&self) -> &Path {
         &self.base_dir
+    }
+
+    /// Sets the arguments that the program sees as `args()`.
+    pub fn set_args(&mut self, args: impl IntoIterator<Item = String>) {
+        self.args = args.into_iter().map(|arg| Value::Str(arg.into())).collect();
     }
 
     /// Whether scalar functions of single values are computed by the virtual machine itself
@@ -741,7 +749,22 @@ impl<W: Write> Vm<W> {
                     let _ = std::fs::create_dir_all(parent);
                 }
                 let written = match builtin {
-                    Builtin::WriteCsv => biggo_exec::write_csv(&plan, &path),
+                    Builtin::WriteCsv => {
+                        // The checker has looked at options that are written out; one
+                        // that the program computed is looked at here.
+                        let delimiter = CsvOptions::delimiter(&text(2));
+                        let encoding = CsvOptions::output_encoding(&text(3));
+                        let options = match (delimiter, encoding) {
+                            (Ok(delimiter), Ok(encoding)) => CsvOptions {
+                                delimiter,
+                                encoding,
+                            },
+                            (Err(message), _) | (_, Err(message)) => {
+                                return self.fail(frame, message);
+                            }
+                        };
+                        biggo_exec::write_csv(&plan, &path, options)
+                    }
                     Builtin::WriteParquet => biggo_exec::write_parquet(&plan, &path),
                     Builtin::WriteJson => biggo_exec::write_json(&plan, &path),
                     _ => biggo_exec::write_sqlite(&plan, &path, &text(2)),
@@ -867,6 +890,14 @@ impl<W: Write> Vm<W> {
                 let mut map = (**map).clone();
                 map.insert(key, args[2].clone());
                 Ok(Value::Map(Rc::new(map)))
+            }
+            Builtin::Args => Ok(Value::List(self.args.clone())),
+            Builtin::Split => {
+                let (whole, separator) = (text(0), text(1));
+                let pieces = biggo_plan::text::split(&whole, &separator).into_iter();
+                Ok(Value::List(
+                    pieces.map(|piece| Value::Str(piece.into())).collect(),
+                ))
             }
             Builtin::Assert => match (&args[0], args.get(1)) {
                 (Value::Bool(true), _) => Ok(Value::Unit),

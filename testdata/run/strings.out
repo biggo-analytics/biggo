@@ -1,0 +1,48 @@
+world ell llo
+ll | lo
+öß าค |
+a+b+c  abc
+["a", "b", "", "c"] ["one"] ["a", "b"] ["abc"]
+a c null
+007 ab   | hello ababax
+2 null 3 0
+true false
+123 order
+null null
+05/01/2026
+a#b#c price: USD 5
+null null null
+null null null
+null null null null
+3 [2026, 1, 5]
+12
++----------+---+-----+---------+-------+--------+--------+
+| code     | n | sep | country | last  | number | padded |
++----------+---+-----+---------+-------+--------+--------+
+| TH-001-a | 1 | -   | TH      | a     | 1      | 001    |
+| US-22-bb | 2 | 2   | US      | -bb   | 22     | 002    |
+| null     | 3 | -   | null    | null  | null   | 003    |
+| plain    | 0 |     | plain   | plain | null   | 000    |
++----------+---+-----+---------+-------+--------+--------+
++----------+------+------+-------+------+----------+----------+------------+
+| code     | tail | head | thai  | dash | colon    | swapped  | wide       |
++----------+------+------+-------+------+----------+----------+------------+
+| TH-001-a | -a   | T    | true  | 2    | TH:001-a | TH/001/a | TH-001-a.| |
+| US-22-bb | bb   | US   | false | 3    | US:22-bb | US-//-bb | US-22-bb.| |
+| null     | null | null | null  | null | null     | null     | null       |
+| plain    | in   |      | false | 0    | plain    | plain    | plain....| |
++----------+------+------+-------+------+----------+----------+------------+
+2
++---------+------+
+| country | rows |
++---------+------+
+| TH      | 1    |
+| US      | 1    |
+| null    | 1    |
+| plain   | 1    |
++---------+------+
+error: `a(b` is not a regular expression: unclosed group
+  --> run/strings.bgo:66:7
+   |
+66 | print(regex_match("ab", broken))
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -3,6 +3,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::csv::CsvOptions;
 use crate::expr::{AggCall, Expr, SortKey, WindowCall};
 use crate::schema::{Field, Name, Scalar, Schema};
 
@@ -107,6 +108,8 @@ pub struct Scan {
     pub display_path: Arc<str>,
     /// For a database, the query whose rows are read.
     pub query: Option<Arc<str>>,
+    /// For a CSV file, how it is laid out.
+    pub csv: CsvOptions,
     /// The columns the program declared for the file.
     pub declared: Arc<Schema>,
     pub schema: Arc<Schema>,
@@ -216,7 +219,8 @@ impl Plan {
 /// except its inputs and the values of its parameters, which exist only when the program runs.
 #[derive(Clone, Debug)]
 pub enum TableOp {
-    /// Parameter 0 is the path.
+    /// Parameter 0 is the path. For a database, parameter 1 is the query; for a CSV file,
+    /// parameters 1 and 2 are the delimiter and the encoding.
     Read {
         format: Format,
         schema: Arc<Schema>,
@@ -299,20 +303,27 @@ impl TableOp {
 
         Ok(match self {
             TableOp::Read { format, schema } => {
-                let Some(Scalar::Str(path)) = params.first() else {
-                    return Err("the file path must be a string".into());
+                let text = |index: usize, what: &str| match params.get(index) {
+                    Some(Scalar::Str(text)) => Ok(text.clone()),
+                    _ => Err(format!("{what} must be a string")),
                 };
-                // A database is read through a query, the second parameter.
-                let query = match (format, params.get(1)) {
-                    (Format::Sqlite, Some(Scalar::Str(query))) => Some(query.clone()),
-                    (Format::Sqlite, _) => return Err("the query must be a string".into()),
-                    _ => None,
-                };
+                let path = text(0, "the file path")?;
+                let mut query = None;
+                let mut csv = CsvOptions::default();
+                match format {
+                    Format::Sqlite => query = Some(text(1, "the query")?),
+                    Format::Csv => {
+                        csv.delimiter = CsvOptions::delimiter(&text(1, "the delimiter")?)?;
+                        csv.encoding = CsvOptions::encoding(&text(2, "the encoding")?)?;
+                    }
+                    Format::Parquet | Format::Json => {}
+                }
                 Plan::Scan(Scan {
                     format: *format,
-                    path: base_dir.join(&**path),
-                    display_path: path.clone(),
+                    path: base_dir.join(&*path),
+                    display_path: path,
                     query,
+                    csv,
                     declared: schema.clone(),
                     schema: schema.clone(),
                     filters: Vec::new(),
@@ -468,6 +479,7 @@ impl Plan {
         match self {
             Plan::Scan(scan) => {
                 write!(f, "Scan {} {:?}", scan.format.name(), scan.display_path)?;
+                write!(f, "{}", scan.csv)?;
                 if let Some(query) = &scan.query {
                     write!(f, " {query:?}")?;
                 }

@@ -1,0 +1,4 @@
+// A file that is not UTF-8, read without saying so.
+type Named = { id: int, name: string }
+
+print(count(read_csv<Named>("data/latin1.csv")))

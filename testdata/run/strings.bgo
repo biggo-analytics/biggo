@@ -1,0 +1,66 @@
+// String functions, on single values and on columns.
+
+print(substring("hello world", 6), substring("hello", 1, 3), substring("hello", -3))
+print(substring("hello", -3, 2), substring("hello", 9) + "|", substring("hello", 3, 99))
+print(substring("größe", 2, 2), substring("ราคา", 1, 2), substring("hello", 2, 0) + "|")
+print(replace("a-b-c", "-", "+"), replace("aaa", "a", ""), replace("abc", "", "x"))
+print(split("a,b,,c", ","), split("one", ","), split("a::b", "::"), split("abc", ""))
+print(split_part("a,b,c", ",", 0), split_part("a,b,c", ",", -1), split_part("a,b,c", ",", 3))
+print(pad_left("7", 3, "0"), pad_right("ab", 5) + "|", pad_left("hello", 3), pad_left("x", 6, "ab"))
+print(index_of("hello", "l"), index_of("hello", "z"), index_of("größe", "ß"), index_of("a", ""))
+
+// Regular expressions. A pattern matches anywhere in the string unless it is anchored.
+print(regex_match("order-123", "[0-9]+"), regex_match("order-123", "^[0-9]+$"))
+print(regex_extract("order-123", "[0-9]+"), regex_extract("order-123", "([a-z]+)-([0-9]+)", 1))
+print(regex_extract("no digits", "[0-9]+"), regex_extract("ab", "(a)|(b)", 2))
+print(regex_replace("2026-01-05", "(\\d+)-(\\d+)-(\\d+)", "$3/$2/$1"))
+print(regex_replace("a1b22c", "[0-9]+", "#"), regex_replace("price: $5", "\\$", "USD "))
+
+// A null argument gives null.
+let none: string? = null
+let no_int: int? = null
+print(substring(none, 1), substring("abc", no_int), replace("abc", "a", none))
+print(split_part(none, ",", 0), pad_left("a", no_int), index_of(none, "a"))
+print(regex_match(none, "a"), regex_match("a", none), regex_extract("a", none), regex_replace(none, "a", "b"))
+
+// The pieces of a string, in ordinary code.
+let parts = split("2026-01-05", "-")
+print(len(parts), map(parts, fn(part) { to_int(part) }))
+print(fold(split("3 4 5", " "), 0, fn(sum, part) { sum + to_int(part) }))
+
+// The same functions on columns.
+let codes = from_rows([
+  { code: "TH-001-a", n: 1, sep: "-" },
+  { code: "US-22-bb", n: 2, sep: "2" },
+  { code: null, n: 3, sep: "-" },
+  { code: "plain", n: 0, sep: "" },
+])
+codes
+  |> derive(
+    country = split_part(code, "-", 0),
+    last = split_part(code, sep, -1),
+    number = to_int(regex_extract(code, "-([0-9]+)-", 1)),
+    padded = pad_left(to_string(n), 3, "0"),
+  )
+  |> print()
+codes
+  |> select(
+    code,
+    tail = substring(code, -2),
+    head = substring(code, 0, n),
+    thai = regex_match(code, "^TH"),
+    dash = index_of(code, sep),
+    colon = regex_replace(code, "^([A-Z]+)-", "$1:"),
+    swapped = replace(code, sep, "/"),
+    wide = pad_right(code, 9, ".") + "|",
+  )
+  |> print()
+
+// A pattern can be a value the program worked out, as long as it is not a column.
+let wanted = "^(" + "TH" + "|" + "US" + ")"
+print(codes |> where(regex_match(code, wanted)) |> count())
+print(codes |> group(country = split_part(code, "-", 0)) |> agg(rows = count()))
+
+// A pattern that the program builds is only seen to be wrong when it is used.
+let broken = "a(" + "b"
+print(regex_match("ab", broken))

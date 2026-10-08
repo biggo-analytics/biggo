@@ -4,7 +4,7 @@
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Cursor;
-use std::ops::Range;
+use std::ops::{Deref, Range};
 use std::sync::Arc;
 
 use arrow::array::{Array, ArrayRef, AsArray, DurationMicrosecondArray, RecordBatch, StringArray};
@@ -270,7 +270,8 @@ fn row_end(data: &[u8], start: usize, mut quoted: bool) -> usize {
     data.len()
 }
 
-fn header_names(line: &[u8]) -> Vec<String> {
+fn header_names(line: &[u8], delimiter: u8) -> Vec<String> {
+    let delimiter = char::from(delimiter);
     let line = String::from_utf8_lossy(line);
     let line = line
         .trim_end_matches(['\r', '\n'])
@@ -286,7 +287,7 @@ fn header_names(line: &[u8]) -> Vec<String> {
                 name.push('"');
             }
             '"' => quoted = !quoted,
-            ',' if !quoted => names.push(std::mem::take(&mut name)),
+            c if c == delimiter && !quoted => names.push(std::mem::take(&mut name)),
             _ => name.push(c),
         }
     }
@@ -393,6 +394,9 @@ fn csv_error(
             "{file}, line {line}: the row has {fields}, but the header has {expected}"
         ))
     };
+    if message.contains("invalid UTF-8") {
+        return not_utf8(file);
+    }
     let rewritten = value_error()
         .or_else(column_error)
         .or_else(decimal_error)
@@ -448,6 +452,31 @@ fn json_error(message: &str, file: &str, read: &Schema) -> Error {
     Error(rewritten.unwrap_or_else(|| format!("{file}: {message}")))
 }
 
+/// The text of a CSV file as UTF-8: the file itself, or a copy made from another encoding.
+enum Text {
+    Mapped(Mmap),
+    Decoded(Vec<u8>),
+}
+
+impl Deref for Text {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        match self {
+            Text::Mapped(data) => data,
+            Text::Decoded(data) => data,
+        }
+    }
+}
+
+/// What to say of a CSV file that was read as UTF-8 and is not.
+fn not_utf8(file: &str) -> Error {
+    Error(format!(
+        "{file} is not UTF-8 text; if it is in another encoding, name it, \
+         as in `encoding = \"tis-620\"`"
+    ))
+}
+
 fn csv_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
     let file = open(scan)?;
     if file.metadata().map(|meta| meta.len() == 0).unwrap_or(false) {
@@ -456,12 +485,30 @@ fn csv_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
     // SAFETY: the mapping is only read. If another process truncates the file while the
     // query runs, the read fails with a signal instead of an error; that is the accepted
     // cost of not copying the file into memory.
-    let data = Arc::new(
-        unsafe { Mmap::map(&file) }
-            .map_err(|err| Error(format!("cannot read {}: {err}", scan.display_path)))?,
-    );
+    let mapped = unsafe { Mmap::map(&file) }
+        .map_err(|err| Error(format!("cannot read {}: {err}", scan.display_path)))?;
+    let data = Arc::new(match scan.csv.encoding {
+        None => Text::Mapped(mapped),
+        // The readers take UTF-8, so a file in another encoding is converted whole first.
+        // A byte order mark at the start of the file overrules the encoding that was named.
+        Some(encoding) => {
+            let (text, _, malformed) = encoding.decode(&mapped);
+            if malformed {
+                return Err(Error(format!(
+                    "{} is not {} text",
+                    scan.display_path,
+                    encoding.name().to_ascii_lowercase()
+                )));
+            }
+            Text::Decoded(text.into_owned().into_bytes())
+        }
+    });
+    let delimiter = scan.csv.delimiter;
     let header_end = row_end(&data, 0, false);
-    let names = header_names(&data[..header_end]);
+    if std::str::from_utf8(&data[..header_end]).is_err() {
+        return Err(not_utf8(&scan.display_path));
+    }
+    let names = header_names(&data[..header_end], delimiter);
 
     // The reader takes column types by position, so every column of the file needs one.
     // Those that are not read are declared as strings and left out of the projection.
@@ -471,7 +518,19 @@ fn csv_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
     let mut projection = Vec::with_capacity(shape.read.fields.len());
     for field in &shape.read.fields {
         let Some(index) = names.iter().position(|name| *name == *field.name) else {
-            return Err(shape.missing_column(&field.name, &names));
+            let Error(mut message) = shape.missing_column(&field.name, &names);
+            // A header that is one long column was probably cut at the wrong character.
+            let other = [('\t', "\\t"), (';', ";"), ('|', "|")];
+            let other = other
+                .iter()
+                .find(|(c, _)| names.len() == 1 && names[0].contains(*c));
+            if let Some((_, written)) = other.filter(|_| delimiter == b',') {
+                message.push_str(&format!(
+                    "; if the file separates its columns with another character, name it, \
+                     as in `delimiter = \"{written}\"`"
+                ));
+            }
+            return Err(Error(message));
         };
         fields[index] = ArrowField::new(&*field.name, file_type(field.ty.dtype), true);
         projection.push(index);
@@ -486,6 +545,7 @@ fn csv_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
         Box::new(move || {
             let reader = ReaderBuilder::new(file_schema)
                 .with_header(false)
+                .with_delimiter(delimiter)
                 .with_batch_size(BATCH_ROWS)
                 .with_projection(projection)
                 .build(Cursor::new(&data[range.clone()]))?;
@@ -811,9 +871,13 @@ mod tests {
     #[test]
     fn reads_header_names() {
         assert_eq!(
-            header_names(b"a,b c,\"d,e\",\"f\"\"g\"\r\n"),
+            header_names(b"a,b c,\"d,e\",\"f\"\"g\"\r\n", b','),
             ["a", "b c", "d,e", "f\"g"]
         );
-        assert_eq!(header_names("\u{feff}id,ชื่อ\n".as_bytes()), ["id", "ชื่อ"]);
+        assert_eq!(
+            header_names("\u{feff}id,ชื่อ\n".as_bytes(), b','),
+            ["id", "ชื่อ"]
+        );
+        assert_eq!(header_names(b"a,b\t\"c\td\"\n", b'\t'), ["a,b", "c\td"]);
     }
 }

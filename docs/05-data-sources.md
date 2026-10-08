@@ -141,10 +141,11 @@ south,17,2.5,2026-03-01
 Requirements for a CSV file that can be read:
 
 - The first line is always the column names (the header).
-- The separator is `,` only.
+- The separator is `,`, unless you name another with `delimiter` (see below).
 - A value that contains `,`, a line break, or `"` must be inside `"..."`, and a `"` inside it is
   doubled as `""`.
-- The encoding is UTF-8; a BOM at the start of the file is skipped.
+- The encoding is UTF-8, unless you name another with `encoding` (see below). A BOM at the start
+  of the file is skipped.
 - An empty field is null, except in a non-nullable `string` column, where it is the empty string
   `""`.
 - Every line must have the same number of fields as the header.
@@ -153,6 +154,63 @@ Requirements for a CSV file that can be read:
 characters so that a value containing a line break is not cut in the middle). Each chunk is parsed
 on its own core. Columns the query does not use are not converted to values, and the `where` filter
 is applied already inside each chunk.
+
+### Other delimiters and encodings
+
+`read_csv` and `write_csv` take two named arguments after the path:
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `delimiter` | `","` | The character between the fields of a row: one ASCII character other than `"` or a line break, such as `"\t"`, `";"` or `"|"` |
+| `encoding` | `"utf-8"` | The encoding of the file's text, by its usual name: `"tis-620"`, `"windows-874"`, `"windows-1252"`, `"iso-8859-1"`, `"shift_jis"`, `"gbk"`, `"utf-16le"` and so on |
+
+```biggo
+type Product = { code: string, name: string, price: float }
+let products = read_csv<Product>("data/products.tsv", delimiter = "\t")
+print(products)
+
+// A file written by an older Thai system, in TIS-620.
+type Customer = { id: int, name: string, city: string }
+let customers = read_csv<Customer>("data/customers_tis620.csv", encoding = "tis-620")
+print(customers |> where(id > 1))
+
+// Written for a program that wants semicolons and TIS-620, then read back.
+write_csv(customers, "out/customers.txt", delimiter = ";", encoding = "tis-620")
+print(count(read_csv<Customer>("out/customers.txt", delimiter = ";", encoding = "tis-620")))
+```
+
+```text output
++------+---------------+-------+
+| code | name          | price |
++------+---------------+-------+
+| W-01 | widget        | 2.5   |
+| G-07 | gadget, large | 10.0  |
+| Z-99 | gizmo         | 99.9  |
++------+---------------+-------+
++----+-------+---------+
+| id | name  | city    |
++----+-------+---------+
+| 2  | สมหญิง | เชียงใหม่ |
+| 3  | Anna  | ภูเก็ต    |
++----+-------+---------+
+3
+```
+
+- Encodings go by the names of the [Encoding Standard](https://encoding.spec.whatwg.org/#names-and-labels),
+  the ones web browsers know, in upper or lower case. `"tis-620"` is read as `"windows-874"`, the
+  same encoding with a few more characters, and that is the name `biggo explain` shows.
+- A file in another encoding is converted to UTF-8 in memory before it is read. The copy is as
+  large as the file for ASCII text and up to three times as large for Thai text, and the
+  conversion runs on one core. A UTF-8 file is read in place, with no copy.
+- A byte order mark at the start of a file overrules the encoding you name, so a UTF-16 file with
+  one is read correctly whether you say `"utf-16le"` or `"utf-16be"`.
+- Nothing is replaced silently. Bytes that are not valid in the encoding stop the program
+  (`x.csv is not windows-874 text`), and so does writing a character that the encoding does not
+  have (`'ร' cannot be written as windows-1252`).
+- A file can be read as UTF-16, but not written as it.
+- An option that is written out as a string is checked before the program runs. One that the
+  program computes is checked when the file is read or written.
+- Whatever the delimiter, a line break ends a row and `"` quotes a value.
 
 ## Parquet
 
@@ -301,6 +359,8 @@ read_sql<{ product: string, units: int }>("out/shop.db", "select * from product_
 | `x.csv has no column `c`; its columns are a, b` | The column name does not match the header (upper and lower case are treated as different) |
 | `column `c` of x.csv has missing values, but is declared `int`; declare it `int?`` | There are missing values in a column that is not declared nullable |
 | `x.csv, line 12: cannot read 'abc' as an int for column `c`` | The value on that line is not of the declared type |
+| `x.csv is not UTF-8 text; if it is in another encoding, name it, as in `encoding = "tis-620"`` | The file is in another encoding, such as TIS-620 or Windows-1252 |
+| `x.csv has no column `id`; its columns are id;name; if the file separates its columns with another character, name it, as in `delimiter = ";"`` | The file uses another delimiter than `,`, so the whole header was read as one column |
 | `x.csv, line 12: the row has 3 fields, but the header has 5` | The number of fields differs from the header. This usually comes from a `,` or `"` in a value that is not wrapped in `"..."` |
 | `x.json: cannot read "abc" as an int for field `c`` | The field's value is not of the declared type |
 | `x.json: every line must be one JSON object` | The file is not JSON Lines |

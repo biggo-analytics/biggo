@@ -1,0 +1,5 @@
+// An option the program computes is checked when the file is read.
+type Named = { id: int, name: string }
+
+fn load(delimiter: string) -> table<Named> { read_csv<Named>("data/latin1.csv", delimiter = delimiter) }
+print(load("::"))

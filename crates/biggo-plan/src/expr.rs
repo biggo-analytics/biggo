@@ -185,10 +185,24 @@ pub enum ScalarFn {
     Seconds,
     /// The length of a duration in seconds.
     TotalSeconds,
+    /// Part of a string, by the position of its first character and its length.
+    Substring,
+    Replace,
+    /// One of the pieces between the separators of a string, by position.
+    SplitPart,
+    PadLeft,
+    PadRight,
+    /// Where one string first occurs in another.
+    IndexOf,
+    /// Whether a regular expression matches anywhere in a string.
+    RegexMatch,
+    /// The first match of a regular expression, or one of its groups.
+    RegexExtract,
+    RegexReplace,
 }
 
 impl ScalarFn {
-    pub const ALL: [ScalarFn; 30] = [
+    pub const ALL: [ScalarFn; 39] = [
         ScalarFn::IsNull,
         ScalarFn::Abs,
         ScalarFn::Round,
@@ -219,6 +233,15 @@ impl ScalarFn {
         ScalarFn::Minutes,
         ScalarFn::Seconds,
         ScalarFn::TotalSeconds,
+        ScalarFn::Substring,
+        ScalarFn::Replace,
+        ScalarFn::SplitPart,
+        ScalarFn::PadLeft,
+        ScalarFn::PadRight,
+        ScalarFn::IndexOf,
+        ScalarFn::RegexMatch,
+        ScalarFn::RegexExtract,
+        ScalarFn::RegexReplace,
     ];
 
     pub fn name(self) -> &'static str {
@@ -253,6 +276,15 @@ impl ScalarFn {
             ScalarFn::Minutes => "minutes",
             ScalarFn::Seconds => "seconds",
             ScalarFn::TotalSeconds => "total_seconds",
+            ScalarFn::Substring => "substring",
+            ScalarFn::Replace => "replace",
+            ScalarFn::SplitPart => "split_part",
+            ScalarFn::PadLeft => "pad_left",
+            ScalarFn::PadRight => "pad_right",
+            ScalarFn::IndexOf => "index_of",
+            ScalarFn::RegexMatch => "regex_match",
+            ScalarFn::RegexExtract => "regex_extract",
+            ScalarFn::RegexReplace => "regex_replace",
         }
     }
 

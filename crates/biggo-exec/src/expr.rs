@@ -38,13 +38,13 @@ impl Datum for Col {
 }
 
 impl Col {
-    fn values(&self) -> &ArrayRef {
+    pub(crate) fn values(&self) -> &ArrayRef {
         match self {
             Col::Array(array) | Col::Scalar(array) => array,
         }
     }
 
-    fn is_scalar(&self) -> bool {
+    pub(crate) fn is_scalar(&self) -> bool {
         matches!(self, Col::Scalar(_))
     }
 
@@ -375,7 +375,7 @@ pub fn to_strings(array: &ArrayRef) -> Result<ArrayRef> {
     Ok(Arc::new(strings))
 }
 
-fn call(func: ScalarFn, mut args: Vec<Col>, dtype: DataType, _rows: usize) -> Result<Col> {
+fn call(func: ScalarFn, mut args: Vec<Col>, dtype: DataType, rows: usize) -> Result<Col> {
     let first = args.remove(0);
     let part = |part| {
         first
@@ -490,6 +490,18 @@ fn call(func: ScalarFn, mut args: Vec<Col>, dtype: DataType, _rows: usize) -> Re
         }),
         ScalarFn::ToFloat | ScalarFn::ToDecimal | ScalarFn::ToDate | ScalarFn::ToDateTime => {
             first.map(|array| convert(array, dtype))
+        }
+        ScalarFn::Substring
+        | ScalarFn::Replace
+        | ScalarFn::SplitPart
+        | ScalarFn::PadLeft
+        | ScalarFn::PadRight
+        | ScalarFn::IndexOf
+        | ScalarFn::RegexMatch
+        | ScalarFn::RegexExtract
+        | ScalarFn::RegexReplace => {
+            args.insert(0, first);
+            crate::text::call(func, &args, dtype, rows)
         }
     }
 }

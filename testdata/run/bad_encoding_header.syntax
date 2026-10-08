@@ -1,0 +1,2 @@
+(type Row {รหัส: int})
+(call print (call read_csv <Row> "data/thai_tis620.csv"))

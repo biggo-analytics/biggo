@@ -288,16 +288,21 @@ the new behavior is correct.
 
 ## Adding a feature
 
-**A scalar function** (such as `replace(s, a, b)`):
+**A scalar function** (such as `reverse(s)`):
 
 1. Add a variant to `ScalarFn`, with its name (`biggo-plan/src/expr.rs`).
 2. Give the types of the arguments and the result in `scalar_call` (`biggo-types/src/verbs.rs`).
-3. Write the computation on Arrow arrays in `call` (`biggo-exec/src/expr.rs`).
+3. Write the computation on Arrow arrays in `call` (`biggo-exec/src/expr.rs`). A string function
+   that has no ready-made Arrow kernel is written for one value in `biggo-plan/src/text.rs` and
+   applied to each row in `biggo-exec/src/text.rs`.
 4. Add the name to the editor grammar and to `docs/06-builtins.md` (the `in_sync` test warns you if
    you forget).
 
 You do not need to touch the VM: scalar values are computed through the same path as columns
-(`call_scalar`), so you get the same behavior in both places automatically.
+(`call_scalar`), so you get the same behavior in both places automatically. If the function is
+called often on single values, the VM can compute it itself (`biggo-eval/src/scalars.rs`), with
+the same one-value function from `text.rs`; the test `scalar_functions_agree_with_the_engine`
+then holds the two to the same answers.
 
 **An aggregate**: add it to `AggFn`, give its type in `agg_type`, and add an accumulator to `Acc`
 (`new`, `update`, `merge`, `finish`). `merge` must give the same result as updating continuously.

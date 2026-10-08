@@ -1,0 +1,3 @@
+(type Row {รหัส: int, ชื่อ: string, จังหวัด: string})
+(let thai (call read_csv <Row> "data/thai_tis620.csv" (encoding: "tis-620")))
+(call write_csv thai "out/not_latin.csv" (encoding: "windows-1252"))

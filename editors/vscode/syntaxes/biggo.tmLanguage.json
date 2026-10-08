@@ -162,7 +162,7 @@
       "patterns": [
         {
           "name": "support.function.biggo",
-          "match": "\\b(abs|agg|assert|assert_eq|ceil|collect|contains|corr|count|count_distinct|cov|cumsum|day|days|derive|describe|distinct|drop|each|ends_with|explain|explode|filter|first|floor|fold|from_rows|group|has_key|histogram|hour|hours|intercept|is_null|join|keys|lag|last|lead|len|length|linreg|lower|map|max|mean|median|min|minute|minutes|month|moving_avg|pivot|print|put|range|rank|read_csv|read_json|read_parquet|read_sql|rename|round|row_number|second|seconds|select|skip|slope|sort|sqrt|starts_with|stddev|sum|take|to_date|to_datetime|to_decimal|to_float|to_int|to_rows|to_string|total_seconds|trim|union|unpivot|upper|values|where|window|write_csv|write_json|write_parquet|write_sql|year)\\b(?=\\s*[(<])"
+          "match": "\\b(abs|agg|args|assert|assert_eq|ceil|collect|contains|corr|count|count_distinct|cov|cumsum|day|days|derive|describe|distinct|drop|each|ends_with|explain|explode|filter|first|floor|fold|from_rows|group|has_key|histogram|hour|hours|index_of|intercept|is_null|join|keys|lag|last|lead|len|length|linreg|lower|map|max|mean|median|min|minute|minutes|month|moving_avg|pad_left|pad_right|pivot|print|put|range|rank|read_csv|read_json|read_parquet|read_sql|regex_extract|regex_match|regex_replace|rename|replace|round|row_number|second|seconds|select|skip|slope|sort|split|split_part|sqrt|starts_with|stddev|substring|sum|take|to_date|to_datetime|to_decimal|to_float|to_int|to_rows|to_string|total_seconds|trim|union|unpivot|upper|values|where|window|write_csv|write_json|write_parquet|write_sql|year)\\b(?=\\s*[(<])"
         },
         {
           "name": "keyword.other.sort-order.biggo",

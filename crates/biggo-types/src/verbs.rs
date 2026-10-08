@@ -5,8 +5,8 @@
 use std::sync::Arc;
 
 use biggo_plan::{
-    self as plan, AggCall, AggFn, ColType, DataType, Field, Format, JoinColumn, JoinKind, Scalar,
-    ScalarFn, Schema, SortKey, TableOp, WindowCall, WindowFn,
+    self as plan, AggCall, AggFn, ColType, CsvOptions, DataType, Field, Format, JoinColumn,
+    JoinKind, Scalar, ScalarFn, Schema, SortKey, TableOp, WindowCall, WindowFn, text,
 };
 use biggo_syntax::Span;
 use biggo_syntax::ast::{self, BinaryOp, Date, ExprId};
@@ -32,7 +32,7 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 48] = [
+const VERBS: [&str; 50] = [
     "print",
     "read_csv",
     "read_parquet",
@@ -64,6 +64,8 @@ const VERBS: [&str; 48] = [
     "has_key",
     "assert",
     "assert_eq",
+    "args",
+    "split",
     "where",
     "select",
     "drop",
@@ -566,12 +568,22 @@ impl Cx<'_> {
                         Some(Lowered::Free(Expr::new(kind, ty, span)))
                     }
                     Err(args) => {
-                        let digits = args.get(1).filter(|_| func == ScalarFn::Round);
-                        if digits.is_some_and(|d| d.reads_any(|_| true)) {
-                            let message =
-                                "the number of digits of `round` cannot depend on a column";
-                            self.error(span, message);
-                            return None;
+                        // These are worked out once for the whole column.
+                        let fixed: &[(usize, &str)] = match func {
+                            ScalarFn::Round => &[(1, "the number of digits")],
+                            ScalarFn::RegexMatch | ScalarFn::RegexReplace => &[(1, "the pattern")],
+                            ScalarFn::RegexExtract => &[(1, "the pattern"), (2, "the group")],
+                            _ => &[],
+                        };
+                        for (index, what) in fixed {
+                            if args.get(*index).is_some_and(|arg| arg.reads_any(|_| true)) {
+                                let message = format!(
+                                    "{what} of `{}` cannot depend on a column",
+                                    func.name()
+                                );
+                                self.error(span, message);
+                                return None;
+                            }
                         }
                         let col_ty = self.col_type(&ty, span)?;
                         let kind = plan::ExprKind::Call(func, args);
@@ -728,10 +740,10 @@ impl Cx<'_> {
         if schema.fields.is_empty() {
             return self.error(row_type.span, "the row type needs at least one column");
         }
-        if !self.all_positional(call, call.args) {
+        let Some((positional, options)) = self.file_args(call, format == Format::Csv, false) else {
             return Expr::error(call.span);
-        }
-        let texts: &[(ExprId, &str)] = match (format, call.args) {
+        };
+        let texts: &[(ExprId, &str)] = match (format, positional) {
             (Format::Sqlite, [path, query]) => &[
                 (path.value, "the database path"),
                 (query.value, "the query"),
@@ -741,6 +753,11 @@ impl Cx<'_> {
                 return self.error(call.span, message);
             }
             (_, [path]) => &[(path.value, "the file path")],
+            (Format::Csv, _) => {
+                let message = "`read_csv` takes the file path, \
+                               and can take `delimiter` and `encoding` by name";
+                return self.error(call.span, message);
+            }
             _ => {
                 let message = format!("`{name}` takes one argument, the file path");
                 return self.error(call.span, message);
@@ -753,6 +770,7 @@ impl Cx<'_> {
                 None => return Expr::error(call.span),
             }
         }
+        params.extend(options);
         let op = TableOp::Read {
             format,
             schema: schema.clone(),
@@ -764,7 +782,11 @@ impl Cx<'_> {
         let Some((table, _)) = self.table_arg(call, 0) else {
             return Expr::error(call.span);
         };
-        let texts: &[(ExprId, &str)] = match (builtin, call.args) {
+        let csv = builtin == Builtin::WriteCsv;
+        let Some((positional, options)) = self.file_args(call, csv, true) else {
+            return Expr::error(call.span);
+        };
+        let texts: &[(ExprId, &str)] = match (builtin, positional) {
             (Builtin::WriteSqlite, [_, path, name]) => &[
                 (path.value, "the database path"),
                 (name.value, "the table name"),
@@ -775,14 +797,16 @@ impl Cx<'_> {
                 return self.error(call.span, message);
             }
             (_, [_, path]) => &[(path.value, "the file path")],
+            (Builtin::WriteCsv, _) => {
+                let message = "`write_csv` takes a table and a file path, \
+                               and can take `delimiter` and `encoding` by name";
+                return self.error(call.span, message);
+            }
             _ => {
                 let message = format!("`{}` takes a table and a file path", call.name);
                 return self.error(call.span, message);
             }
         };
-        if !self.all_positional(call, call.args) {
-            return Expr::error(call.span);
-        }
         let mut args = vec![table];
         for (value, what) in texts {
             match self.scalar_arg(*value, Type::Str, what) {
@@ -790,7 +814,75 @@ impl Cx<'_> {
                 None => return Expr::error(call.span),
             }
         }
+        args.extend(options);
         Expr::new(ExprKind::Builtin(builtin, args), Type::Unit, call.span)
+    }
+
+    /// Separates the arguments of a call that reads or writes a file. A CSV file can say how
+    /// it is laid out, in named arguments after the others: its delimiter and its encoding,
+    /// each a string. Returns the arguments before those, and for a CSV file the two options
+    /// in that order, with the default for one the call leaves out.
+    fn file_args<'c>(
+        &mut self,
+        call: &Call<'c>,
+        csv: bool,
+        writing: bool,
+    ) -> Option<(&'c [ArgSrc], Vec<Expr>)> {
+        let args = call.args;
+        if !csv {
+            return self
+                .all_positional(call, args)
+                .then_some((args, Vec::new()));
+        }
+        let named = args.iter().position(|arg| arg.name.is_some());
+        let (positional, options) = args.split_at(named.unwrap_or(args.len()));
+        let (mut delimiter, mut encoding) = (None, None);
+        for arg in options {
+            let Some(name) = arg.name else {
+                let span = self.ast.span(arg.value);
+                self.error(
+                    span,
+                    "positional arguments must come before named arguments",
+                );
+                return None;
+            };
+            let option = self.text(name.name);
+            let (slot, what) = match &*option {
+                "delimiter" => (&mut delimiter, "the delimiter"),
+                "encoding" => (&mut encoding, "the encoding"),
+                other => {
+                    let message = format!(
+                        "`{}` has no argument `{other}`; it takes `delimiter` and `encoding`",
+                        call.name
+                    );
+                    self.error(name.span, message);
+                    return None;
+                }
+            };
+            if slot.is_some() {
+                self.error(name.span, format!("`{option}` is given twice"));
+                return None;
+            }
+            let value = self.scalar_arg(arg.value, Type::Str, what)?;
+            // A value that is written out is checked now. Any other is checked when the
+            // program runs.
+            if let ExprKind::Str(literal) = &value.kind {
+                let checked = match (&*option, writing) {
+                    ("delimiter", _) => CsvOptions::delimiter(literal).map(drop),
+                    (_, true) => CsvOptions::output_encoding(literal).map(drop),
+                    (_, false) => CsvOptions::encoding(literal).map(drop),
+                };
+                if let Err(message) = checked {
+                    self.error(value.span, message);
+                    return None;
+                }
+            }
+            *slot = Some(value);
+        }
+        let default = |text: &str| Expr::new(ExprKind::Str(text.into()), Type::Str, call.span);
+        let delimiter = delimiter.unwrap_or_else(|| default(","));
+        let encoding = encoding.unwrap_or_else(|| default("utf-8"));
+        Some((positional, vec![delimiter, encoding]))
     }
 
     fn table_builtin(&mut self, call: &Call, builtin: Builtin) -> Expr {
@@ -2188,6 +2280,7 @@ impl Cx<'_> {
             Amount,
             /// An int that is not null.
             Count,
+            Int,
         }
         let name = call.name;
         if !self.all_positional(call, call.args) {
@@ -2219,11 +2312,28 @@ impl Cx<'_> {
                 &[Want::Amount]
             }
             ScalarFn::TotalSeconds => &[Want::Duration],
+            ScalarFn::Substring if args.len() == 3 => &[Want::Str, Want::Int, Want::Int],
+            ScalarFn::Substring => &[Want::Str, Want::Int],
+            ScalarFn::Replace | ScalarFn::RegexReplace => &[Want::Str, Want::Str, Want::Str],
+            ScalarFn::SplitPart => &[Want::Str, Want::Str, Want::Int],
+            ScalarFn::PadLeft | ScalarFn::PadRight if args.len() == 3 => {
+                &[Want::Str, Want::Int, Want::Str]
+            }
+            ScalarFn::PadLeft | ScalarFn::PadRight => &[Want::Str, Want::Int],
+            ScalarFn::IndexOf | ScalarFn::RegexMatch => &[Want::Str, Want::Str],
+            ScalarFn::RegexExtract if args.len() == 3 => &[Want::Str, Want::Str, Want::Count],
+            ScalarFn::RegexExtract => &[Want::Str, Want::Str],
         };
         if args.len() != wants.len() {
             let plural = if wants.len() == 1 { "" } else { "s" };
-            let message = format!("`{name}` takes {} argument{plural}", wants.len());
-            return self.error(call.span, message);
+            let count = match func {
+                ScalarFn::Substring
+                | ScalarFn::PadLeft
+                | ScalarFn::PadRight
+                | ScalarFn::RegexExtract => "2 or 3 arguments".to_string(),
+                _ => format!("{} argument{plural}", wants.len()),
+            };
+            return self.error(call.span, format!("`{name}` takes {count}"));
         }
         let mut nullable = false;
         let mut first = Int;
@@ -2251,6 +2361,7 @@ impl Cx<'_> {
                 Want::Duration => ty.dtype == Duration,
                 Want::Amount => matches!(ty.dtype, Int | Float),
                 Want::Count => ty == ColType::required(Int),
+                Want::Int => ty.dtype == Int,
             };
             if !accepted {
                 let expected = match want {
@@ -2259,7 +2370,7 @@ impl Cx<'_> {
                     Want::Day => "a date or a datetime",
                     Want::Moment => "a datetime",
                     Want::Duration => "a duration",
-                    Want::Count => "an int",
+                    Want::Count | Want::Int => "an int",
                     Want::Any => {
                         let message = format!("`{name}` cannot convert a value of type {}", arg.ty);
                         return self.error(arg.span, message);
@@ -2284,10 +2395,37 @@ impl Cx<'_> {
             }
             nullable |= ty.nullable;
         }
-        let dtype = match func {
-            ScalarFn::IsNull | ScalarFn::Contains | ScalarFn::StartsWith | ScalarFn::EndsWith => {
-                Bool
+        // A pattern that is written out is checked now, and so is the group asked of it.
+        let regex = matches!(
+            func,
+            ScalarFn::RegexMatch | ScalarFn::RegexExtract | ScalarFn::RegexReplace
+        );
+        if regex && let ExprKind::Str(pattern) = &args[1].kind {
+            let regex = match text::regex(pattern) {
+                Ok(regex) => regex,
+                Err(message) => return self.error(args[1].span, message),
+            };
+            let written = |group: &Expr| match &group.kind {
+                ExprKind::Int(number) => Some(*number),
+                ExprKind::Neg(inner) => match inner.kind {
+                    ExprKind::Int(number) => Some(-number),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(group) = args.get(2).filter(|_| func == ScalarFn::RegexExtract)
+                && let Some(number) = written(group)
+                && let Err(message) = text::regex_group(&regex, number)
+            {
+                return self.error(group.span, message);
             }
+        }
+        let dtype = match func {
+            ScalarFn::IsNull
+            | ScalarFn::Contains
+            | ScalarFn::StartsWith
+            | ScalarFn::EndsWith
+            | ScalarFn::RegexMatch => Bool,
             // A decimal stays exact when rounded.
             ScalarFn::Abs | ScalarFn::Round => first,
             ScalarFn::Floor
@@ -2295,8 +2433,19 @@ impl Cx<'_> {
             | ScalarFn::Sqrt
             | ScalarFn::ToFloat
             | ScalarFn::TotalSeconds => Float,
-            ScalarFn::Lower | ScalarFn::Upper | ScalarFn::Trim | ScalarFn::ToString => Str,
+            ScalarFn::Lower
+            | ScalarFn::Upper
+            | ScalarFn::Trim
+            | ScalarFn::ToString
+            | ScalarFn::Substring
+            | ScalarFn::Replace
+            | ScalarFn::SplitPart
+            | ScalarFn::PadLeft
+            | ScalarFn::PadRight
+            | ScalarFn::RegexExtract
+            | ScalarFn::RegexReplace => Str,
             ScalarFn::Length
+            | ScalarFn::IndexOf
             | ScalarFn::Year
             | ScalarFn::Month
             | ScalarFn::Day
@@ -2309,7 +2458,13 @@ impl Cx<'_> {
             ScalarFn::ToDecimal => Decimal,
             ScalarFn::Days | ScalarFn::Hours | ScalarFn::Minutes | ScalarFn::Seconds => Duration,
         };
-        let nullable = nullable && func != ScalarFn::IsNull;
+        // Some functions have no answer for some values: a piece that is not there, a
+        // pattern that does not match.
+        let partial = matches!(
+            func,
+            ScalarFn::SplitPart | ScalarFn::IndexOf | ScalarFn::RegexExtract
+        );
+        let nullable = (nullable || partial) && func != ScalarFn::IsNull;
         let ty = Type::from_col(ColType::new(dtype, nullable));
         Expr::new(ExprKind::Scalar(func, args), ty, call.span)
     }

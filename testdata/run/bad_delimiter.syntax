@@ -1,0 +1,4 @@
+(type Named {id: int, name: string})
+(fn load(delimiter: string) -> table<Named>
+  (block (call read_csv <Named> "data/latin1.csv" (delimiter: delimiter))))
+(call print (call load "::"))
