@@ -12,6 +12,8 @@ path = "src/main.rs"
 [dependencies]
 biggo-syntax.workspace = true
 biggo-eval.workspace = true
+biggo-exec.workspace = true
+biggo-plan.workspace = true
 biggo-fmt.workspace = true
 biggo-lsp.workspace = true
 rustyline = { version = "18.0.1", default-features = false, features = ["with-file-history"] }

@@ -97,7 +97,8 @@ sales
 You can read it from top to bottom:
 
 1. `type Sale = {...}` declares the row type. `price: float?` means this column can be empty (the file
-   has a row with no price)
+   has a row with no price). For a file of your own, `biggo infer file.csv` prints this
+   declaration, worked out from what is in the file
 2. `read_csv<Sale>(...)` gives a table whose columns follow `Sale`. The file path is relative to the
    location of the program file, not to the directory where you run the command
 3. `a |> f(b)` is `f(a, b)`. The table on the left is passed as the first argument of the function on

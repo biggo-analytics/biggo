@@ -274,19 +274,13 @@ its first argument.
 
 ### 8. Getting data in and out
 
-Exists: `read_csv` and `write_csv` (with `delimiter` and `encoding`), `read_parquet`
-`write_parquet`, `read_json` `write_json` (JSON Lines), `read_sql` `write_sql` (SQLite), `args()`.
+Exists: `read_csv` and `write_csv` (with `delimiter`, `encoding`, `header`, `skip`, `nulls`),
+`read_parquet` `write_parquet`, `read_json` `write_json` (JSON Lines and arrays), `read_sql`
+`write_sql` (SQLite), patterns that match many files, `args()`, `env()`, `biggo infer`.
 
 | Feature | What it does | Priority |
 | --- | --- | --- |
-| `biggo infer data.csv` | Reads a sample of a file and prints the `type` declaration for it, to copy into a program, instead of typing the type of every column by hand | Must |
-| `read_csv(..., header = false)` | Files with no header line. Columns are taken in the order of the row type | Must |
-| `read_csv(..., nulls = ["NA", "-"])` | Which text means null | Must |
-| `read_csv(..., skip = 3)` | Lines to pass over before the header, for exports that start with a title | Must |
-| JSON files that are one array | `[{...}, {...}]`, in addition to JSON Lines | Must |
-| many files in one call | `read_csv<T>("logs/2026-*.csv")`, with the file name available as a column | Must |
 | `read_excel<T>(path)`, with `sheet`, `skip` and `range` | Excel workbooks, where most analysts' data is | Must |
-| `env(name)` | An environment variable as a `string?`, for paths and passwords that do not belong in a program | Must |
 | `write_excel(t, path, sheet = "...")` | A result as a workbook | Should |
 | `read_csv(..., date_format = "%d/%m/%Y", decimal = ",")` | Dates and numbers in the form the file uses, read straight into `date` and `float` columns | Should |
 | `read_csv(..., on_error = "null")` | A value that does not fit its column becomes null, and the number of such values is reported, instead of the first one stopping the query | Should |
@@ -303,6 +297,13 @@ Exists: `read_csv` and `write_csv` (with `delimiter` and `encoding`), `read_parq
 | Arrow IPC (Feather) | Handing data to Python and R without converting it | Later |
 | nested columns | `list<T>` and records as columns. Today a column can only have a basic type | Later |
 
+- [x] `biggo infer data.csv` prints the row type of a CSV, JSON, Parquet or SQLite source, with
+      the call that reads it
+- [x] `read_csv` with `header = false`, `skip = n` and `nulls = [...]`
+- [x] JSON files that are one array, in addition to JSON Lines
+- [x] Many files in one call, by a pattern such as `"logs/2026-*.csv"`, with the path of each
+      row's file in a column (`file_name = "..."`)
+- [x] `env(name)` for paths and passwords that do not belong in a program
 - [x] Programs can read their command-line arguments with `args()`
 - [x] CSV files with another delimiter (tab, `;`, `|`) and in encodings other than UTF-8 (such as
       TIS-620 / Windows-874), for both reading and writing

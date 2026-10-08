@@ -1,0 +1,67 @@
+(type Line {id: int, region: string?, units: int?, price: float?, note: string})
+(let report
+  (call read_csv <Line> "data/report_title.csv"
+    (skip: 3)
+    (nulls: (list "NA" "-"))))
+(call print report)
+(call print (|> report (call where (call is_null units)) (call select id note)))
+(call print
+  (|> report
+    (call agg
+      (units: (call sum units))
+      (priced: (call count price))
+      (regions: (call count region)))))
+(type Loose {id: int, region: string, note: string?})
+(call print
+  (|>
+    (call read_csv <Loose> "data/report_title.csv" (skip: 3))
+    (call select id region note)))
+(type Bare {id: int, region: string, units: int, price: float?})
+(let bare (call read_csv <Bare> "data/no_header.csv" (header: false)))
+(call print bare)
+(call print (|> bare (call where (> units 5)) (call select region price)))
+(let lines 1)
+(call print
+  (|>
+    (call read_csv <Bare> "data/no_header.csv"
+      (header: (== lines 0))
+      (skip: lines))
+    (call count)))
+(type Item {id: int, name: string, score: float?, joined: date?})
+(let items (call read_json <Item> "data/items.json"))
+(call print items)
+(call print (|> items (call where (> score 8.0)) (call select name)))
+(call print (|> (call read_json <Item> "data/empty_array.json") (call count)))
+(type Hits {day: date, hits: int, file: string})
+(let logs (call read_csv <Hits> "data/logs/*.csv" (file_name: "file")))
+(call print logs)
+(call print
+  (|> logs
+    (call group file)
+    (call agg (hits: (call sum hits)))
+    (call sort file)))
+(call print
+  (|>
+    (call read_csv <Hits> "data/logs/2026-*.csv" (file_name: "file"))
+    (call where (> hits 9))
+    (call select file day)))
+(call print
+  (|> logs (call select file) (call distinct file) (call count))
+  (|> logs (call count)))
+(call print
+  (|>
+    (call read_csv <{day: date, hits: int}> "data/logs/2026-0?.csv")
+    (call agg (hits: (call sum hits)))))
+(call print (call read_json <Hits> "data/logs/*.json" (file_name: "file")))
+(call explain
+  (|>
+    (call read_csv <Hits> "data/logs/*.csv"
+      (file_name: "file")
+      (skip: 0)
+      (nulls: (list "NA")))
+    (call where (> hits 9))))
+(call print
+  (call env "BIGGO_NO_SUCH_VARIABLE")
+  (?? (call env "BIGGO_NO_SUCH_VARIABLE") "unset")
+  (call is_null (call env "PATH")))
+(call print (call read_csv <Hits> "data/logs/1999-*.csv" (file_name: "file")))

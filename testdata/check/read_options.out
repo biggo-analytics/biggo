@@ -1,0 +1,131 @@
+error: `header` must be bool, found int
+ --> check/read_options.bgo:4:33
+  |
+4 | read_csv<Row>("a.csv", header = 1)
+  |                                 ^
+
+error: `skip` must be int, found string
+ --> check/read_options.bgo:5:31
+  |
+5 | read_csv<Row>("a.csv", skip = "3")
+  |                               ^^^
+
+error: `skip` is a number of lines, so it cannot be negative
+ --> check/read_options.bgo:6:31
+  |
+6 | read_csv<Row>("a.csv", skip = -1)
+  |                               ^^
+
+error: `nulls` must be list<string>, found string
+ --> check/read_options.bgo:7:32
+  |
+7 | read_csv<Row>("a.csv", nulls = "NA")
+  |                                ^^^^
+
+error: `nulls` must be list<string>, found list<int>
+ --> check/read_options.bgo:8:32
+  |
+8 | read_csv<Row>("a.csv", nulls = [1, 2])
+  |                                ^^^^^^
+
+error: the row type has no column `source` to take the file name; add `source: string` to it
+ --> check/read_options.bgo:9:36
+  |
+9 | read_csv<Row>("a.csv", file_name = "source")
+  |                                    ^^^^^^^^
+
+error: column `n` takes the file name, so it must be `string`, not `int`
+  --> check/read_options.bgo:10:36
+   |
+10 | read_csv<Row>("a.csv", file_name = "n")
+   |                                    ^^^
+
+error: the column that takes the file name must be written out, as in `file_name = "source"`
+  --> check/read_options.bgo:12:36
+   |
+12 | read_csv<Row>("a.csv", file_name = column)
+   |                                    ^^^^^^
+
+error: `header` is given twice
+  --> check/read_options.bgo:13:40
+   |
+13 | read_csv<Row>("a.csv", header = false, header = true)
+   |                                        ^^^^^^
+
+error: `read_csv` has no argument `sheet`; it takes `delimiter`, `encoding`, `header`, `skip`, `nulls` and `file_name`
+  --> check/read_options.bgo:14:24
+   |
+14 | read_csv<Row>("a.csv", sheet = 2)
+   |                        ^^^^^
+
+error: `read_csv` takes the file path, and can take `delimiter`, `encoding`, `header`, `skip`, `nulls` and `file_name` by name
+  --> check/read_options.bgo:15:1
+   |
+15 | read_csv<Row>("a.csv", "b.csv")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `read_json` has no argument `header`; it takes `file_name`
+  --> check/read_options.bgo:16:26
+   |
+16 | read_json<Row>("a.json", header = false)
+   |                          ^^^^^^
+
+error: column `id` takes the file name, so it must be `string`, not `int`
+  --> check/read_options.bgo:17:38
+   |
+17 | read_json<Row>("a.json", file_name = "id")
+   |                                      ^^^^
+
+error: `read_parquet` has no argument `skip`; it takes `file_name`
+  --> check/read_options.bgo:18:32
+   |
+18 | read_parquet<Row>("a.parquet", skip = 1)
+   |                                ^^^^
+
+error: `read_parquet` takes the file path, and can take `file_name` by name
+  --> check/read_options.bgo:19:1
+   |
+19 | read_parquet<Row>()
+   | ^^^^^^^^^^^^^^^^^^^
+
+error: `read_sql` does not take named arguments
+  --> check/read_options.bgo:20:35
+   |
+20 | read_sql<Row>("a.db", "select 1", file_name = "name")
+   |                                   ^^^^^^^^^
+
+error: column `file` takes the file name, so the row type needs a column that is read from the file as well
+  --> check/read_options.bgo:21:49
+   |
+21 | read_csv<{ file: string }>("a.csv", file_name = "file")
+   |                                                 ^^^^^^
+
+error: `write_csv` has no argument `header`; it takes `delimiter` and `encoding`
+  --> check/read_options.bgo:22:45
+   |
+22 | write_csv(from_rows([{ a: 1 }]), "out.csv", header = false)
+   |                                             ^^^^^^
+
+error: `env` takes the name of an environment variable
+  --> check/read_options.bgo:23:1
+   |
+23 | env()
+   | ^^^^^
+
+error: the name of the variable must be string, found int
+  --> check/read_options.bgo:24:5
+   |
+24 | env(1)
+   |     ^
+
+error: `env` takes the name of an environment variable
+  --> check/read_options.bgo:25:1
+   |
+25 | env("A", "B")
+   | ^^^^^^^^^^^^^
+
+error: expected string, found string?
+  --> check/read_options.bgo:26:20
+   |
+26 | let home: string = env("HOME")
+   |                    ^^^^^^^^^^^

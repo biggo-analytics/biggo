@@ -1,4 +1,4 @@
-//! Reads CSV and Parquet files. A file is split into pieces that are decoded on all cores, a
+//! Reads files and databases. A file is split into pieces that are decoded on all cores, a
 //! few at a time, so that a reader who wants only the first rows does not pay for the rest.
 
 use std::collections::VecDeque;
@@ -14,13 +14,14 @@ use arrow::datatypes::{
     DataType as ArrowType, Field as ArrowField, Float64Type, Schema as ArrowSchema, SchemaRef,
 };
 use biggo_plan::Date;
-use biggo_plan::{DataType, Expr, Field, Format, Scalar, Scan, Schema, scalar};
+use biggo_plan::{ColType, DataType, Expr, Field, Format, Scalar, Scan, Schema, scalar};
 use memmap2::Mmap;
 use parquet::arrow::ProjectionMask;
 use parquet::arrow::arrow_reader::{
     ArrowReaderMetadata, ArrowReaderOptions, ParquetRecordBatchReaderBuilder,
 };
 use rayon::prelude::*;
+use regex::Regex;
 
 use crate::convert::{arrow_type, batch as make_batch, scalars_to_array};
 use crate::expr::eval_array;
@@ -35,13 +36,16 @@ pub const BATCH_ROWS: usize = 32_768;
 const PIECE_BYTES: usize = 2 << 20;
 
 pub fn scan(scan: &Scan) -> Result<BatchIter> {
-    let shape = Arc::new(Shape::new(scan));
-    let pieces: Vec<Piece> = match scan.format {
-        Format::Csv => csv_pieces(scan, &shape)?,
-        Format::Parquet => parquet_pieces(scan, &shape)?,
-        Format::Json => json_pieces(scan, &shape)?,
-        Format::Sqlite => sqlite_pieces(scan, &shape)?,
-    };
+    let mut pieces: Vec<Piece> = Vec::new();
+    for file in files(scan)? {
+        let shape = Arc::new(Shape::new(&file));
+        pieces.extend(match scan.format {
+            Format::Csv => csv_pieces(&file, &shape)?,
+            Format::Parquet => parquet_pieces(&file, &shape)?,
+            Format::Json => json_pieces(&file, &shape)?,
+            Format::Sqlite => sqlite_pieces(&file, &shape)?,
+        });
+    }
     Ok(Box::new(ScanIter {
         pieces: pieces.into_iter(),
         ready: VecDeque::new(),
@@ -54,6 +58,47 @@ pub fn scan(scan: &Scan) -> Result<BatchIter> {
             rayon::current_num_threads()
         },
     }))
+}
+
+/// The files that a scan reads, each as a scan of its own: the file at the path, or, when
+/// there is none and the path has `*`, `?` or `[`, the files that it matches as a pattern.
+/// They come in the order of their names, so that a query reads them the same way each time.
+fn files(scan: &Scan) -> Result<Vec<Scan>> {
+    let pattern = scan.path.to_string_lossy();
+    let one =
+        scan.format == Format::Sqlite || !pattern.contains(['*', '?', '[']) || scan.path.exists();
+    if one {
+        return Ok(vec![scan.clone()]);
+    }
+    let shown = &*scan.display_path;
+    let matches = glob::glob(&pattern)
+        .map_err(|err| Error(format!("{shown:?} is not a pattern for files: {}", err.msg)))?;
+    // A file is named as the program names the pattern: without the folder of the program.
+    let folder = match pattern.ends_with(shown) {
+        true => pattern.len() - shown.len(),
+        false => 0,
+    };
+    let mut found = Vec::new();
+    for path in matches {
+        let path =
+            path.map_err(|err| Error(format!("cannot look for {shown}: {}", err.error())))?;
+        if path.is_dir() {
+            continue;
+        }
+        let display_path = match path.to_string_lossy().get(folder..) {
+            Some(name) => name.into(),
+            None => path.to_string_lossy().into(),
+        };
+        found.push(Scan {
+            path,
+            display_path,
+            ..scan.clone()
+        });
+    }
+    match found.is_empty() {
+        true => Err(Error(format!("no file matches {shown}"))),
+        false => Ok(found),
+    }
 }
 
 /// A part of a file that can be decoded independently of the others.
@@ -118,8 +163,12 @@ impl Iterator for ScanIter {
 struct Shape {
     file: String,
     format: Format,
-    /// The declared columns that are read: those produced and those the filters need.
+    /// The declared columns that are read from the file: those produced and those the
+    /// filters need.
     read: Schema,
+    /// The columns the filters see: those of `read`, and after them the column that holds
+    /// the name of the file, if it is wanted.
+    whole: Schema,
     output: Schema,
     filters: Vec<Expr>,
 }
@@ -133,15 +182,27 @@ impl Shape {
                     .iter()
                     .any(|filter| filter.reads_any(|column| column == name))
         };
-        let read = scan
-            .declared
-            .fields
+        let named = |field: &&Field| scan.read.file_column.as_deref() == Some(&*field.name);
+        let declared = scan.declared.fields.iter();
+        let (name, in_file): (Vec<&Field>, Vec<&Field>) = declared.partition(named);
+        let mut read: Vec<Field> = in_file
             .iter()
-            .filter(|field| wanted(&field.name));
+            .copied()
+            .filter(|f| wanted(&f.name))
+            .cloned()
+            .collect();
+        // The rows of a file are counted by reading something, even if only its name is
+        // wanted.
+        if read.is_empty() {
+            read.extend(in_file.first().copied().cloned());
+        }
+        let mut whole = read.clone();
+        whole.extend(name.into_iter().filter(|f| wanted(&f.name)).cloned());
         Self {
             file: scan.display_path.to_string(),
             format: scan.format,
-            read: Schema::new(read.cloned().collect()),
+            read: Schema::new(read),
+            whole: Schema::new(whole),
             output: (*scan.schema).clone(),
             filters: scan.filters.clone(),
         }
@@ -206,14 +267,18 @@ impl Shape {
             // A file can hold negative zero and any "not a number"; a column holds one of each.
             columns.push(crate::expr::canonical(column));
         }
-        let mut batch = make_batch(&self.read, columns, rows)?;
+        if self.whole.fields.len() > self.read.fields.len() {
+            let name: StringArray = std::iter::repeat_n(Some(self.file.as_str()), rows).collect();
+            columns.push(Arc::new(name));
+        }
+        let mut batch = make_batch(&self.whole, columns, rows)?;
         for filter in &self.filters {
             let keep = eval_array(filter, &batch)?;
             batch = filter_record_batch(&batch, keep.as_boolean())?;
         }
         let output = self.output.fields.iter().map(|field| {
             let index = self
-                .read
+                .whole
                 .index_of(&field.name)
                 .expect("output columns are read");
             batch.column(index).clone()
@@ -269,7 +334,7 @@ fn open(scan: &Scan) -> Result<File> {
 }
 
 /// The end of the row that starts at `start`: the first line break outside quotes.
-fn row_end(data: &[u8], start: usize, mut quoted: bool) -> usize {
+pub(crate) fn row_end(data: &[u8], start: usize, mut quoted: bool) -> usize {
     let mut pos = start;
     while pos < data.len() {
         match data[pos] {
@@ -282,7 +347,30 @@ fn row_end(data: &[u8], start: usize, mut quoted: bool) -> usize {
     data.len()
 }
 
-fn header_names(line: &[u8], delimiter: u8) -> Vec<String> {
+/// The end of the line that starts at `start`, whatever is in it.
+pub(crate) fn line_end(data: &[u8], start: usize) -> usize {
+    let line = data[start..].iter().position(|&byte| byte == b'\n');
+    line.map_or(data.len(), |end| start + end + 1)
+}
+
+/// A pattern for the fields that are null when a file says which texts mean null: those
+/// texts, and the empty field. `None` if the file names no texts.
+fn null_texts(texts: &[Arc<str>]) -> Result<Option<Regex>> {
+    if texts.is_empty() {
+        return Ok(None);
+    }
+    let texts: Vec<String> = texts.iter().map(|text| regex::escape(text)).collect();
+    let pattern = format!("^(?:{})?$", texts.join("|"));
+    let pattern = Regex::new(&pattern).map_err(|err| Error(format!("`nulls`: {err}")))?;
+    Ok(Some(pattern))
+}
+
+/// A pattern that no field matches, for reading a file with nothing taken as null.
+fn never() -> Regex {
+    Regex::new(r"[^\s\S]").expect("the pattern is valid")
+}
+
+pub(crate) fn header_names(line: &[u8], delimiter: u8) -> Vec<String> {
     let delimiter = char::from(delimiter);
     let line = String::from_utf8_lossy(line);
     let line = line
@@ -344,18 +432,20 @@ fn split_rows(data: &[u8], start: usize, target: usize) -> Vec<Range<usize>> {
 }
 
 /// Rewrites a value error of the CSV reader in terms of the file: its line number and the
-/// name of the column. `first_line` is the line of the first row the reader was given, and
-/// `read` are the columns being read.
+/// name of the column. `line_of` gives the line of the file that a row starts on, where rows
+/// are counted from 0 as the reader counts them; `read` are the columns being read, and
+/// `header` says whether the file has one.
 fn csv_error(
     message: &str,
     file: &str,
-    first_line: usize,
+    line_of: &dyn Fn(usize) -> usize,
     names: &[String],
     read: &Schema,
+    header: bool,
 ) -> Error {
     let located = |value: &str, column: &str, row: &str| {
         let name = names.get(column.parse::<usize>().ok()?)?;
-        let line = first_line + row.parse::<usize>().ok()?;
+        let line = line_of(row.parse().ok()?);
         let ty = read.field(name)?.ty.dtype.with_article();
         Some(format!(
             "{file}, line {line}: cannot read '{value}' as {ty} for column `{name}`"
@@ -397,13 +487,15 @@ fn csv_error(
         let rest = message.strip_prefix("Csv error: incorrect number of fields for line ")?;
         let (row, rest) = rest.split_once(", expected ")?;
         let (expected, found) = rest.split_once(" got ")?;
-        let line = first_line + row.parse::<usize>().ok()? - 1;
+        let line = line_of(row.parse::<usize>().ok()?.checked_sub(1)?);
         let fields = match found.trim() {
             "1" => "1 field".to_string(),
             found => format!("{found} fields"),
         };
+        // The number of columns of a file is that of its first line.
+        let first = if header { "header" } else { "first row" };
         Some(format!(
-            "{file}, line {line}: the row has {fields}, but the header has {expected}"
+            "{file}, line {line}: the row has {fields}, but the {first} has {expected}"
         ))
     };
     if message.contains("invalid UTF-8") {
@@ -426,7 +518,8 @@ fn shortened(value: &str) -> String {
 }
 
 /// Rewrites a value error of the JSON reader in terms of the file and the declared columns.
-fn json_error(message: &str, file: &str, read: &Schema) -> Error {
+/// `each` is what holds one object in this file: a line, or an item of an array.
+fn json_error(message: &str, file: &str, read: &Schema, each: &str) -> Error {
     let message = message.strip_prefix("Json error: ").unwrap_or(message);
     let field_error = || {
         let rest = message.strip_prefix("whilst decoding field '")?;
@@ -445,7 +538,7 @@ fn json_error(message: &str, file: &str, read: &Schema) -> Error {
     let not_an_object = || {
         let found = shortened(message.strip_prefix("expected { got ")?);
         Some(format!(
-            "{file}: every line must be one JSON object, but one is {found}"
+            "{file}: every {each} must be one JSON object, but one is {found}"
         ))
     };
     let decimal_error = || {
@@ -453,9 +546,12 @@ fn json_error(message: &str, file: &str, read: &Schema) -> Error {
         Some(format!("{file}: cannot read \"{value}\" as a decimal"))
     };
     let truncated = || {
-        message
-            .starts_with("Truncated record")
-            .then(|| format!("{file}: a line is not a whole JSON object"))
+        message.starts_with("Truncated record").then(|| {
+            format!(
+                "{file}: a{} {each} is not a whole JSON object",
+                if each == "item" { "n" } else { "" }
+            )
+        })
     };
     let rewritten = field_error()
         .or_else(decimal_error)
@@ -516,11 +612,47 @@ fn csv_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
         }
     });
     let delimiter = scan.csv.delimiter;
-    let header_end = row_end(&data, 0, false);
-    if std::str::from_utf8(&data[..header_end]).is_err() {
+    // The lines before the table are not rows of it, so a quote in them opens nothing.
+    let mut start = 0;
+    for _ in 0..scan.read.skip {
+        start = line_end(&data, start);
+    }
+    if start == data.len() {
+        return Err(Error(format!(
+            "{} has nothing after the {} lines that `skip` passes over",
+            scan.display_path, scan.read.skip
+        )));
+    }
+    let first_end = row_end(&data, start, false);
+    if std::str::from_utf8(&data[start..first_end]).is_err() {
         return Err(not_utf8(&scan.display_path));
     }
-    let names = header_names(&data[..header_end], delimiter);
+    let first = header_names(&data[start..first_end], delimiter);
+    let (names, body) = match scan.read.header {
+        true => (first, first_end),
+        // Without a header the columns are the declared ones, in the order they are
+        // declared, and the first line is a row.
+        false => {
+            let declared = scan.declared.fields.iter();
+            let in_file =
+                declared.filter(|field| scan.read.file_column.as_deref() != Some(&*field.name));
+            let mut names: Vec<String> = in_file.map(|field| field.name.to_string()).collect();
+            if first.len() < names.len() {
+                let columns = match first.len() {
+                    1 => "1 column".to_string(),
+                    count => format!("{count} columns"),
+                };
+                return Err(Error(format!(
+                    "{} has {columns}, but its row type has {}",
+                    scan.display_path,
+                    names.len()
+                )));
+            }
+            // Columns after the declared ones are not read.
+            names.extend((names.len()..first.len()).map(|index| format!("#{index}")));
+            (names, start)
+        }
+    };
 
     // The reader takes column types by position, so every column of the file needs one.
     // Those that are not read are declared as strings and left out of the projection.
@@ -549,32 +681,81 @@ fn csv_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
     }
     let file_schema: SchemaRef = Arc::new(ArrowSchema::new(fields));
 
-    let ranges = split_rows(&data, header_end, PIECE_BYTES);
+    let ranges = split_rows(&data, body, PIECE_BYTES);
     let names = Arc::new(names);
+    let nulls = null_texts(&scan.read.nulls)?;
+    // Where the texts that mean null are text all the same: the columns of strings that
+    // cannot be null, where an empty field is an empty string too.
+    let kept: Vec<usize> = match nulls {
+        Some(_) => (0..shape.read.fields.len())
+            .filter(|&index| shape.read.fields[index].ty == ColType::new(DataType::Str, false))
+            .collect(),
+        None => Vec::new(),
+    };
     let pieces = ranges.into_iter().map(|range| {
         let (data, shape, names) = (data.clone(), shape.clone(), names.clone());
         let (file_schema, projection) = (file_schema.clone(), projection.clone());
+        let (nulls, kept) = (nulls.clone(), kept.clone());
+        let header = scan.read.header;
         Box::new(move || {
-            let reader = ReaderBuilder::new(file_schema)
-                .with_header(false)
-                .with_delimiter(delimiter)
-                .with_batch_size(BATCH_ROWS)
-                .with_projection(projection)
-                .build(Cursor::new(&data[range.clone()]))?;
+            let reader = |nulls: Option<Regex>, projection: Vec<usize>| {
+                let builder = ReaderBuilder::new(file_schema.clone())
+                    .with_header(false)
+                    .with_delimiter(delimiter)
+                    .with_batch_size(BATCH_ROWS)
+                    .with_projection(projection);
+                let builder = match nulls {
+                    Some(nulls) => builder.with_null_regex(nulls),
+                    None => builder,
+                };
+                builder.build(Cursor::new(&data[range.clone()]))
+            };
+            // A second reading of the columns of `kept`, in which nothing is null. It is
+            // made only if one of them turns out to hold a text that means null.
+            let mut as_written: Option<Vec<RecordBatch>> = None;
             let mut batches = Vec::new();
-            for batch in reader {
+            for (number, batch) in reader(nulls.clone(), projection.clone())?.enumerate() {
                 let batch = batch.map_err(|err| {
-                    // The reader counts rows from the start of its piece, and columns by
-                    // position; say where that is in the file.
-                    let lines_before = data[..range.start].iter().filter(|&&byte| byte == b'\n');
+                    // The reader counts rows from the start of its piece, passing over
+                    // the lines with nothing on them, and columns by position; say where
+                    // that is in the file.
+                    let line_of = |row: usize| {
+                        let (mut start, mut rows) = (range.start, 0);
+                        while start < range.end {
+                            let end = row_end(&data, start, false);
+                            let blank = data[start..end].iter().all(|byte| b"\r\n".contains(byte));
+                            if !blank && rows == row {
+                                break;
+                            }
+                            rows += usize::from(!blank);
+                            start = end;
+                        }
+                        data[..start].iter().filter(|&&byte| byte == b'\n').count() + 1
+                    };
                     csv_error(
                         &err.to_string(),
                         &shape.file,
-                        lines_before.count() + 1,
+                        &line_of,
                         &names,
                         &shape.read,
+                        header,
                     )
                 })?;
+                let mut columns = batch.columns().to_vec();
+                for (place, &index) in kept.iter().enumerate() {
+                    if columns[index].null_count() == 0 {
+                        continue;
+                    }
+                    if as_written.is_none() {
+                        let columns: Vec<usize> = kept.iter().map(|&i| projection[i]).collect();
+                        let batches: std::result::Result<_, _> =
+                            reader(Some(never()), columns)?.collect();
+                        as_written = Some(batches?);
+                    }
+                    let written = as_written.as_ref().expect("it was just read");
+                    columns[index] = written[number].column(place).clone();
+                }
+                let batch = RecordBatch::try_new(batch.schema(), columns)?;
                 batches.push(shape.finish(&batch)?);
             }
             Ok(batches)
@@ -657,7 +838,63 @@ fn split_lines(data: &[u8], target: usize) -> Vec<Range<usize>> {
     ranges
 }
 
-/// A file of JSON objects, one per line. A field that an object lacks reads as null.
+/// Calls `found` with the place of each comma of `text` that is outside every string,
+/// object and array: in the items of a JSON array, the commas between the items.
+pub(crate) fn outer_commas(text: &[u8], mut found: impl FnMut(usize)) {
+    let (mut depth, mut quoted, mut escaped) = (0usize, false, false);
+    for (at, &byte) in text.iter().enumerate() {
+        if quoted {
+            match byte {
+                _ if escaped => escaped = false,
+                b'\\' => escaped = true,
+                b'"' => quoted = false,
+                _ => {}
+            }
+            continue;
+        }
+        match byte {
+            b'"' => quoted = true,
+            b'{' | b'[' => depth += 1,
+            b'}' | b']' => depth = depth.saturating_sub(1),
+            b',' if depth == 0 => found(at),
+            _ => {}
+        }
+    }
+}
+
+/// If `data` is one JSON array, the range of what is between its brackets.
+pub(crate) fn array_items(data: &[u8], file: &str) -> Result<Option<Range<usize>>> {
+    let space = |byte: &u8| byte.is_ascii_whitespace();
+    let Some(open) = data.iter().position(|byte| !space(byte)) else {
+        return Ok(None);
+    };
+    if data[open] != b'[' {
+        return Ok(None);
+    }
+    match data.iter().rposition(|byte| !space(byte)) {
+        Some(close) if close > open && data[close] == b']' => Ok(Some(open + 1..close)),
+        _ => Err(Error(format!(
+            "{file} starts a JSON array with `[`, but does not end with `]`"
+        ))),
+    }
+}
+
+/// Cuts the items of a JSON array into ranges of whole items of about `target` bytes each.
+fn split_items(data: &[u8], items: Range<usize>, target: usize) -> Vec<Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    outer_commas(&data[items.clone()], |comma| {
+        if comma - start >= target {
+            ranges.push(items.start + start..items.start + comma);
+            start = comma + 1;
+        }
+    });
+    ranges.push(items.start + start..items.end);
+    ranges
+}
+
+/// A file of JSON objects: one per line, or the items of one array. A field that an object
+/// lacks reads as null.
 fn json_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
     let file = open(scan)?;
     if file.metadata().map(|meta| meta.len() == 0).unwrap_or(false) {
@@ -674,15 +911,36 @@ fn json_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
         .iter()
         .map(|field| ArrowField::new(&*field.name, file_type(field.ty.dtype), true));
     let schema: SchemaRef = Arc::new(ArrowSchema::new(fields.collect::<Vec<_>>()));
-    let pieces = split_lines(&data, PIECE_BYTES).into_iter().map(|range| {
+    let items = array_items(&data, &scan.display_path)?;
+    let ranges = match &items {
+        Some(items) => split_items(&data, items.clone(), PIECE_BYTES),
+        None => split_lines(&data, PIECE_BYTES),
+    };
+    let array = items.is_some();
+    let pieces = ranges.into_iter().map(move |range| {
         let (data, shape, schema) = (data.clone(), shape.clone(), schema.clone());
         Box::new(move || {
+            let each = if array { "item" } else { "line" };
             let fail = |err: arrow::error::ArrowError| {
-                json_error(&err.to_string(), &shape.file, &shape.read)
+                json_error(&err.to_string(), &shape.file, &shape.read, each)
+            };
+            // The reader takes objects one after another, so in a copy of the items of an
+            // array the commas between them are blanked.
+            let text: std::borrow::Cow<[u8]> = match array {
+                true => {
+                    let mut text = data[range].to_vec();
+                    let mut commas = Vec::new();
+                    outer_commas(&text, |comma| commas.push(comma));
+                    commas.into_iter().for_each(|comma| text[comma] = b' ');
+                    // An item that is not an object, such as a number, ends at a space.
+                    text.push(b'\n');
+                    text.into()
+                }
+                false => (&data[range]).into(),
             };
             let reader = arrow::json::ReaderBuilder::new(schema)
                 .with_batch_size(BATCH_ROWS)
-                .build(Cursor::new(&data[range]))
+                .build(Cursor::new(text))
                 .map_err(fail)?;
             let mut batches = Vec::new();
             for batch in reader {
@@ -851,31 +1109,45 @@ mod tests {
         let message = "Parser error: Error while parsing value 'north' as type 'Int64' \
                        for column 1 at line 3. Row data: '[2026-01-05,north]'";
         assert_eq!(
-            csv_error(message, "sales.csv", 10, &names, &read).0,
+            csv_error(message, "sales.csv", &|row| 10 + row, &names, &read, true).0,
             "sales.csv, line 13: cannot read 'north' as an int for column `region`"
         );
         let message = "Parser error: Error parsing column 0 at line 2: Parser error: \
                        Error parsing timestamp from 'soon': error parsing date";
         assert_eq!(
-            csv_error(message, "sales.csv", 10, &names, &read).0,
+            csv_error(message, "sales.csv", &|row| 10 + row, &names, &read, true).0,
             "sales.csv, line 12: cannot read 'soon' as a datetime for column `date`"
         );
         let message = "Csv error: incorrect number of fields for line 2, expected 2 got 3";
         assert_eq!(
-            csv_error(message, "sales.csv", 10, &names, &read).0,
+            csv_error(message, "sales.csv", &|row| 10 + row, &names, &read, true).0,
             "sales.csv, line 11: the row has 3 fields, but the header has 2"
         );
         assert_eq!(
-            csv_error("something else", "sales.csv", 1, &names, &read).0,
+            csv_error(
+                "something else",
+                "sales.csv",
+                &|row| 1 + row,
+                &names,
+                &read,
+                true
+            )
+            .0,
             "sales.csv: something else"
         );
         assert_eq!(
-            json_error("Json error: expected { got [1, 2]", "sales.json", &read).0,
+            json_error(
+                "Json error: expected { got [1, 2]",
+                "sales.json",
+                &read,
+                "line"
+            )
+            .0,
             "sales.json: every line must be one JSON object, but one is [1, 2]"
         );
         let message = "Json error: whilst decoding field 'region': failed to parse \"x\" as Int64";
         assert_eq!(
-            json_error(message, "sales.json", &read).0,
+            json_error(message, "sales.json", &read, "line").0,
             "sales.json: cannot read \"x\" as an int for field `region`"
         );
     }

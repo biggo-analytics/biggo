@@ -3,7 +3,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::csv::CsvOptions;
+use crate::csv::{CsvOptions, ReadOptions};
 use crate::expr::{AggCall, Expr, SortKey, WindowCall};
 use crate::schema::{Field, Name, Scalar, Schema};
 
@@ -110,6 +110,7 @@ pub struct Scan {
     pub query: Option<Arc<str>>,
     /// For a CSV file, how it is laid out.
     pub csv: CsvOptions,
+    pub read: ReadOptions,
     /// The columns the program declared for the file.
     pub declared: Arc<Schema>,
     pub schema: Arc<Schema>,
@@ -219,11 +220,15 @@ impl Plan {
 /// except its inputs and the values of its parameters, which exist only when the program runs.
 #[derive(Clone, Debug)]
 pub enum TableOp {
-    /// Parameter 0 is the path. For a database, parameter 1 is the query; for a CSV file,
-    /// parameters 1 and 2 are the delimiter and the encoding.
+    /// Parameter 0 is the path, which for a file can be a pattern that matches several. For
+    /// a database, parameter 1 is the query. For a CSV file, parameters 1 to 5 are the
+    /// delimiter, the encoding, whether there is a header, the lines to skip, and the texts
+    /// that mean null.
     Read {
         format: Format,
         schema: Arc<Schema>,
+        /// The column that holds the path of the file each row came from, if one does.
+        file_column: Option<Arc<str>>,
     },
     Filter {
         predicate: Expr,
@@ -302,7 +307,11 @@ impl TableOp {
         let mut input = || inputs.remove(0);
 
         Ok(match self {
-            TableOp::Read { format, schema } => {
+            TableOp::Read {
+                format,
+                schema,
+                file_column,
+            } => {
                 let text = |index: usize, what: &str| match params.get(index) {
                     Some(Scalar::Str(text)) => Ok(text.clone()),
                     _ => Err(format!("{what} must be a string")),
@@ -310,11 +319,33 @@ impl TableOp {
                 let path = text(0, "the file path")?;
                 let mut query = None;
                 let mut csv = CsvOptions::default();
+                let mut read = ReadOptions {
+                    file_column: file_column.clone(),
+                    ..ReadOptions::default()
+                };
                 match format {
                     Format::Sqlite => query = Some(text(1, "the query")?),
                     Format::Csv => {
                         csv.delimiter = CsvOptions::delimiter(&text(1, "the delimiter")?)?;
                         csv.encoding = CsvOptions::encoding(&text(2, "the encoding")?)?;
+                        read.header = !matches!(params.get(3), Some(Scalar::Bool(false)));
+                        read.skip = match params.get(4) {
+                            Some(Scalar::Int(lines)) => usize::try_from(*lines)
+                                .map_err(|_| format!("`skip` cannot be negative, found {lines}"))?,
+                            _ => 0,
+                        };
+                        if let Some(Scalar::List(texts)) = params.get(5) {
+                            for text in texts.iter() {
+                                match text {
+                                    Scalar::Str(text) if !text.is_empty() => {
+                                        read.nulls.push(text.clone());
+                                    }
+                                    // An empty field is null whatever the list says.
+                                    Scalar::Str(_) => {}
+                                    _ => return Err("`nulls` must be a list of strings".into()),
+                                }
+                            }
+                        }
                     }
                     Format::Parquet | Format::Json => {}
                 }
@@ -324,6 +355,7 @@ impl TableOp {
                     display_path: path,
                     query,
                     csv,
+                    read,
                     declared: schema.clone(),
                     schema: schema.clone(),
                     filters: Vec::new(),
@@ -479,7 +511,7 @@ impl Plan {
         match self {
             Plan::Scan(scan) => {
                 write!(f, "Scan {} {:?}", scan.format.name(), scan.display_path)?;
-                write!(f, "{}", scan.csv)?;
+                write!(f, "{}{}", scan.csv, scan.read)?;
                 if let Some(query) = &scan.query {
                     write!(f, " {query:?}")?;
                 }

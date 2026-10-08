@@ -5,6 +5,7 @@ mod aggregate;
 mod convert;
 mod dates;
 mod expr;
+pub mod infer;
 mod join;
 mod math;
 mod ops;

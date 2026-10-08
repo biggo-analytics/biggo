@@ -385,6 +385,71 @@ on the target machine.
 - The executable works on the same operating system and CPU as the `biggo` that built it (no
   cross-compilation).
 
+## biggo infer
+
+```text
+$ biggo infer data/sales.csv
+type Sales = {
+  date: date,
+  region: string,
+  product: string,
+  qty: int,
+  price: float?,
+}
+
+let sales = read_csv<Sales>("data/sales.csv")
+```
+
+Reads a data file and prints the row type that fits it, with the call that reads the file, to
+copy into a program. It saves typing the type of every column, and it is the quickest way to see
+what is in a file.
+
+| File | What is looked at |
+| --- | --- |
+| `.csv`, `.tsv`, `.txt` | The header and the first 10,000 rows. The delimiter is found among `,` `;` tab and `\|` |
+| `.json`, `.jsonl`, `.ndjson` | The first 10,000 objects, of lines or of one array |
+| `.parquet` | The schema in the file, which is exact |
+| `.db`, `.sqlite`, `.sqlite3` | The declared columns of the table named after the file, as in `biggo infer shop.db orders` |
+
+How a column of a text file gets its type:
+
+- `int`, `float`, `bool`, `date` or `datetime` if every value in the sample can be read as it;
+  otherwise `string`. A column of whole numbers and fractions is `float`.
+- A number that starts with a zero, such as a postal code `01000` or a telephone number, is a
+  `string`: as a number it would lose the zero.
+- A column with an empty field in the sample is nullable (`int?`).
+- A name that is not a plain word is written in backticks: `` `Order ID`: int ``.
+
+What cannot be worked out is said in comments above the type: a column without a name, a second
+column of the same name, a JSON field that holds a list, and a column of dates written another
+way, with the call that reads them:
+
+```text
+$ biggo infer orders.csv
+// `paid on` holds dates written like 05/01/2569: parse_date(`paid on`, "%d/%m/%Y", era = "buddhist") reads them
+type Orders = {
+  `Order ID`: int,
+  zip: string,
+  `paid on`: string,
+}
+
+let orders = read_csv<Orders>("orders.csv", delimiter = ";")
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--delimiter <d>` | The delimiter of a CSV file, when it should not be found out; `tab` or `\t` for a tab |
+| `--encoding <e>` | The encoding of a CSV file that is not UTF-8, such as `tis-620`. A UTF-16 file with a byte order mark is recognized without it |
+| `--skip <n>` | The lines before the header |
+| `--no-header` | The first line is a row. The columns are named `column_1`, `column_2`, and so on; rename them in the type |
+
+The options that the file needs appear in the `read_csv` call that is printed.
+
+The types are a starting point, to read and correct: a column that is whole numbers in its
+first 10,000 rows and has a fraction later fails when the program reads that row, with a message
+that names the line and the column. Money read as `float` may be better as `decimal`, and a
+column that is null in a later row needs a `?`.
+
 ## biggo help
 
 ```text

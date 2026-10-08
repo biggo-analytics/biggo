@@ -18,12 +18,29 @@ biggo reads and writes data in 4 formats. All of them follow the same principles
 | --- | --- | --- | --- | --- |
 | CSV | `read_csv` | `write_csv` | ✓ | ✓ (values are not converted) |
 | Parquet | `read_parquet` | `write_parquet` | ✓ | ✓ (not read from disk at all) |
-| JSON (one object per line) | `read_json` | `write_json` | ✓ | ✓ |
+| JSON (one object per line, or one array) | `read_json` | `write_json` | ✓ | ✓ |
 | SQLite | `read_sql` | `write_sql` | | (you write it in the query yourself) |
 
 ## The row type
 
-The type argument in `<...>` says which columns the program wants:
+The type argument in `<...>` says which columns the program wants. You do not have to type it
+out: [`biggo infer`](07-tools.md#biggo-infer) reads a file and prints its row type, with the
+call that reads it.
+
+```text
+$ biggo infer sales.csv
+type Sales = {
+  date: date,
+  region: string,
+  product: string,
+  qty: int,
+  price: float?,
+}
+
+let sales = read_csv<Sales>("sales.csv")
+```
+
+A row type looks like this:
 
 ```biggo
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -143,14 +160,15 @@ south,17,2.5,2026-03-01
 
 Requirements for a CSV file that can be read:
 
-- The first line is always the column names (the header).
+- The first line is the column names (the header), unless you say otherwise with `header` or
+  `skip` (see [below](#titles-no-header-and-other-words-for-null)).
 - The separator is `,`, unless you name another with `delimiter` (see below).
 - A value that contains `,`, a line break, or `"` must be inside `"..."`, and a `"` inside it is
   doubled as `""`.
 - The encoding is UTF-8, unless you name another with `encoding` (see below). A BOM at the start
   of the file is skipped.
 - An empty field is null, except in a non-nullable `string` column, where it is the empty string
-  `""`.
+  `""`. `nulls` names other texts that mean null.
 - Every line must have the same number of fields as the header.
 
 **Speed:** the file is mapped into memory and cut into 2 MiB chunks at line boundaries (counting `"`
@@ -215,6 +233,120 @@ print(count(read_csv<Customer>("out/customers.txt", delimiter = ";", encoding = 
   program computes is checked when the file is read or written.
 - Whatever the delimiter, a line break ends a row and `"` quotes a value.
 
+### Titles, no header, and other words for null
+
+Files that come out of other systems are often not a plain table. Three more named arguments of
+`read_csv` say how such a file is laid out:
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `skip` | `0` | The number of lines to pass over before the header: a title, the date of printing, a blank line |
+| `header` | `true` | Whether the first line (after those skipped) names the columns. With `header = false` it is a row, and the columns of the file are the columns of the row type, in the order they are declared |
+| `nulls` | `[]` | Texts that mean null, besides an empty field, such as `["NA", "-", "n/a"]` |
+
+The file [`data/report.csv`](data/report.csv) starts with three lines that are not part of the
+table, and marks missing values in two ways:
+
+```text
+Branch report
+printed 2026-02-01
+
+branch,units,price,note
+north,10,2.5,ok
+south,NA,-,NA
+east,5,NA,
+```
+
+```biggo
+type Line = { branch: string, units: int?, price: float?, note: string }
+let report = read_csv<Line>("data/report.csv", skip = 3, nulls = ["NA", "-"])
+print(report)
+print(report |> agg(units = sum(units), priced = count(price)))
+
+// A file with no header: the first column is `id`, the second `branch`, the third `units`.
+type Plain = { id: int, branch: string, units: int }
+print(read_csv<Plain>("data/plain.csv", header = false) |> where(units > 5))
+```
+
+```text output
++--------+-------+-------+------+
+| branch | units | price | note |
++--------+-------+-------+------+
+| north  | 10    | 2.5   | ok   |
+| south  | null  | null  | NA   |
+| east   | 5     | null  |      |
++--------+-------+-------+------+
++-------+--------+
+| units | priced |
++-------+--------+
+| 15    | 1      |
++-------+--------+
++----+--------+-------+
+| id | branch | units |
++----+--------+-------+
+| 1  | north  | 10    |
+| 2  | south  | 7     |
++----+--------+-------+
+```
+
+- `nulls` applies to every column that can hold null. In a column that cannot, the text is
+  an error for a number or a date (`cannot read 'NA' as an int`), and stays as it is written in
+  a `string` column: above, `note` is `string`, so it keeps `NA`. Declare the column `string?`
+  to get null.
+- The texts are compared exactly: `"NA"` does not match `na` or ` NA`.
+- Without a header, a file may have more columns than the row type; those after the declared
+  ones are not read. It may not have fewer.
+- The lines that `skip` passes over are not looked at, so they may hold anything.
+
+## Many files at once
+
+A path with `*`, `?` or `[...]` in it is a pattern, and `read_csv`, `read_json` and
+`read_parquet` read every file that matches it as one table. The files are read in the order of
+their names, so the result is the same each time.
+
+| Pattern | Matches |
+| --- | --- |
+| `*` | Any run of characters in a name: `logs/2026-*.csv` |
+| `?` | Any one character: `logs/2026-0?.csv` |
+| `[abc]`, `[0-9]` | One of the characters, or one in the range |
+| `**` | Any number of folders: `logs/**/*.csv` |
+
+The named argument `file_name` picks a `string` column of the row type that is not read from
+the files: it is filled with the path of the file each row came from.
+
+```biggo
+type Hits = { day: date, hits: int, source: string }
+let logs = read_csv<Hits>("data/logs/*.csv", file_name = "source")
+print(logs)
+print(logs |> group(source) |> agg(hits = sum(hits)) |> sort(source))
+```
+
+```text output
++------------+------+-----------------------+
+| day        | hits | source                |
++------------+------+-----------------------+
+| 2026-01-01 | 10   | data/logs/2026-01.csv |
+| 2026-01-02 | 12   | data/logs/2026-01.csv |
+| 2026-02-01 | 7    | data/logs/2026-02.csv |
++------------+------+-----------------------+
++-----------------------+------+
+| source                | hits |
++-----------------------+------+
+| data/logs/2026-01.csv | 22   |
+| data/logs/2026-02.csv | 7    |
++-----------------------+------+
+```
+
+- Every file must have the declared columns. Each file is read with its own header, so the
+  columns may be in another order from one file to the next.
+- A pattern that matches no file is an error (`no file matches data/logs/*.csv`), since a table
+  of no files is more likely a wrong path than what was meant.
+- If a file exists whose name is exactly the path, that file is read, whatever characters its
+  name has.
+- The path in the `file_name` column is written the way the pattern is: relative to the program.
+  `regex_extract(source, r"(\d{4}-\d{2})")` or `split_part` takes a part of it, such as a month.
+- `file_name` also works with a path that is one file.
+
 ## Parquet
 
 Parquet is a columnar format that is compressed and carries its own types. It is much faster than
@@ -251,8 +383,9 @@ the Parquet file.
 
 ## JSON
 
-`read_json` reads *JSON Lines* (NDJSON) files: one object per line.
-The example file [`data/events.json`](data/events.json):
+`read_json` reads files of JSON objects in either of two layouts: *JSON Lines* (NDJSON), with one
+object per line, and one array of objects, `[{...}, {...}]`. It tells them apart by the first
+character of the file. The example file [`data/events.json`](data/events.json):
 
 ```text
 {"id": 1, "kind": "click", "at": "2026-01-05T09:00:00", "cost": "0.25", "ok": true}
@@ -292,9 +425,35 @@ print(read_json<{ id: int, day: date, cost: decimal? }>("out/ok.json"))
 - A field that the object does not have, or whose value is `null`, is read as null.
 - Fields that are not declared are skipped. Blank lines are skipped.
 - Values must be scalar values: a field that is a nested object or array cannot be read as a column.
-- A file that is one big array (`[{...}, {...}]`) is not JSON Lines and cannot be read.
-  Convert it first with a tool such as `jq -c '.[]'`.
 - `write_json` writes one object per line. Fields that are null are omitted.
+
+A file that is one array, [`data/people.json`](data/people.json):
+
+```text
+[
+  {"id": 1, "name": "Ann", "score": 9.5},
+  {"id": 2, "name": "Bo", "score": null},
+  {"id": 3, "name": "Cy", "score": 7, "joined": "2026-01-05"}
+]
+```
+
+```biggo
+type Person = { id: int, name: string, score: float?, joined: date? }
+print(read_json<Person>("data/people.json") |> where(score > 5.0))
+```
+
+```text output
++----+------+-------+------------+
+| id | name | score | joined     |
++----+------+-------+------------+
+| 1  | Ann  | 9.5   | null       |
+| 3  | Cy   | 7.0   | 2026-01-05 |
++----+------+-------+------------+
+```
+
+An array is cut into pieces between its objects and read on every core, like a file of lines. To
+find the places to cut, the file is first passed over once on one core, which a file of lines
+does not need.
 
 ## SQLite
 
@@ -366,7 +525,11 @@ read_sql<{ product: string, units: int }>("out/shop.db", "select * from product_
 | `x.csv has no column `id`; its columns are id;name; if the file separates its columns with another character, name it, as in `delimiter = ";"`` | The file uses another delimiter than `,`, so the whole header was read as one column |
 | `x.csv, line 12: the row has 3 fields, but the header has 5` | The number of fields differs from the header. This usually comes from a `,` or `"` in a value that is not wrapped in `"..."` |
 | `x.json: cannot read "abc" as an int for field `c`` | The field's value is not of the declared type |
-| `x.json: every line must be one JSON object` | The file is not JSON Lines |
+| `x.json: every line must be one JSON object, but one is 5` | A line (or, in an array, an item) is a number, a string or a list instead of an object |
+| `x.json starts a JSON array with `[`, but does not end with `]`` | The file is cut short, or has something after the array |
+| `no file matches logs/*.csv` | A pattern that matches nothing: check the folder, which is relative to the program |
+| `x.csv has 3 columns, but its row type has 5` | With `header = false`, the file has fewer columns than the row type declares |
+| `x.csv has nothing after the 9 lines that `skip` passes over` | `skip` is larger than the file |
 | `x.db: no such table: t` | A message straight from SQLite |
 
 Errors from data point to the program line that *runs* the query (such as `print`), not the line

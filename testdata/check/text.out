@@ -202,7 +202,7 @@ error: unknown encoding "klingon"; some that are known are "utf-8", "tis-620", "
 38 | read_csv<Sale>("sales.csv", encoding = "klingon")
    |                                        ^^^^^^^^^
 
-error: `read_csv` has no argument `separator`; it takes `delimiter` and `encoding`
+error: `read_csv` has no argument `separator`; it takes `delimiter`, `encoding`, `header`, `skip`, `nulls` and `file_name`
   --> check/text.bgo:39:29
    |
 39 | read_csv<Sale>("sales.csv", separator = ";")
@@ -220,25 +220,25 @@ error: positional arguments must come before named arguments
 41 | read_csv<Sale>("sales.csv", delimiter = ";", "x")
    |                                              ^^^
 
-error: `read_csv` takes the file path, and can take `delimiter` and `encoding` by name
+error: `read_csv` takes the file path, and can take `delimiter`, `encoding`, `header`, `skip`, `nulls` and `file_name` by name
   --> check/text.bgo:42:1
    |
 42 | read_csv<Sale>(delimiter = ";")
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: `read_csv` takes the file path, and can take `delimiter` and `encoding` by name
+error: `read_csv` takes the file path, and can take `delimiter`, `encoding`, `header`, `skip`, `nulls` and `file_name` by name
   --> check/text.bgo:43:1
    |
 43 | read_csv<Sale>("a.csv", "b.csv")
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: `read_json` does not take named arguments
+error: `read_json` has no argument `encoding`; it takes `file_name`
   --> check/text.bgo:44:31
    |
 44 | read_json<Sale>("sales.json", encoding = "tis-620")
    |                               ^^^^^^^^
 
-error: `read_parquet` does not take named arguments
+error: `read_parquet` has no argument `delimiter`; it takes `file_name`
   --> check/text.bgo:45:37
    |
 45 | read_parquet<Sale>("sales.parquet", delimiter = ";")

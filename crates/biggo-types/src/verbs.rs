@@ -32,7 +32,7 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 75] = [
+const VERBS: [&str; 76] = [
     "print",
     "read_csv",
     "read_parquet",
@@ -65,6 +65,7 @@ const VERBS: [&str; 75] = [
     "assert",
     "assert_eq",
     "args",
+    "env",
     "split",
     "between",
     "clamp",
@@ -197,6 +198,74 @@ pub(crate) fn pass_through(field: &Field) -> (Arc<str>, plan::Expr) {
 }
 
 /// The whole number that an expression writes out, with or without a minus sign.
+/// An argument that a call which reads or writes a file takes by name.
+struct FileOption {
+    name: &'static str,
+    /// How a message refers to the value.
+    what: &'static str,
+    ty: fn() -> Type,
+    /// The value when the call leaves the argument out.
+    default: fn(Span) -> Expr,
+}
+
+const FILE_NAME: FileOption = FileOption {
+    name: "file_name",
+    what: "the column for the file name",
+    ty: || Type::Str,
+    default: |span| Expr::new(ExprKind::Null, Type::Null, span),
+};
+
+/// What `read_csv` takes by name. `write_csv` takes the first two. The column for the file
+/// name is last, where `read` looks for it.
+const READ_CSV_OPTIONS: [FileOption; 6] = [
+    FileOption {
+        name: "delimiter",
+        what: "the delimiter",
+        ty: || Type::Str,
+        default: |span| Expr::new(ExprKind::Str(",".into()), Type::Str, span),
+    },
+    FileOption {
+        name: "encoding",
+        what: "the encoding",
+        ty: || Type::Str,
+        default: |span| Expr::new(ExprKind::Str("utf-8".into()), Type::Str, span),
+    },
+    FileOption {
+        name: "header",
+        what: "`header`",
+        ty: || Type::Bool,
+        default: |span| Expr::new(ExprKind::Bool(true), Type::Bool, span),
+    },
+    FileOption {
+        name: "skip",
+        what: "`skip`",
+        ty: || Type::Int,
+        default: |span| Expr::new(ExprKind::Int(0), Type::Int, span),
+    },
+    FileOption {
+        name: "nulls",
+        what: "`nulls`",
+        ty: || Type::List(Box::new(Type::Str)),
+        default: |span| {
+            let none = Type::List(Box::new(Type::Str));
+            Expr::new(ExprKind::List(Vec::new()), none, span)
+        },
+    },
+    FILE_NAME,
+];
+
+/// The names of options, for a message: "`a`, `b` and `c`".
+fn option_names(options: &[FileOption]) -> String {
+    let names: Vec<String> = options
+        .iter()
+        .map(|option| format!("`{}`", option.name))
+        .collect();
+    match names.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+        _ => names.concat(),
+    }
+}
+
 fn written_int(expr: &Expr) -> Option<i64> {
     match &expr.kind {
         ExprKind::Int(number) => Some(*number),
@@ -848,8 +917,22 @@ impl Cx<'_> {
         if schema.fields.is_empty() {
             return self.error(row_type.span, "the row type needs at least one column");
         }
-        let Some((positional, options)) = self.file_args(call, format == Format::Csv, false) else {
+        let takes: &[FileOption] = match format {
+            Format::Csv => &READ_CSV_OPTIONS,
+            Format::Json | Format::Parquet => &[FILE_NAME],
+            Format::Sqlite => &[],
+        };
+        let Some((positional, mut options)) = self.file_args(call, takes, false) else {
             return Expr::error(call.span);
+        };
+        // The column that takes the name of the file is settled now. The other options are
+        // values that the program can compute.
+        let file_column = match options.pop().filter(|_| !takes.is_empty()).flatten() {
+            Some(column) => match self.file_column(&schema, &column) {
+                Some(column) => Some(column),
+                None => return Expr::error(call.span),
+            },
+            None => None,
         };
         let texts: &[(ExprId, &str)] = match (format, positional) {
             (Format::Sqlite, [path, query]) => &[
@@ -861,13 +944,11 @@ impl Cx<'_> {
                 return self.error(call.span, message);
             }
             (_, [path]) => &[(path.value, "the file path")],
-            (Format::Csv, _) => {
-                let message = "`read_csv` takes the file path, \
-                               and can take `delimiter` and `encoding` by name";
-                return self.error(call.span, message);
-            }
             _ => {
-                let message = format!("`{name}` takes one argument, the file path");
+                let message = format!(
+                    "`{name}` takes the file path, and can take {} by name",
+                    option_names(takes)
+                );
                 return self.error(call.span, message);
             }
         };
@@ -878,10 +959,13 @@ impl Cx<'_> {
                 None => return Expr::error(call.span),
             }
         }
-        params.extend(options);
+        let defaults = takes.iter().map(|option| (option.default)(call.span));
+        let options = options.into_iter().zip(defaults);
+        params.extend(options.map(|(given, default)| given.unwrap_or(default)));
         let op = TableOp::Read {
             format,
             schema: schema.clone(),
+            file_column,
         };
         self.table(call.span, op, Vec::new(), params, schema)
     }
@@ -890,8 +974,11 @@ impl Cx<'_> {
         let Some((table, _)) = self.table_arg(call, 0) else {
             return Expr::error(call.span);
         };
-        let csv = builtin == Builtin::WriteCsv;
-        let Some((positional, options)) = self.file_args(call, csv, true) else {
+        let takes: &[FileOption] = match builtin {
+            Builtin::WriteCsv => &READ_CSV_OPTIONS[..2],
+            _ => &[],
+        };
+        let Some((positional, options)) = self.file_args(call, takes, true) else {
             return Expr::error(call.span);
         };
         let texts: &[(ExprId, &str)] = match (builtin, positional) {
@@ -922,29 +1009,30 @@ impl Cx<'_> {
                 None => return Expr::error(call.span),
             }
         }
-        args.extend(options);
+        let defaults = takes.iter().map(|option| (option.default)(call.span));
+        let options = options.into_iter().zip(defaults);
+        args.extend(options.map(|(given, default)| given.unwrap_or(default)));
         Expr::new(ExprKind::Builtin(builtin, args), Type::Unit, call.span)
     }
 
-    /// Separates the arguments of a call that reads or writes a file. A CSV file can say how
-    /// it is laid out, in named arguments after the others: its delimiter and its encoding,
-    /// each a string. Returns the arguments before those, and for a CSV file the two options
-    /// in that order, with the default for one the call leaves out.
+    /// Separates the arguments of a call that reads or writes a file: those before the
+    /// first named one, and the options in `takes`, which are given by name. Returns the
+    /// first, and for each option of `takes` the value the call gives it, if it gives one.
     fn file_args<'c>(
         &mut self,
         call: &Call<'c>,
-        csv: bool,
+        takes: &[FileOption],
         writing: bool,
-    ) -> Option<(&'c [ArgSrc], Vec<Expr>)> {
+    ) -> Option<(&'c [ArgSrc], Vec<Option<Expr>>)> {
         let args = call.args;
-        if !csv {
+        if takes.is_empty() {
             return self
                 .all_positional(call, args)
                 .then_some((args, Vec::new()));
         }
         let named = args.iter().position(|arg| arg.name.is_some());
         let (positional, options) = args.split_at(named.unwrap_or(args.len()));
-        let (mut delimiter, mut encoding) = (None, None);
+        let mut given: Vec<Option<Expr>> = vec![None; takes.len()];
         for arg in options {
             let Some(name) = arg.name else {
                 let span = self.ast.span(arg.value);
@@ -954,43 +1042,71 @@ impl Cx<'_> {
                 );
                 return None;
             };
-            let option = self.text(name.name);
-            let (slot, what) = match &*option {
-                "delimiter" => (&mut delimiter, "the delimiter"),
-                "encoding" => (&mut encoding, "the encoding"),
-                other => {
-                    let message = format!(
-                        "`{}` has no argument `{other}`; it takes `delimiter` and `encoding`",
-                        call.name
-                    );
-                    self.error(name.span, message);
-                    return None;
-                }
+            let written = self.text(name.name);
+            let Some(index) = takes.iter().position(|option| option.name == &*written) else {
+                let message = format!(
+                    "`{}` has no argument `{written}`; it takes {}",
+                    call.name,
+                    option_names(takes)
+                );
+                self.error(name.span, message);
+                return None;
             };
-            if slot.is_some() {
-                self.error(name.span, format!("`{option}` is given twice"));
+            if given[index].is_some() {
+                self.error(name.span, format!("`{written}` is given twice"));
                 return None;
             }
-            let value = self.scalar_arg(arg.value, Type::Str, what)?;
+            let option = &takes[index];
+            let value = self.scalar_arg(arg.value, (option.ty)(), option.what)?;
             // A value that is written out is checked now. Any other is checked when the
             // program runs.
-            if let ExprKind::Str(literal) = &value.kind {
-                let checked = match (&*option, writing) {
-                    ("delimiter", _) => CsvOptions::delimiter(literal).map(drop),
-                    (_, true) => CsvOptions::output_encoding(literal).map(drop),
-                    (_, false) => CsvOptions::encoding(literal).map(drop),
-                };
-                if let Err(message) = checked {
-                    self.error(value.span, message);
-                    return None;
+            let checked = match (&value.kind, option.name) {
+                (ExprKind::Str(text), "delimiter") => CsvOptions::delimiter(text).map(drop),
+                (ExprKind::Str(text), "encoding") if writing => {
+                    CsvOptions::output_encoding(text).map(drop)
                 }
+                (ExprKind::Str(text), "encoding") => CsvOptions::encoding(text).map(drop),
+                (_, "skip") if written_int(&value).is_some_and(|lines| lines < 0) => {
+                    Err("`skip` is a number of lines, so it cannot be negative".to_string())
+                }
+                (ExprKind::Str(_), "file_name") => Ok(()),
+                (_, "file_name") => Err("the column that takes the file name must be written \
+                                         out, as in `file_name = \"source\"`"
+                    .to_string()),
+                _ => Ok(()),
+            };
+            if let Err(message) = checked {
+                self.error(value.span, message);
+                return None;
             }
-            *slot = Some(value);
+            given[index] = Some(value);
         }
-        let default = |text: &str| Expr::new(ExprKind::Str(text.into()), Type::Str, call.span);
-        let delimiter = delimiter.unwrap_or_else(|| default(","));
-        let encoding = encoding.unwrap_or_else(|| default("utf-8"));
-        Some((positional, vec![delimiter, encoding]))
+        Some((positional, given))
+    }
+
+    /// The declared column that `named` says takes the name of the file, which has to be a
+    /// column of strings.
+    fn file_column(&mut self, schema: &Schema, named: &Expr) -> Option<Arc<str>> {
+        let ExprKind::Str(column) = &named.kind else {
+            return None;
+        };
+        let message = match schema.field(column) {
+            Some(_) if schema.fields.len() == 1 => format!(
+                "column `{column}` takes the file name, so the row type needs \
+                 a column that is read from the file as well"
+            ),
+            Some(field) if field.ty.dtype == DataType::Str => return Some(column.clone()),
+            Some(field) => format!(
+                "column `{column}` takes the file name, so it must be `string`, not `{}`",
+                field.ty
+            ),
+            None => format!(
+                "the row type has no column `{column}` to take the file name; \
+                 add `{column}: string` to it"
+            ),
+        };
+        self.error(named.span, message);
+        None
     }
 
     fn table_builtin(&mut self, call: &Call, builtin: Builtin) -> Expr {

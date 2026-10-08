@@ -1,0 +1,49 @@
+// Files that are not laid out the plain way: a title above the header, no header at all,
+// texts that stand for null, a JSON array, and a table spread over many files.
+
+type Line = { id: int, region: string?, units: int?, price: float?, note: string }
+
+// Three lines come before the header, and "NA" and "-" mean that a value is missing.
+let report = read_csv<Line>("data/report_title.csv", skip = 3, nulls = ["NA", "-"])
+print(report)
+// In `note`, which cannot be null, such a text is kept as it is written.
+print(report |> where(is_null(units)) |> select(id, note))
+print(report |> agg(units = sum(units), priced = count(price), regions = count(region)))
+
+// Without `nulls`, only an empty field is null, and "NA" is not a number.
+type Loose = { id: int, region: string, note: string? }
+print(read_csv<Loose>("data/report_title.csv", skip = 3) |> select(id, region, note))
+
+// A file with no header: the columns are the declared ones, in their order. A column the
+// row type does not have is not read.
+type Bare = { id: int, region: string, units: int, price: float? }
+let bare = read_csv<Bare>("data/no_header.csv", header = false)
+print(bare)
+print(bare |> where(units > 5) |> select(region, price))
+// The options can be computed.
+let lines = 1
+print(read_csv<Bare>("data/no_header.csv", header = lines == 0, skip = lines) |> count())
+
+// A JSON file that is one array of objects.
+type Item = { id: int, name: string, score: float?, joined: date? }
+let items = read_json<Item>("data/items.json")
+print(items)
+print(items |> where(score > 8.0) |> select(name))
+print(read_json<Item>("data/empty_array.json") |> count())
+
+// One table from every file that a pattern matches, in the order of their names.
+type Hits = { day: date, hits: int, file: string }
+let logs = read_csv<Hits>("data/logs/*.csv", file_name = "file")
+print(logs)
+print(logs |> group(file) |> agg(hits = sum(hits)) |> sort(file))
+print(read_csv<Hits>("data/logs/2026-*.csv", file_name = "file") |> where(hits > 9) |> select(file, day))
+// The name of the file alone, and a count, which reads no column for itself.
+print(logs |> select(file) |> distinct(file) |> count(), logs |> count())
+print(read_csv<{ day: date, hits: int }>("data/logs/2026-0?.csv") |> agg(hits = sum(hits)))
+print(read_json<Hits>("data/logs/*.json", file_name = "file"))
+explain(read_csv<Hits>("data/logs/*.csv", file_name = "file", skip = 0, nulls = ["NA"]) |> where(hits > 9))
+
+// A variable of the environment, which may not be set.
+print(env("BIGGO_NO_SUCH_VARIABLE"), env("BIGGO_NO_SUCH_VARIABLE") ?? "unset", is_null(env("PATH")))
+
+print(read_csv<Hits>("data/logs/1999-*.csv", file_name = "file"))

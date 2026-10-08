@@ -1,0 +1,26 @@
+// Mistakes in the options of the functions that read files.
+type Row = { id: int, name: string, n: int }
+
+read_csv<Row>("a.csv", header = 1)
+read_csv<Row>("a.csv", skip = "3")
+read_csv<Row>("a.csv", skip = -1)
+read_csv<Row>("a.csv", nulls = "NA")
+read_csv<Row>("a.csv", nulls = [1, 2])
+read_csv<Row>("a.csv", file_name = "source")
+read_csv<Row>("a.csv", file_name = "n")
+let column = "name"
+read_csv<Row>("a.csv", file_name = column)
+read_csv<Row>("a.csv", header = false, header = true)
+read_csv<Row>("a.csv", sheet = 2)
+read_csv<Row>("a.csv", "b.csv")
+read_json<Row>("a.json", header = false)
+read_json<Row>("a.json", file_name = "id")
+read_parquet<Row>("a.parquet", skip = 1)
+read_parquet<Row>()
+read_sql<Row>("a.db", "select 1", file_name = "name")
+read_csv<{ file: string }>("a.csv", file_name = "file")
+write_csv(from_rows([{ a: 1 }]), "out.csv", header = false)
+env()
+env(1)
+env("A", "B")
+let home: string = env("HOME")

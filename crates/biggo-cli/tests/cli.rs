@@ -752,3 +752,266 @@ error: undefined name `y`
     assert!(stderr.starts_with(complaints), "{stderr}");
     assert_eq!(code, Some(0));
 }
+
+/// Runs a one-line program from the root of the project and gives what it wrote as an error.
+fn failure_of(program: &str) -> String {
+    let (stdout, stderr, code) = biggo(&["run", "-e", program], "");
+    assert_eq!(
+        (stdout.as_str(), code),
+        ("", Some(1)),
+        "{program}: {stderr}"
+    );
+    stderr.lines().next().unwrap_or("").to_string()
+}
+
+#[test]
+fn files_that_do_not_fit_their_options_are_explained() {
+    let data = "testdata/run/data";
+    let cases = [
+        (
+            format!("print(read_csv<{{ id: int }}>(\"{data}/no_header.csv\", skip = 9))"),
+            format!(
+                "error: {data}/no_header.csv has nothing after the 9 lines that `skip` passes over"
+            ),
+        ),
+        (
+            format!(
+                "let lines = 0 - 1\nprint(read_csv<{{ id: int }}>(\"{data}/sales.csv\", skip = lines))"
+            ),
+            "error: `skip` cannot be negative, found -1".to_string(),
+        ),
+        (
+            format!(
+                "print(read_csv<{{ a: int, b: string, c: int, d: float?, e: string, f: int }}>\
+                 (\"{data}/no_header.csv\", header = false))"
+            ),
+            format!("error: {data}/no_header.csv has 5 columns, but its row type has 6"),
+        ),
+        (
+            format!(
+                "print(read_csv<{{ a: string }}>(\"{data}/report_title.csv\", header = false))"
+            ),
+            format!(
+                "error: {data}/report_title.csv, line 4: the row has 5 fields, but the first row has 1"
+            ),
+        ),
+        (
+            format!("print(read_json<{{ id: int }}>(\"{data}/bad_array.json\"))"),
+            format!(
+                "error: {data}/bad_array.json: every item must be one JSON object, but one is 5"
+            ),
+        ),
+        (
+            format!("print(read_json<{{ id: int }}>(\"{data}/open_array.json\"))"),
+            format!(
+                "error: {data}/open_array.json starts a JSON array with `[`, but does not end with `]`"
+            ),
+        ),
+        (
+            format!("print(read_parquet<{{ id: int }}>(\"{data}/*.parquet\"))"),
+            format!("error: no file matches {data}/*.parquet"),
+        ),
+    ];
+    for (program, expected) in cases {
+        assert_eq!(failure_of(&program), expected, "{program}");
+    }
+}
+
+#[test]
+fn a_program_reads_the_environment() {
+    let output = Command::new(env!("CARGO_BIN_EXE_biggo"))
+        .args([
+            "run",
+            "-e",
+            "print(env(\"BIGGO_TEST_REGION\"), env(\"BIGGO_TEST_UNSET\"))",
+        ])
+        .env("BIGGO_TEST_REGION", "north east")
+        .env_remove("BIGGO_TEST_UNSET")
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "north east null\n");
+    assert!(output.status.success());
+}
+
+#[test]
+fn infer_writes_the_row_type_of_a_file() {
+    let data = "testdata/run/data";
+    let (stdout, stderr, code) = biggo(
+        &["infer", &format!("{data}/report_title.csv"), "--skip", "3"],
+        "",
+    );
+    let expected = "\
+type ReportTitle = {
+  id: int,
+  region: string,
+  units: string?,
+  price: string,
+  note: string?,
+}
+
+let report_title = read_csv<ReportTitle>(\"testdata/run/data/report_title.csv\", skip = 3)
+";
+    assert_eq!(
+        (stdout.as_str(), stderr.as_str(), code),
+        (expected, "", Some(0))
+    );
+
+    // The delimiter is found out, and so is an encoding that the file itself gives away.
+    let (stdout, _, code) = biggo(&["infer", &format!("{data}/people.tsv")], "");
+    assert!(
+        stdout
+            .ends_with("read_csv<People>(\"testdata/run/data/people.tsv\", delimiter = \"\\t\")\n"),
+        "{stdout}"
+    );
+    assert_eq!(code, Some(0));
+    let (stdout, _, _) = biggo(&["infer", &format!("{data}/amounts.csv")], "");
+    assert!(stdout.contains("delimiter = \";\""), "{stdout}");
+    let (stdout, _, _) = biggo(&["infer", &format!("{data}/utf16.csv")], "");
+    assert!(stdout.contains("encoding = \"utf-16le\""), "{stdout}");
+
+    // Any other encoding has to be named.
+    let (stdout, stderr, code) = biggo(&["infer", &format!("{data}/thai_tis620.csv")], "");
+    assert!(
+        stderr.contains("is not UTF-8 text; if it is in another encoding, name it"),
+        "{stderr}"
+    );
+    assert_eq!((stdout.as_str(), code), ("", Some(1)));
+    let (stdout, _, code) = biggo(
+        &[
+            "infer",
+            &format!("{data}/thai_tis620.csv"),
+            "--encoding",
+            "tis-620",
+        ],
+        "",
+    );
+    assert!(
+        stdout.contains("  ชื่อ: string,\n") && stdout.contains("encoding = \"windows-874\""),
+        "{stdout}"
+    );
+    assert_eq!(code, Some(0));
+
+    let (stdout, _, code) = biggo(
+        &["infer", &format!("{data}/no_header.csv"), "--no-header"],
+        "",
+    );
+    assert!(
+        stdout.contains("  column_1: int,\n  column_2: string,\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("  column_4: float?,\n") && stdout.contains(", header = false)"),
+        "{stdout}"
+    );
+    assert_eq!(code, Some(0));
+
+    // JSON, as lines and as one array; a field that holds a list cannot be a column.
+    let (stdout, _, code) = biggo(&["infer", &format!("{data}/items.json")], "");
+    let expected = "\
+// `tags` holds lists or objects, which a column cannot, and is left out
+type Items = {
+  id: int,
+  name: string,
+  score: float?,
+  joined: date?,
+}
+
+let items = read_json<Items>(\"testdata/run/data/items.json\")
+";
+    assert_eq!((stdout.as_str(), code), (expected, Some(0)));
+
+    let (_, stderr, code) = biggo(&["infer", "README.md"], "");
+    assert!(
+        stderr.starts_with("biggo infer: cannot tell what kind of file README.md is"),
+        "{stderr}"
+    );
+    assert_eq!(code, Some(1));
+    let (_, stderr, code) = biggo(&["infer"], "");
+    assert!(
+        stderr.starts_with("biggo infer: expected one file\n\nusage: biggo infer"),
+        "{stderr}"
+    );
+    assert_eq!(code, Some(2));
+}
+
+/// What `infer` prints is a program: the type it writes reads the file it was made from.
+#[test]
+fn what_infer_writes_runs() {
+    let dir = scratch("infer");
+    let table = "from_rows([{ id: 1, at: @2026-01-05, price: 2.5d, ok: true, note: \"a\" }, \
+                 { id: 2, at: @2026-01-06, price: 0.75d, ok: false, note: \"b\" }])";
+    let write = format!(
+        "let t = {table}\nwrite_parquet(t, \"t.parquet\")\nwrite_sql(t, \"shop.db\", \"orders\")\n\
+         write_csv(t, \"plain.csv\")\nwrite_json(t, \"lines.json\")\n"
+    );
+    std::fs::write(dir.join("write.bgo"), write).unwrap();
+    let path = |name: &str| dir.join(name).to_str().unwrap().to_string();
+    let (_, stderr, code) = biggo(&["run", &path("write.bgo")], "");
+    assert_eq!((stderr.as_str(), code), ("", Some(0)));
+
+    let sources: [&[&str]; 4] = [
+        &["t.parquet"],
+        &["shop.db", "orders"],
+        &["plain.csv"],
+        &["lines.json"],
+    ];
+    for source in sources {
+        let output = Command::new(env!("CARGO_BIN_EXE_biggo"))
+            .arg("infer")
+            .args(source)
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        let program = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            output.status.success(),
+            "{source:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        // A database keeps a truth value as a number, and says that any column may be null.
+        let (id, ok) = match source.len() {
+            2 => ("  id: int?,\n", "  ok: int?,\n"),
+            _ => ("  id: int,\n", "  ok: bool,\n"),
+        };
+        assert!(program.contains(id) && program.contains(ok), "{program}");
+        assert!(program.contains("  at: date"), "{program}");
+        // The last line names the table; print how many of its rows are of the fifth.
+        let name = program.lines().last().unwrap().split(' ').nth(1).unwrap();
+        let program = format!("{program}print({name} |> where(day(at) == 5) |> count())\n");
+        let ran = Command::new(env!("CARGO_BIN_EXE_biggo"))
+            .args(["run", "-"])
+            .current_dir(&dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.take().unwrap().write_all(program.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        let shown = (
+            String::from_utf8_lossy(&ran.stdout),
+            String::from_utf8_lossy(&ran.stderr),
+        );
+        assert_eq!(
+            (shown.0.as_ref(), shown.1.as_ref()),
+            ("1\n", ""),
+            "{source:?}:\n{program}"
+        );
+    }
+
+    // A database is described a table at a time.
+    let output = Command::new(env!("CARGO_BIN_EXE_biggo"))
+        .args(["infer", "shop.db"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "a database needs the name of a table after it; in shop.db, its tables are orders"
+        ),
+        "{stderr}"
+    );
+}

@@ -1,5 +1,6 @@
 mod build;
 mod help;
+mod infer;
 mod repl;
 mod test;
 
@@ -21,6 +22,7 @@ commands:
   explain <file> [<arg>...]  show the query plans of a program without running them
   test [<path>...]         run the tests in the `*_test.bgo` files under the paths
   fmt [--check] <file>...  format programs in place, or list those that need it
+  infer <file>             print the row type of a data file, to copy into a program
   help <function>          describe a built-in function
 
 `-` in place of a file is standard input. `fmt -` writes the formatted program to standard
@@ -65,6 +67,7 @@ fn command(args: &[&str]) -> u8 {
             print!("{USAGE}");
             0
         }
+        ["infer", ref rest @ ..] => infer::command(rest),
         ["help", name] => match help::entry(name) {
             Some(entry) => {
                 print!("{entry}");

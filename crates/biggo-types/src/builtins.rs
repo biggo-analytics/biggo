@@ -26,6 +26,7 @@ impl Cx<'_> {
             "assert" => self.builtin_assert(call),
             "assert_eq" => self.builtin_assert_eq(call),
             "args" => self.builtin_args(call),
+            "env" => self.builtin_env(call),
             "split" => self.builtin_split(call),
             "between" => self.builtin_between(call),
             "clamp" => self.builtin_clamp(call),
@@ -143,6 +144,13 @@ impl Cx<'_> {
         let [] = self.exactly(call, "no arguments")?;
         let ty = Type::List(Box::new(Type::Str));
         self.builtin(call, Builtin::Args, Vec::new(), ty)
+    }
+
+    /// `env(name)` is the value of an environment variable, which may not be set.
+    fn builtin_env(&mut self, call: &Call) -> Option<Expr> {
+        let [name] = self.exactly(call, "the name of an environment variable")?;
+        let name = self.scalar_arg(name, Type::Str, "the name of the variable")?;
+        self.builtin(call, Builtin::Env, vec![name], Type::Str.or_null())
     }
 
     /// `split(text, separator)` is the list of the pieces of `text`.

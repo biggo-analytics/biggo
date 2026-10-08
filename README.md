@@ -45,8 +45,9 @@ read_csv<Sale>("docs/data/sales.csv")
 - **A small but complete language.** Functions, lambdas, `match`, records, maps, lists, `import`,
   `decimal` for money, `datetime` and `duration` for time, regular expressions, and program
   arguments.
-- **Reads and writes several formats.** CSV (any delimiter, and encodings such as TIS-620), Parquet,
-  JSON Lines, SQLite.
+- **Reads and writes several formats.** CSV (any delimiter, encodings such as TIS-620, files
+  with titles or without a header), Parquet, JSON, SQLite, and many files at once by a pattern.
+  `biggo infer` writes the row type of a file for you.
 - **All the tools in one executable.** A runner, a REPL, a formatter, a test runner, a language
   server, and a builder of standalone executables. A VS Code extension is in this repository.
 
@@ -215,6 +216,7 @@ ok
 | `biggo test [path]` | Runs the tests in `*_test.bgo` files |
 | `biggo fmt [--check] files` | Formats code |
 | `biggo build file.bgo -o app` | Builds a standalone executable |
+| `biggo infer data.csv` | Prints the row type of a data file, so that it need not be typed |
 | `biggo help substring` | What a built-in function does |
 | `biggo lsp` | Language server for editors (errors as you type, hover, formatting) |
 

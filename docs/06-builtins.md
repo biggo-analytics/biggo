@@ -685,9 +685,10 @@ Details: [Working with tables](04-tables.md)
 
 | Function | Meaning |
 | --- | --- |
-| `read_csv<T>(path)`, `read_csv<T>(path, delimiter = d, encoding = e)` | A table from a CSV file, which can have another delimiter than `,` and another encoding than UTF-8 |
+| `read_csv<T>(path)`, `read_csv<T>(path, delimiter = d, encoding = e, header = false, skip = n, nulls = [...])` | A table from a CSV file, which can have another delimiter than `,`, another encoding than UTF-8, lines before its header or no header, and texts that mean null |
 | `read_parquet<T>(path)` | A table from a Parquet file |
-| `read_json<T>(path)` | A table from a JSON Lines file |
+| `read_json<T>(path)` | A table from a file of JSON objects: one per line, or one array of them |
+| `read_csv<T>(pattern, file_name = "column")`, and so `read_json` and `read_parquet` | A table from every file that a pattern such as `"logs/*.csv"` matches; the column named takes the path of the file of each row |
 | `read_sql<T>(path, query)` | The result of a query on a SQLite database |
 | `write_csv(t, path)`, `write_csv(t, path, delimiter = d, encoding = e)` | Writes a table as CSV |
 | `write_parquet(t, path)` | Writes a table as Parquet |
@@ -795,6 +796,21 @@ Details: [list](02-language.md#list), [map](02-language.md#map),
 | Function | Returns | Meaning |
 | --- | --- | --- |
 | `args()` | `list<string>` | The arguments that follow the program on the command line: `biggo run report.bgo 2026-01 north` gives `["2026-01", "north"]`. The list is empty when there are none |
+| `env(name)` | `string?` | The value of an environment variable, or null if it is not set |
+
+```biggo
+let folder = env("REPORT_FOLDER") ?? "data"
+print(folder, is_null(env("REPORT_FOLDER")))
+```
+
+```text output
+data true
+```
+
+- `env` is for what belongs to the machine and not to the program: a folder that differs
+  between a laptop and a server, or a password, which should not be written in a file that is
+  shared. `??` gives the value to use when the variable is not set.
+- A variable that is set to nothing is the empty string, not null.
 
 Details: [biggo run](07-tools.md#biggo-run)
 

@@ -1,8 +1,12 @@
-//! How a CSV file is laid out: what separates its fields, and how its text is encoded.
+//! How a CSV file is laid out: what separates its fields, and how its text is encoded. And
+//! what else a call that reads a file can say about it.
 
 use std::fmt;
+use std::sync::Arc;
 
 use encoding_rs::{Encoding, UTF_8};
+
+use crate::schema::Name;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CsvOptions {
@@ -59,6 +63,52 @@ impl CsvOptions {
     }
 }
 
+/// What a call that reads a file says about it, beyond the delimiter and the encoding. All
+/// but `file_column` are for CSV files.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReadOptions {
+    /// Whether the first line names the columns. If not, the columns of the file are the
+    /// declared ones, in the order they are declared.
+    pub header: bool,
+    /// The lines to pass over before the header: a title, a date, a blank line.
+    pub skip: usize,
+    /// The texts that mean null, besides an empty field.
+    pub nulls: Vec<Arc<str>>,
+    /// The declared column that is not read from the file, but holds the path of the file
+    /// that each row came from.
+    pub file_column: Option<Arc<str>>,
+}
+
+impl Default for ReadOptions {
+    fn default() -> Self {
+        ReadOptions {
+            header: true,
+            skip: 0,
+            nulls: Vec::new(),
+            file_column: None,
+        }
+    }
+}
+
+/// Shows the options that differ from the default, each with a space before it.
+impl fmt::Display for ReadOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !self.header {
+            f.write_str(" no header")?;
+        }
+        if self.skip > 0 {
+            write!(f, " skip {}", self.skip)?;
+        }
+        if !self.nulls.is_empty() {
+            write!(f, " nulls {:?}", self.nulls)?;
+        }
+        if let Some(column) = &self.file_column {
+            write!(f, " file name in {}", Name(column))?;
+        }
+        Ok(())
+    }
+}
+
 /// Shows the options that differ from the default, each with a space before it.
 impl fmt::Display for CsvOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -104,5 +154,18 @@ mod tests {
         };
         assert_eq!(options.to_string(), " delimiter '\\t' encoding windows-874");
         assert_eq!(CsvOptions::default().to_string(), "");
+    }
+
+    #[test]
+    fn read_options_show_what_is_not_the_default() {
+        assert_eq!(ReadOptions::default().to_string(), "");
+        let options = ReadOptions {
+            header: false,
+            skip: 2,
+            nulls: vec!["NA".into(), "-".into()],
+            file_column: Some("from file".into()),
+        };
+        let shown = " no header skip 2 nulls [\"NA\", \"-\"] file name in `from file`";
+        assert_eq!(options.to_string(), shown);
     }
 }

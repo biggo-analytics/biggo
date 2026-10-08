@@ -926,6 +926,14 @@ impl<W: Write> Vm<W> {
                 Err(message) => self.fail(frame, message),
             },
             Builtin::Args => Ok(Value::List(self.args.clone())),
+            Builtin::Env => match std::env::var(&*text(0)) {
+                Ok(value) => Ok(Value::Str(value.into())),
+                Err(std::env::VarError::NotPresent) => Ok(Value::Null),
+                Err(std::env::VarError::NotUnicode(_)) => {
+                    let message = format!("the environment variable {} is not text", text(0));
+                    self.fail(frame, message)
+                }
+            },
             Builtin::Today | Builtin::Now => match self.clock() {
                 Ok(now) if builtin == Builtin::Now => Ok(Value::DateTime(now)),
                 Ok(now) => Ok(Value::Date(now.div_euclid(biggo_plan::dates::DAY) as i32)),

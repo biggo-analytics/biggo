@@ -187,6 +187,8 @@ pub enum Builtin {
     AssertEq,
     /// The arguments the program was started with, as a list of strings.
     Args,
+    /// The value of an environment variable, or null if it is not set.
+    Env,
     /// The pieces of a string between its separators, as a list.
     Split,
     /// The day the program started, and the moment it did.
