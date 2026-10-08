@@ -1,7 +1,7 @@
-# การทำงานกับตาราง
+# Working with tables
 
-ตารางคือชนิดข้อมูลหลักของ biggo หน้านี้ครอบคลุมทุก operation ของตาราง
-ตัวอย่างทั้งหน้าใช้ตาราง `sales` นี้ (ไฟล์ [`data/sales.csv`](data/sales.csv)):
+The table is the main data type in biggo. This page covers every table operation.
+All examples on this page use this `sales` table (the file [`data/sales.csv`](data/sales.csv)):
 
 ```biggo prelude
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -29,23 +29,25 @@ print(sales)
 +------------+--------+---------+-----+-------+
 ```
 
-## ตารางคือ query ที่ยังไม่ได้รัน
+## A table is a query that has not run yet
 
-`read_csv` ไม่ได้อ่านไฟล์ และ `where` ไม่ได้กรองอะไรทันที แต่ละ operation แค่ *ต่อแผน* ให้ยาวขึ้น
-ตัวแปรที่เก็บตารางจึงเก็บแผน ไม่ใช่ข้อมูล แผนถูกรันเมื่อโปรแกรมต้องการผลลัพธ์จริง คือเมื่อเรียก
+`read_csv` does not read the file, and `where` does not filter anything right away. Each operation
+only *extends the plan*. A variable that holds a table therefore holds a plan, not data. The plan
+runs when the program needs an actual result, that is, when you call:
 
-| ฟังก์ชัน | สิ่งที่ทำ |
+| Function | What it does |
 | --- | --- |
-| `print(t)` | รันแล้วพิมพ์ 50 แถวแรก |
-| `write_csv` `write_parquet` `write_json` `write_sql` | รันแล้วเขียนผลลัพธ์ทั้งหมด |
-| `count(t)` | รันแล้วให้จำนวนแถว (`int`) |
-| `collect(t)` | รันแล้วเก็บผลลัพธ์ไว้ในหน่วยความจำ ได้ตารางใหม่ |
-| `to_rows(t)` | รันแล้วให้ `list` ของ record |
-| `describe(t)` `histogram(t, ...)` `linreg(t, ...)` | รันเพื่อคำนวณสถิติ |
-| `assert_eq(t1, t2)` | รันทั้งสองตารางแล้วเทียบ |
+| `print(t)` | Runs the plan and prints the first 50 rows |
+| `write_csv` `write_parquet` `write_json` `write_sql` | Runs the plan and writes the whole result |
+| `count(t)` | Runs the plan and gives the number of rows (`int`) |
+| `collect(t)` | Runs the plan and keeps the result in memory, giving a new table |
+| `to_rows(t)` | Runs the plan and gives a `list` of records |
+| `describe(t)` `histogram(t, ...)` `linreg(t, ...)` | Run the plan to compute statistics |
+| `assert_eq(t1, t2)` | Runs both tables and compares them |
 
-ก่อนรัน แผนทั้งก้อนถูกปรับ (optimize): กรองให้เร็วที่สุด อ่านเฉพาะ column ที่ใช้
-หยุดอ่านเมื่อได้แถวครบ ดูได้ด้วย `explain(t)` หรือคำสั่ง `biggo explain`
+Before a plan runs, the whole plan is optimized: it filters as early as possible, reads only the
+columns that are used, and stops reading once it has enough rows. You can see this with `explain(t)`
+or the `biggo explain` command.
 
 ```biggo explain
 sales
@@ -69,11 +71,11 @@ optimized plan:
       Scan csv "data/sales.csv": product, qty, price where region == "north" limit 2
 ```
 
-ผลที่ตามมาคือ **ตารางที่ใช้สองครั้งถูกคำนวณสองครั้ง** ถ้าตารางกลางทางคำนวณแพงและใช้หลายที่
-ให้ `collect` ไว้ก่อน:
+One consequence is that **a table used twice is computed twice**. If an intermediate table is
+expensive to compute and is used in several places, `collect` it first:
 
 ```biggo
-let large = collect(sales |> where(qty > 5))      // อ่านไฟล์ครั้งเดียวตรงนี้
+let large = collect(sales |> where(qty > 5))      // the file is read once, here
 print(count(large), large |> agg(units = sum(qty)))
 ```
 
@@ -86,20 +88,20 @@ print(count(large), large |> agg(units = sum(qty)))
 +-------+
 ```
 
-## expression ของ column
+## Column expressions
 
-ภายใน argument ของ operation อย่าง `where` `derive` `agg` ชื่อ column ใช้ได้เหมือนตัวแปร
-expression แบบนี้ถูกคำนวณ *ทั้ง column ในคราวเดียว* โดย engine ไม่ใช่ทีละแถวโดยตัวแปลภาษา
-สิ่งที่ใช้ได้ใน expression ของ column:
+Inside the arguments of operations such as `where`, `derive`, and `agg`, you can use column names
+like variables. An expression like this is computed *a whole column at a time* by the engine, not
+row by row by the interpreter. What you can use in a column expression:
 
-- ชื่อ column, literal, และค่าจากโปรแกรม (ตัวแปร ผลของฟังก์ชัน)
-- ตัวดำเนินการทั้งหมด: คณิตศาสตร์ เปรียบเทียบ `and` `or` `not` `??`
-- `if ... else ...` (ต้องมี `else`) และ `match`
-- built-in ที่ทำงานกับค่าเดี่ยว: `round` `upper` `year` `to_int` `is_null` ฯลฯ
-  ([รายการเต็ม](06-builtins.md#ฟังก์ชันของค่าเดี่ยว))
+- Column names, literals, and values from the program (variables, function results)
+- All operators: arithmetic, comparison, `and`, `or`, `not`, `??`
+- `if ... else ...` (the `else` is required) and `match`
+- Built-in functions that work on scalar values: `round`, `upper`, `year`, `to_int`, `is_null`, and so on
+  ([full list](06-builtins.md#scalar-functions))
 
 ```biggo
-let min_qty = 4                                   // ค่าจากโปรแกรมใช้ใน expression ได้
+let min_qty = 4                                   // a value from the program can be used in an expression
 fn tax_rate() -> float { 0.07 }
 
 sales
@@ -109,7 +111,7 @@ sales
     label = upper(region) + "-" + product,
     size = match qty { 4 | 5 => "small", _ => "large" },
   )
-  |> derive(taxed = round(revenue * (1 + tax_rate()), 2))   // ใช้ column ที่เพิ่งสร้างได้
+  |> derive(taxed = round(revenue * (1 + tax_rate()), 2))   // a column you just created can be used
   |> select(date, label, size, revenue, taxed)
   |> print()
 ```
@@ -125,10 +127,11 @@ sales
 +------------+--------------+-------+---------+-------+
 ```
 
-ส่วนของ expression ที่ไม่แตะ column เลย (อย่าง `1 + tax_rate()`) ถูกคำนวณ **ครั้งเดียว**
-ตอนสร้างแผน แล้วฝังค่าลงไป ไม่ได้ถูกเรียกซ้ำทุกแถว
+A part of an expression that does not touch any column (such as `1 + tax_rate()`) is computed
+**once**, when the plan is built, and its value is embedded in the plan. It is not called again for
+every row.
 
-สิ่งที่ทำไม่ได้: ส่ง column เข้าฟังก์ชันที่เขียนเอง
+What you cannot do: pass a column to a user-defined function.
 
 ```biggo error
 fn double(n: int) -> int { n * 2 }
@@ -143,30 +146,31 @@ error: a user-defined function cannot take a column; only operators and built-in
   |                                      ^^^
 ```
 
-เพราะฟังก์ชันที่เขียนเองทำงานทีละค่าบนตัวแปลภาษา ซึ่งช้ากว่า engine หลายร้อยเท่า ภาษาจึงไม่ยอมให้
-เผลอเขียน pipeline ที่ช้าโดยไม่รู้ตัว ถ้าต้องการใช้ซ้ำ ให้เขียนฟังก์ชันที่ *รับและคืนตาราง* แทน
-(ดู [ฟังก์ชันที่รับและคืนตาราง](#ฟังก์ชันที่รับและคืนตาราง))
+This is because a user-defined function works on one value at a time in the interpreter, which is
+hundreds of times slower than the engine. The language therefore does not let you write a slow
+pipeline by accident. If you want something reusable, write a function that *takes and returns a
+table* instead (see [Functions that take and return tables](#functions-that-take-and-return-tables)).
 
-กฎอื่นที่ควรรู้:
+Other rules worth knowing:
 
-- ตัวแปรกับ column ชื่อชนกันเป็น compile error (`is both a column of this table and a variable`)
-  ให้เปลี่ยนชื่อตัวแปร
-- null ทำงานแบบเดียวกับนอกตาราง: `price > 50` ของแถวที่ `price` เป็น null ได้ null
-- column ที่ชื่อมีช่องว่างหรือตรงกับ keyword ครอบด้วย backtick: `` `order date` ``
-- expression ที่ผิดพลาดได้ตอนรัน (เช่น `%` ด้วยศูนย์) ถูกคำนวณเฉพาะแถวที่ต้องใช้จริง:
-  `if n != 0 { 10 % n } else { 0 }` ปลอดภัยเสมอ
+- A variable and a column with the same name is a compile error
+  (`is both a column of this table and a variable`). Rename the variable.
+- null works the same way as it does outside tables: `price > 50` gives null for a row where `price` is null
+- A column whose name contains a space or matches a keyword is wrapped in backticks: `` `order date` ``
+- An expression that can fail at run time (such as `%` by zero) is computed only for the rows that
+  actually need it: `if n != 0 { 10 % n } else { 0 }` is always safe
 
-## เลือกแถว
+## Selecting rows
 
 ```biggo
-// where: เก็บแถวที่เงื่อนไขเป็น true (แถวที่เงื่อนไขเป็น null ถูกทิ้ง)
+// where: keeps the rows where the condition is true (rows where the condition is null are dropped)
 print(sales |> where(price > 50) |> select(product, price))
 print(sales |> where(is_null(price)))
 
-// take / skip: n แถวแรก / ข้าม n แถวแรก
+// take / skip: the first n rows / skip the first n rows
 print(sales |> sort(desc(qty)) |> skip(1) |> take(2) |> select(product, qty))
 
-// distinct: ตัดแถวซ้ำ ทั้งแถว หรือเฉพาะ column ที่ระบุ
+// distinct: removes duplicate rows, by the whole row or only by the given columns
 print(sales |> distinct(region))
 print(sales |> select(region, product) |> distinct() |> count())
 ```
@@ -199,24 +203,24 @@ print(sales |> select(region, product) |> distinct() |> count())
 8
 ```
 
-| operation | ผลลัพธ์ |
+| Operation | Result |
 | --- | --- |
-| `where(cond)` | แถวที่ `cond` เป็น `true`; `cond` เป็น `bool` หรือ `bool?` |
-| `take(n)` | `n` แถวแรก |
-| `skip(n)` | ทุกแถวยกเว้น `n` แถวแรก |
-| `distinct()` | แถวที่ไม่ซ้ำกัน เรียงตามที่พบครั้งแรก |
-| `distinct(a, b)` | ค่าที่ไม่ซ้ำของ column `a`, `b` (ผลลัพธ์มีเฉพาะ column ที่ระบุ) |
+| `where(cond)` | Rows where `cond` is `true`; `cond` is `bool` or `bool?` |
+| `take(n)` | The first `n` rows |
+| `skip(n)` | Every row except the first `n` |
+| `distinct()` | The unique rows, in order of first appearance |
+| `distinct(a, b)` | The unique values of columns `a`, `b` (the result has only the given columns) |
 
-`n` ของ `take`/`skip` เป็น expression ของโปรแกรมได้ (`take(limit * 2)`) แต่ต้องไม่ติดลบ
+The `n` of `take`/`skip` can be a program expression (`take(limit * 2)`), but it must not be negative.
 
-## เลือกและสร้าง column
+## Selecting and creating columns
 
 ```biggo
 print(sales |> select(product, qty) |> take(2))
-// select สร้าง column ใหม่ได้ด้วย name = expression
+// select can create new columns with name = expression
 print(sales |> select(product, year = year(date), total = qty * (price ?? 0.0)) |> take(2))
 print(sales |> drop(date, price) |> rename(quantity = qty, area = region) |> take(2))
-// derive เพิ่ม column หรือแทนที่ column ชื่อเดิม
+// derive adds a column, or replaces the column that has the same name
 print(sales |> derive(qty = qty * 10, big = qty >= 5) |> take(2))
 ```
 
@@ -247,17 +251,17 @@ print(sales |> derive(qty = qty * 10, big = qty >= 5) |> take(2))
 +------------+--------+---------+-----+-------+------+
 ```
 
-| operation | ผลลัพธ์ |
+| Operation | Result |
 | --- | --- |
-| `select(a, b, c = expr)` | เฉพาะ column ที่ระบุ ตามลำดับที่เขียน |
-| `drop(a, b)` | ทุก column ยกเว้นที่ระบุ |
-| `rename(new = old)` | เปลี่ยนชื่อ ตำแหน่งเดิม |
-| `derive(c = expr)` | ทุก column เดิม บวก column ใหม่ต่อท้าย; ชื่อซ้ำกับของเดิมคือแทนที่ |
+| `select(a, b, c = expr)` | Only the given columns, in the order written |
+| `drop(a, b)` | Every column except the given ones |
+| `rename(new = old)` | Renames the column; its position stays the same |
+| `derive(c = expr)` | Every existing column, plus the new columns at the end; a name that matches an existing column replaces it |
 
-ใน `derive` เดียวกัน column หลังใช้ column ที่ประกาศก่อนหน้าได้ ส่วนในตัวอย่างข้างบน
-`big = qty >= 5` เห็น `qty` ที่ถูกคูณ 10 แล้ว
+Within a single `derive`, a later column can use a column declared before it. In the example above,
+`big = qty >= 5` sees the `qty` that has already been multiplied by 10.
 
-## เรียงลำดับ
+## Sorting
 
 ```biggo
 print(sales |> sort(region, desc(qty)) |> select(region, product, qty) |> take(5))
@@ -283,23 +287,23 @@ print(sales |> sort(desc(price), product) |> select(product, price) |> skip(7))
 +---------+-------+
 ```
 
-- `sort(a, b)` เรียงตาม `a` ก่อน ถ้าเท่ากันจึงดู `b` ค่าเริ่มต้นคือน้อยไปมาก
-- `desc(x)` กลับเป็นมากไปน้อย, `asc(x)` เขียนให้ชัดได้ว่าน้อยไปมาก
-- key เป็น expression ได้: `sort(desc(qty * price))`
-- **null อยู่ท้ายเสมอ** ทั้งแบบ `asc` และ `desc`
-- แถวที่ key เท่ากันคงลำดับเดิม (stable sort)
-- `sort` ตามด้วย `take(n)` ถูกรวมเป็น top-n: ไม่ต้องเรียงทั้งตาราง
+- `sort(a, b)` sorts by `a` first, then looks at `b` when the values are equal. The default is ascending.
+- `desc(x)` reverses the order to descending, and `asc(x)` lets you state ascending explicitly
+- A key can be an expression: `sort(desc(qty * price))`
+- **null always comes last**, with both `asc` and `desc`
+- Rows with equal keys keep their original order (stable sort)
+- `sort` followed by `take(n)` is combined into a top-n: the whole table does not have to be sorted
 
-## สรุปเป็นกลุ่ม: group และ agg
+## Summarizing by group: group and agg
 
-`group(...)` แบ่งแถวเป็นกลุ่มตามค่าของ column แล้ว `agg(...)` ย่อแต่ละกลุ่มเหลือหนึ่งแถว
+`group(...)` splits the rows into groups by the values of columns, then `agg(...)` reduces each group to one row.
 
 ```biggo
 sales
   |> group(region)
   |> agg(
-    orders = count(),            // จำนวนแถว
-    priced = count(price),       // จำนวนค่าที่ไม่เป็น null
+    orders = count(),            // number of rows
+    priced = count(price),       // number of non-null values
     units = sum(qty),
     avg_qty = mean(qty),
     high = max(price),
@@ -319,30 +323,31 @@ sales
 +--------+--------+--------+-------+--------------------+-------+----------+
 ```
 
-aggregate ที่มี:
+The available aggregates:
 
-| ฟังก์ชัน | ผลลัพธ์ | รับ |
+| Function | Result | Accepts |
 | --- | --- | --- |
-| `count()` | จำนวนแถวของกลุ่ม | — |
-| `count(x)` | จำนวนค่าที่ไม่เป็น null | ทุกชนิด |
-| `count_distinct(x)` | จำนวนค่าที่ต่างกัน (ไม่นับ null) | ทุกชนิด |
-| `sum(x)` | ผลรวม | ตัวเลข, `duration` |
-| `mean(x)` | ค่าเฉลี่ย (`float`) | ตัวเลข |
-| `median(x)` | มัธยฐาน (`float`) | ตัวเลข |
-| `stddev(x)` | ส่วนเบี่ยงเบนมาตรฐานของตัวอย่าง (หารด้วย n−1) | ตัวเลข |
-| `min(x)` `max(x)` | ค่าน้อยสุด/มากสุด | ทุกชนิดยกเว้น `bool` |
-| `first(x)` `last(x)` | ค่าของแถวแรก/สุดท้ายของกลุ่ม | ทุกชนิด |
-| `corr(y, x)` `cov(y, x)` | สหสัมพันธ์, ความแปรปรวนร่วม | ตัวเลข |
-| `slope(y, x)` `intercept(y, x)` | เส้นถดถอยเชิงเส้น | ตัวเลข |
+| `count()` | Number of rows in the group | — |
+| `count(x)` | Number of non-null values | Any type |
+| `count_distinct(x)` | Number of distinct values (null is not counted) | Any type |
+| `sum(x)` | Sum | Numbers, `duration` |
+| `mean(x)` | Mean (`float`) | Numbers |
+| `median(x)` | Median (`float`) | Numbers |
+| `stddev(x)` | Sample standard deviation (divides by n−1) | Numbers |
+| `min(x)` `max(x)` | Smallest/largest value | Any type except `bool` |
+| `first(x)` `last(x)` | Value of the first/last row of the group | Any type |
+| `corr(y, x)` `cov(y, x)` | Correlation, covariance | Numbers |
+| `slope(y, x)` `intercept(y, x)` | Linear regression line | Numbers |
 
-ทุก aggregate ข้าม null (ยกเว้น `count()` ที่นับแถว) เมื่อไม่มีค่าให้สรุปเลย `count` ได้ `0`
-ตัวอื่นได้ null — ยกเว้น `sum` ของ column ที่ไม่ใช่ nullable บนตารางว่าง ซึ่งได้ `0`
+Every aggregate skips null (except `count()`, which counts rows). When there are no values to
+aggregate at all, `count` gives `0` and the others give null, except for `sum` of a non-nullable
+column on an empty table, which gives `0`.
 
-argument ของ aggregate เป็น expression ได้ และผลของ aggregate นำมาคำนวณต่อได้:
+The argument of an aggregate can be an expression, and the result of an aggregate can be used in further computation:
 
 ```biggo
 sales
-  |> group(month = month(date), large = qty >= 5)      // key ของกลุ่มคำนวณได้
+  |> group(month = month(date), large = qty >= 5)      // group keys can be computed
   |> agg(
     per_order = sum(qty) / count(),
     revenue = round(sum(qty * (price ?? 0.0)), 1),
@@ -365,7 +370,7 @@ sales
 +-------+-------+-----------+---------+
 ```
 
-`agg` โดยไม่มี `group` สรุปทั้งตารางเป็นแถวเดียว (ได้หนึ่งแถวเสมอ แม้ตารางว่าง):
+`agg` without `group` aggregates the whole table into a single row (you always get one row, even when the table is empty):
 
 ```biggo
 print(sales |> agg(rows = count(), total = sum(qty), best = max(price)))
@@ -385,19 +390,20 @@ print(sales |> where(qty > 1000) |> agg(rows = count(), total = sum(qty), best =
 +------+-------+------+
 ```
 
-กฎของ `agg`:
+Rules of `agg`:
 
-- ทุก argument ต้องเป็น `name = expression` และ expression ต้องเป็น aggregate
-  หรือคำนวณจาก aggregate กับ column ของกลุ่ม
-- column ที่ไม่ใช่ key ของกลุ่มต้องอยู่ใน aggregate: `agg(x = qty)` เป็น error
-- ผลลัพธ์มี column ของกลุ่มตามด้วย column ที่ประกาศใน `agg`
-- **ลำดับของกลุ่มในผลลัพธ์คือลำดับที่แต่ละกลุ่มปรากฏครั้งแรกในข้อมูล** ถ้าต้องการลำดับอื่นให้ `sort`
-- ผลของ `group` (ที่ยังไม่ `agg`) ใช้ได้กับ `agg` และ `pivot` เท่านั้น แต่เก็บในตัวแปรแล้ว `agg`
-  หลายแบบได้
+- Every argument must be `name = expression`, and the expression must be an aggregate
+  or be computed from aggregates and the group's columns
+- A column that is not a group key must be inside an aggregate: `agg(x = qty)` is an error
+- The result has the group's columns followed by the columns declared in `agg`
+- **The order of the groups in the result is the order in which each group first appears in the data**.
+  If you want a different order, use `sort`.
+- The result of `group` (before any `agg`) can be used only with `agg` and `pivot`, but you can keep
+  it in a variable and apply `agg` to it in several ways
 
 ## join
 
-`join` จับคู่แถวของสองตารางที่ key เท่ากัน
+`join` matches the rows of two tables where the keys are equal.
 
 ```biggo
 type Order = { order_id: int, customer_id: int?, amount: float }
@@ -407,11 +413,11 @@ let customers = read_csv<Customer>("data/customers.csv")
 print(orders)
 print(customers)
 
-// inner join (ค่าเริ่มต้น): เฉพาะแถวที่จับคู่ได้
+// inner join (the default): only the rows that have a match
 print(orders |> join(customers, on = customer_id) |> sort(order_id))
-// left join: ทุกแถวของตารางซ้าย ฝั่งขวาเป็น null ถ้าไม่มีคู่
+// left join: every row of the left table; the right side is null when there is no match
 print(orders |> join(customers, on = customer_id, how = "left") |> sort(order_id))
-// semi / anti: แถวของตารางซ้ายที่ มี / ไม่มี คู่ในตารางขวา
+// semi / anti: rows of the left table that have / do not have a match in the right table
 print(customers |> join(orders, on = customer_id, how = "anti"))
 ```
 
@@ -455,20 +461,20 @@ print(customers |> join(orders, on = customer_id, how = "anti"))
 +-------------+------+--------+
 ```
 
-| `how` | แถวในผลลัพธ์ |
+| `how` | Rows in the result |
 | --- | --- |
-| `"inner"` (ค่าเริ่มต้น) | คู่ที่ key ตรงกัน |
-| `"left"` | ทุกแถวของตารางซ้าย; column ฝั่งขวาเป็น null เมื่อไม่มีคู่ |
-| `"right"` | ทุกแถวของตารางขวา; column ฝั่งซ้ายเป็น null เมื่อไม่มีคู่ |
-| `"full"` | ทุกแถวของทั้งสองตาราง |
-| `"semi"` | แถวของตารางซ้ายที่มีคู่ (มีแต่ column ของตารางซ้าย ไม่ซ้ำแถว) |
-| `"anti"` | แถวของตารางซ้ายที่ไม่มีคู่ |
+| `"inner"` (the default) | Pairs whose keys match |
+| `"left"` | Every row of the left table; the right-side columns are null when there is no match |
+| `"right"` | Every row of the right table; the left-side columns are null when there is no match |
+| `"full"` | Every row of both tables |
+| `"semi"` | Rows of the left table that have a match (only the left table's columns, no repeated rows) |
+| `"anti"` | Rows of the left table that have no match |
 
-การระบุ key:
+Specifying the key:
 
-- `on = key` เมื่อ column ชื่อเดียวกันทั้งสองตาราง ผลลัพธ์มี column key เดียว
-- `on = [a, b]` เมื่อ key มีหลาย column
-- `left_on = a, right_on = b` เมื่อชื่อต่างกัน ผลลัพธ์เก็บทั้งสอง column
+- `on = key` when the column has the same name in both tables. The result has a single key column.
+- `on = [a, b]` when the key has several columns
+- `left_on = a, right_on = b` when the names differ. The result keeps both columns.
 
 ```biggo
 type Order = { order_id: int, customer_id: int?, amount: float }
@@ -482,7 +488,7 @@ orders
   |> sort(order_id)
   |> print()
 
-// ยอดรวมต่อเมือง รวมลูกค้าที่ยังไม่มี order
+// total per city, including customers that have no order yet
 people
   |> join(orders, left_on = id, right_on = customer_id, how = "left")
   |> group(city)
@@ -508,18 +514,19 @@ people
 +------------+--------+-------+
 ```
 
-กฎของ `join`:
+Rules of `join`:
 
-- key ที่เป็น null ไม่จับคู่กับอะไรเลย (รวมถึง null ด้วยกัน)
-- key ทั้งสองฝั่งต้องเป็นชนิดเดียวกัน (`int` กับ `float` ต้องแปลงฝั่งหนึ่งก่อน)
-- column ที่ไม่ใช่ key ชื่อซ้ำกันสองตารางเป็น compile error: `rename` หรือ `drop` ฝั่งหนึ่งก่อน
-- type ของผลลัพธ์สะท้อน `how`: ใน left join column ฝั่งขวากลายเป็น `T?` ทั้งหมด
-- engine สร้าง hash table จากตารางขวาแล้วไล่ตารางซ้าย: ถ้าทำได้ **ให้ตารางเล็กอยู่ทางขวา**
+- A null key matches nothing (including another null)
+- The keys on both sides must have the same type (for `int` and `float`, convert one side first)
+- A non-key column with the same name in both tables is a compile error: `rename` or `drop` it on one side first
+- The type of the result reflects `how`: in a left join, every right-side column becomes `T?`
+- The engine builds a hash table from the right table and then scans the left table: when you can,
+  **put the smaller table on the right**
 
 ## window
 
-`window` คำนวณค่าของแต่ละแถวจากแถวอื่นใน "หน้าต่าง" เดียวกัน โดยไม่ยุบแถว
-`by` แบ่งตารางเป็น partition และ `order` กำหนดลำดับภายใน partition
+`window` computes a value for each row from the other rows in the same "window", without collapsing rows.
+`by` splits the table into partitions, and `order` sets the order within a partition.
 
 ```biggo
 type Visit = { day: date, site: string, visits: int? }
@@ -553,23 +560,24 @@ log
 +------------+------+--------+---+------+---------+------+------------+-------+
 ```
 
-| ฟังก์ชัน | ค่าของแต่ละแถว |
+| Function | Value for each row |
 | --- | --- |
-| `row_number()` | ลำดับที่ของแถวใน partition เริ่มจาก 1 |
-| `rank()` | อันดับตาม `order`; แถวที่เท่ากันได้อันดับเดียวกัน แล้วข้ามเลขถัดไป |
-| `lag(x)`, `lag(x, n)` | ค่าของ `x` ในแถวก่อนหน้า `n` แถว (ค่าเริ่มต้น 1); null ถ้าไม่มี |
-| `lead(x)`, `lead(x, n)` | ค่าของ `x` ในแถวถัดไป `n` แถว |
-| `cumsum(x)` | ผลรวมสะสมตั้งแต่ต้น partition ถึงแถวนี้ |
-| `moving_avg(x, n)` | ค่าเฉลี่ยของแถวนี้กับ `n − 1` แถวก่อนหน้า |
-| `sum` `mean` `min` `max` `count` ฯลฯ | aggregate ของทั้ง partition ซ้ำให้ทุกแถว |
+| `row_number()` | Position of the row in its partition, starting from 1 |
+| `rank()` | Rank by `order`; equal rows get the same rank, then the next number is skipped |
+| `lag(x)`, `lag(x, n)` | Value of `x` in the row `n` rows before (default 1); null if there is none |
+| `lead(x)`, `lead(x, n)` | Value of `x` in the row `n` rows after |
+| `cumsum(x)` | Running total from the start of the partition up to this row |
+| `moving_avg(x, n)` | Mean of this row and the `n − 1` rows before it |
+| `sum` `mean` `min` `max` `count` etc. | The aggregate of the whole partition, repeated on every row |
 
-- `by` และ `order` รับ column เดียวหรือ list: `by = [site, region]`, `order = [desc(visits), day]`
-- ไม่มี `by` คือทั้งตารางเป็น partition เดียว
-- ผลลัพธ์มีทุก column เดิมบวก column ที่ประกาศ **จำนวนและลำดับของแถวเหมือนตารางต้นทาง**:
-  `order` กำหนดลำดับที่ใช้คำนวณเท่านั้น ถ้าต้องการให้ผลลัพธ์เรียงให้ `sort` ต่อ
-- `n` ของ `lag`/`lead`/`moving_avg` ต้องเขียนเป็นตัวเลขตรง ๆ
+- `by` and `order` take a single column or a list: `by = [site, region]`, `order = [desc(visits), day]`
+- Without `by`, the whole table is one partition
+- The result has every existing column plus the declared columns.
+  **The number and order of rows are the same as in the source table**: `order` only sets the order
+  used for the computation. If you want the result sorted, add a `sort` afterwards.
+- The `n` of `lag`/`lead`/`moving_avg` must be written as a literal number
 
-รูปแบบที่ใช้บ่อย — top-n ต่อกลุ่ม:
+A common pattern, top-n per group:
 
 ```biggo
 sales
@@ -595,7 +603,7 @@ sales
 
 ## union
 
-`union(a, b, ...)` ต่อแถวของตารางที่มี column เหมือนกัน (ชื่อ ชนิด ลำดับ) ไม่ตัดแถวซ้ำ
+`union(a, b, ...)` appends the rows of tables that have the same columns (names, types, order). It does not remove duplicate rows.
 
 ```biggo
 let north = sales |> where(region == "north") |> select(product, qty)
@@ -625,12 +633,13 @@ print(union(north, east) |> distinct(product))
 +---------+
 ```
 
-## แปลงรูปร่าง: pivot, unpivot, explode
+## Reshaping: pivot, unpivot, explode
 
-### pivot: แถว → column
+### pivot: rows → columns
 
-`pivot(column, [ค่า...], aggregate)` สร้าง column ใหม่หนึ่ง column ต่อหนึ่งค่าที่ระบุ
-แต่ละ column เก็บ aggregate ของแถวที่ `column` มีค่านั้น `group` ก่อน `pivot` กำหนดว่าแถวของผลลัพธ์คืออะไร
+`pivot(column, [value...], aggregate)` creates one new column for each value given.
+Each column holds the aggregate of the rows where `column` has that value. The `group` before
+`pivot` determines what the rows of the result are.
 
 ```biggo
 let wide = sales
@@ -639,7 +648,7 @@ let wide = sales
   |> sort(product)
 print(wide)
 
-// หลาย aggregate ต้องตั้งชื่อ ชื่อ column คือ ค่า_ชื่อ
+// several aggregates must be named; the column name is value_name
 sales
   |> group(month = month(date))
   |> pivot(product, ["widget", "gadget"], orders = count(), best = max(price))
@@ -665,14 +674,15 @@ sales
 +-------+---------------+---------------+-------------+-------------+
 ```
 
-ต้องระบุค่าที่จะกลายเป็น column เองเพราะ type ของตาราง (รายชื่อ column) ต้องรู้ตอน compile
-ค่าที่ไม่อยู่ในรายการถูกข้าม ค่าที่อยู่ในรายการแต่ไม่มีข้อมูลได้ null (หรือ `0` สำหรับ `count`)
-หารายการค่าได้ด้วย `distinct(region)` `first` และ `last` ใช้ใน `pivot` ไม่ได้
+You have to list the values that become columns yourself, because the type of the table (its list of
+columns) must be known at compile time. A value that is not in the list is skipped. A value that is
+in the list but has no data gives null (or `0` for `count`). You can find the list of values with
+`distinct(region)`. `first` and `last` cannot be used in `pivot`.
 
-### unpivot: column → แถว
+### unpivot: columns → rows
 
-`unpivot(a, b, ...)` ทำกลับกัน: แต่ละแถวกลายเป็นหลายแถว แถวละหนึ่ง column ที่ระบุ
-ได้ column ใหม่สองตัวคือชื่อของ column เดิม และค่าของมัน
+`unpivot(a, b, ...)` does the reverse: each row becomes several rows, one for each column given.
+You get two new columns: the name of the original column, and its value.
 
 ```biggo
 let wide = sales |> group(product) |> pivot(region, ["north", "south"], sum(qty))
@@ -692,14 +702,14 @@ print(wide |> unpivot(north, south, names = "region", values = "qty") |> sort(pr
 +---------+--------+------+
 ```
 
-- column ที่ระบุต้องเป็นชนิดเดียวกัน
-- `names` และ `values` ตั้งชื่อ column ใหม่ (ค่าเริ่มต้น `"name"` และ `"value"`) ต้องเขียนเป็น string ตรง ๆ
-- column ที่ไม่ได้ระบุถูกคงไว้และซ้ำค่าในทุกแถวที่แตกออกมา
+- The given columns must have the same type
+- `names` and `values` name the new columns (the defaults are `"name"` and `"value"`). They must be written as literal strings.
+- Columns that are not given are kept, and their values are repeated in every row that is produced
 
-### explode: หนึ่งแถว → หลายแถว
+### explode: one row → many rows
 
-`explode(column)` แยก string ที่มีหลายค่าคั่นด้วย `,` ออกเป็นแถวละค่า ตัดช่องว่างรอบแต่ละค่า
-argument ที่สองเปลี่ยนตัวคั่นได้
+`explode(column)` splits a string that holds several values separated by `,` into one row per value,
+and trims the whitespace around each value. A second argument changes the separator.
 
 ```biggo
 let people = from_rows([
@@ -739,9 +749,9 @@ print(from_rows([{ path: "usr/local/bin" }]) |> explode(path, "/"))
 +-------+
 ```
 
-แถวที่ค่าเป็น null คงเป็นหนึ่งแถวที่ค่าเป็น null
+A row whose value is null stays as one row whose value is null.
 
-## สถิติ
+## Statistics
 
 ```biggo
 let points = from_rows([
@@ -752,13 +762,13 @@ let points = from_rows([
   { x: 5, y: 10.1 },
 ])
 
-// สหสัมพันธ์และเส้นถดถอย y = slope * x + intercept
+// correlation and the regression line y = slope * x + intercept
 print(points |> agg(r = corr(y, x), slope = slope(y, x), intercept = intercept(y, x)))
 
-// linreg ให้ record ของเส้นถดถอย พร้อม r²
+// linreg gives a record for the regression line, including r²
 let line = linreg(points, y, x)
 print(line)
-print((line.slope ?? 0.0) * 6 + (line.intercept ?? 0.0))      // ทำนาย y ที่ x = 6
+print((line.slope ?? 0.0) * 6 + (line.intercept ?? 0.0))      // predict y at x = 6
 ```
 
 ```text output
@@ -771,13 +781,13 @@ print((line.slope ?? 0.0) * 6 + (line.intercept ?? 0.0))      // ทำนาย
 11.989999999999998
 ```
 
-- `corr(y, x)` สัมประสิทธิ์สหสัมพันธ์ของ Pearson; `cov(y, x)` ความแปรปรวนร่วมของตัวอย่าง
-- `slope(y, x)` และ `intercept(y, x)` คือเส้นกำลังสองน้อยที่สุด: **ตัวแปรตามมาก่อน**
-- แถวที่ `x` หรือ `y` เป็น null ถูกข้าม ถ้าเหลือน้อยกว่า 2 แถว หรือ `x` ไม่มีการกระจาย ผลเป็น null
-- ทั้งสี่ตัวเป็น aggregate ใช้ร่วมกับ `group` ได้ เพื่อหาความสัมพันธ์แยกตามกลุ่ม
-- `linreg(t, y, x)` ได้ record `{ slope, intercept, r2 }` ทุก field เป็น `float?`
+- `corr(y, x)` is the Pearson correlation coefficient; `cov(y, x)` is the sample covariance
+- `slope(y, x)` and `intercept(y, x)` are the least-squares line: **the dependent variable comes first**
+- Rows where `x` or `y` is null are skipped. If fewer than 2 rows remain, or `x` has no variation, the result is null.
+- All four are aggregates, so you can use them with `group` to find the relationship for each group separately
+- `linreg(t, y, x)` gives a record `{ slope, intercept, r2 }`. Every field is `float?`.
 
-`describe` สรุปทุก column ในการอ่านข้อมูลรอบเดียว และ `histogram` นับการกระจายของ column ตัวเลข:
+`describe` summarizes every column in a single pass over the data, and `histogram` counts the distribution of a numeric column:
 
 ```biggo
 print(describe(sales))
@@ -804,16 +814,17 @@ print(histogram(sales, qty, bins = 4))
 +-----------+---------+-------+
 ```
 
-- `describe(t)` ได้ตารางที่มีหนึ่งแถวต่อ column: ชนิด จำนวนค่า จำนวน null และสำหรับ column ตัวเลข
-  ค่าเฉลี่ย ส่วนเบี่ยงเบนมาตรฐาน ค่าต่ำสุด มัธยฐาน ค่าสูงสุด
-- `histogram(t, column)` แบ่งช่วงระหว่างค่าต่ำสุดกับสูงสุดเป็น 10 ช่วงกว้างเท่ากัน (`bins = n` เปลี่ยนจำนวน)
-  แล้วนับค่าในแต่ละช่วง ค่าสูงสุดอยู่ในช่วงสุดท้าย null ไม่ถูกนับ
-- ทั้งสองคืนตารางธรรมดา นำไป `where` `sort` หรือเขียนไฟล์ต่อได้
+- `describe(t)` gives a table with one row per column: the type, the number of values, the number of nulls,
+  and for numeric columns the mean, standard deviation, minimum, median, and maximum
+- `histogram(t, column)` divides the range between the minimum and the maximum into 10 bins of equal
+  width (`bins = n` changes the number), then counts the values in each bin. The maximum falls in
+  the last bin. null is not counted.
+- Both return an ordinary table, which you can pass on to `where` or `sort`, or write to a file
 
-## ตารางกับ list ของ record
+## Tables and lists of records
 
-`to_rows` ดึงผลของ query ออกมาเป็น `list` ของ record เพื่อใช้ในโค้ดทั่วไป
-และ `from_rows` สร้างตารางจาก `list` ของ record
+`to_rows` pulls the result of a query out as a `list` of records for use in ordinary code,
+and `from_rows` creates a table from a `list` of records.
 
 ```biggo
 let top = to_rows(sales |> sort(desc(qty)) |> take(2) |> select(product, qty))
@@ -821,7 +832,7 @@ print(top)
 print(top[0].product, map(top, fn(row) { row.qty * 2 }))
 
 each(top, fn(row) {
-  print(row.product, "ขายได้", row.qty)
+  print(row.product, "sold", row.qty)
 })
 
 let cities = from_rows([
@@ -830,15 +841,15 @@ let cities = from_rows([
 ])
 print(cities |> where(not is_null(people)))
 
-// list ว่างไม่มี type ของแถว ต้องบอกเอง
+// an empty list has no row type, so you have to state it yourself
 print(from_rows<{ id: int, note: string? }>([]))
 ```
 
 ```text output
 [{product: "widget", qty: 12}, {product: "widget", qty: 10}]
 widget [24, 20]
-widget ขายได้ 12
-widget ขายได้ 10
+widget sold 12
+widget sold 10
 +---------+--------+
 | city    | people |
 +---------+--------+
@@ -850,9 +861,9 @@ widget ขายได้ 10
 +----+------+
 ```
 
-`to_rows` โหลดทุกแถวเข้าหน่วยความจำเป็นค่าของตัวแปลภาษา จึงเหมาะกับผลลัพธ์ขนาดเล็ก
-(ผลสรุป, top-n, ค่า config) งานกับข้อมูลจำนวนมากควรอยู่ในรูป operation ของตารางให้นานที่สุด
-ตัวอย่างการใช้ผลของ query หนึ่งเป็นค่าของอีก query:
+`to_rows` loads every row into memory as interpreter values, so it suits small results
+(summaries, top-n, config values). Work on large amounts of data should stay in the form of table
+operations for as long as possible. An example of using the result of one query as a value in another query:
 
 ```biggo
 let average = to_rows(sales |> agg(m = mean(qty)))[0].m ?? 0.0
@@ -872,9 +883,10 @@ print(sales |> where(qty > average) |> select(product, qty))
 +---------+-----+
 ```
 
-## ฟังก์ชันที่รับและคืนตาราง
+## Functions that take and return tables
 
-ขั้นตอนที่ใช้ซ้ำเขียนเป็นฟังก์ชันธรรมดาที่รับและคืนตาราง แล้วใช้ใน pipeline ได้เหมือน built-in
+You write a reusable step as an ordinary function that takes and returns a table, and then use it
+in a pipeline like a built-in function.
 
 ```biggo
 type Priced = table<{ product: string, qty: int, price: float? }>
@@ -904,16 +916,16 @@ sales
 +---------+---------+
 ```
 
-ฟังก์ชันแบบนี้ไม่ทำให้ช้าลง: มันถูกเรียกครั้งเดียวเพื่อ *สร้างแผน* แล้วแผนทั้งหมดถูกปรับรวมกัน
-เหมือนเขียนต่อกันตรง ๆ
+A function like this does not slow anything down: it is called once to *build the plan*, and then
+the whole plan is optimized together, as if you had written the steps directly one after another.
 
-## ลำดับของแถวและผลลัพธ์ที่ทำซ้ำได้
+## Row order and reproducible results
 
-engine ทำงานหลาย core แต่ **ผลลัพธ์เหมือนกันทุกครั้ง ไม่ว่าเครื่องจะมีกี่ core**:
+The engine runs on several cores, but **the result is the same every time, no matter how many cores the machine has**:
 
-- operation ที่ไม่เรียง (`where` `select` `derive` `join` ...) คงลำดับของแถวตามข้อมูลต้นทาง
-- `group` ให้กลุ่มตามลำดับที่พบครั้งแรก
-- `sort` เป็น stable sort
-- ผลรวมของ `float` ถูกบวกตามลำดับที่ตายตัว จึงได้เลขเดิมทุกหลัก ไม่ว่าใช้กี่ thread
+- Operations that do not sort (`where` `select` `derive` `join` ...) keep the row order of the source data
+- `group` gives the groups in order of first appearance
+- `sort` is a stable sort
+- Sums of `float` are added in a fixed order, so every digit of the result is the same, no matter how many threads are used
 
-จำนวน thread กำหนดด้วย environment variable `RAYON_NUM_THREADS` (ค่าเริ่มต้นคือจำนวน core)
+The number of threads is set with the environment variable `RAYON_NUM_THREADS` (the default is the number of cores).

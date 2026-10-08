@@ -1,17 +1,13 @@
 # biggo
 
-> **biggo** is a statically typed, pipeline-oriented programming language for data analytics.
-> Its compiler, bytecode VM and multi-threaded columnar engine (on Apache Arrow) are written in
-> Rust and ship as one executable, together with a REPL, formatter, test runner and language
-> server. The documentation is in Thai; the [roadmap](ROADMAP.md) lists what comes next.
+biggo is a programming language for data analytics, with a compiler and an engine written in Rust.
+A program reads data in as tables, transforms them with pipelines, and prints or writes the result.
+Everything is type-checked before the program runs, including the name and type of every column,
+and queries run on a columnar engine that uses every core of the machine.
 
-biggo เป็นภาษาโปรแกรมสำหรับงานวิเคราะห์ข้อมูล พร้อม compiler และ engine ที่เขียนด้วย Rust
-โปรแกรมอ่านข้อมูลเข้ามาเป็นตาราง แปลงด้วย pipeline แล้วพิมพ์หรือเขียนผลออกไป
-ทุกอย่างถูกตรวจ type ก่อนรัน รวมถึงชื่อและชนิดของทุก column และ query ถูกรันโดย engine
-แบบ column ที่ใช้ทุก core ของเครื่อง
-
-**สถานะ:** รุ่น 0.1.0 ซึ่งเป็นรุ่นแรก ใช้งานได้ตามที่เอกสารเขียน แต่ตัวภาษายังเปลี่ยนได้ และทดสอบบน macOS
-(Apple Silicon) เท่านั้น ดู[ข้อจำกัด](#ข้อจำกัดที่ควรรู้)และ[แผนการพัฒนา](ROADMAP.md)
+**Status:** version 0.1.0, the first release. It works as documented, but the language can still
+change, and it has been tested on macOS (Apple Silicon) only. See the
+[known limitations](#known-limitations) and the [roadmap](ROADMAP.md).
 
 ```biggo
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -36,45 +32,48 @@ read_csv<Sale>("docs/data/sales.csv")
 +--------+-------+-------+--------+
 ```
 
-## จุดเด่น
+## Highlights
 
-- **ผิดแล้วรู้ก่อนรัน** — static typing ทั้งภาษา: ชื่อ column ผิด ชนิดไม่ตรง หรือลืมจัดการ null
-  เป็น compile error พร้อมตำแหน่งและคำแนะนำ ก่อนที่จะอ่านข้อมูลสักแถว
-- **เร็ว** — query บน CSV 5 ล้านแถวใช้ราว 0.2 วินาทีบนโน้ตบุ๊ก 8 core (ระดับเดียวกับ DuckDB และ
-  Polars) เพราะคำนวณทีละ column บน Apache Arrow, มี optimizer, และขนานทุกขั้น
-- **ผลลัพธ์ทำซ้ำได้** — ได้ผลเหมือนกันทุก bit ไม่ว่าใช้กี่ thread
-- **ภาษาเล็กแต่ครบ** — ฟังก์ชัน, lambda, `match`, record, map, list, `import`,
-  `decimal` สำหรับเงิน, `datetime` และ `duration` สำหรับเวลา
-- **อ่านเขียนได้หลายรูปแบบ** — CSV, Parquet, JSON Lines, SQLite
-- **เครื่องมือครบในไฟล์เดียว** — ตัวรัน, REPL, formatter, ตัวรัน test, language server,
-  ตัวสร้าง executable แบบ standalone และ extension ของ VS Code
+- **Errors are caught before the program runs.** The whole language is statically typed: a
+  misspelled column name, a mismatched type, or a null you forgot to handle is a compile error
+  with a location and a hint, before a single row of data is read.
+- **Fast.** A query over a 5-million-row CSV file takes about 0.2 seconds on an 8-core laptop,
+  in the same range as DuckDB and Polars ([Performance](#performance) shows where it is ahead
+  and where it is behind). It computes column by column on Apache Arrow, has an optimizer, and
+  runs every stage in parallel.
+- **Reproducible results.** The result is identical bit for bit, however many threads are used.
+- **A small but complete language.** Functions, lambdas, `match`, records, maps, lists, `import`,
+  `decimal` for money, `datetime` and `duration` for time.
+- **Reads and writes several formats.** CSV, Parquet, JSON Lines, SQLite.
+- **All the tools in one executable.** A runner, a REPL, a formatter, a test runner, a language
+  server, and a builder of standalone executables. A VS Code extension is in this repository.
 
-## เริ่มต้น
+## Getting started
 
-ต้องมี Rust (ทดสอบกับ 1.99) และ C compiler ของระบบ
+You need Rust (tested with 1.99) and the system's C compiler.
 
 ```sh
 git clone https://github.com/biggo-analytics/biggo.git && cd biggo
 cargo build --release
-cp target/release/biggo ~/.local/bin/      # หรือที่ใดก็ได้ใน PATH
+cp target/release/biggo ~/.local/bin/      # or anywhere on your PATH
 
-biggo run hello.bgo          # รันโปรแกรม
-biggo repl                   # ลองทีละบรรทัด
-biggo check hello.bgo        # ตรวจ type อย่างเดียว
+biggo run hello.bgo          # run a program
+biggo repl                   # try things one line at a time
+biggo check hello.bgo        # type-check only
 ```
 
-อ่านต่อ: [เริ่มต้นใช้งาน](docs/01-getting-started.md)
+Read on: [Getting started](docs/01-getting-started.md)
 
-## ภาษาโดยสังเขป
+## The language at a glance
 
-โค้ดทั่วไป — ฟังก์ชัน, lambda, `match`, record และ map:
+Ordinary code: functions, lambdas, `match`, records and maps:
 
 ```biggo
 fn tier(score: int?) -> string {
   match score {
-    null => "ไม่มีคะแนน"
-    100 => "เต็ม"
-    _ => if (score ?? 0) >= 50 { "ผ่าน" } else { "ไม่ผ่าน" }
+    null => "no score"
+    100 => "full marks"
+    _ => if (score ?? 0) >= 50 { "pass" } else { "fail" }
   }
 }
 
@@ -90,13 +89,14 @@ print(map(passed, fn(s) { s.name }), len(passed))
 ```
 
 ```text output
-Ann เต็ม
-Bo ไม่ผ่าน
-Cy ไม่มีคะแนน
+Ann full marks
+Bo fail
+Cy no score
 ["Ann"] 1
 ```
 
-เงินและเวลา — `decimal` ไม่มีค่าคลาดเคลื่อนของทศนิยม, `datetime` ลบกันได้ `duration`:
+Money and time: `decimal` has no floating-point error, and subtracting one `datetime` from
+another gives a `duration`:
 
 ```biggo
 print(0.1 + 0.2, 0.1d + 0.2d)
@@ -111,16 +111,16 @@ print(stop - start, start + hours(36), to_date(stop))
 02:45:30 2026-02-02T10:30:00 2026-02-01
 ```
 
-ตาราง — join, window, pivot และสถิติ:
+Tables: joins, windows, pivots and statistics:
 
 ```biggo
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
 let sales = read_csv<Sale>("docs/data/sales.csv")
 
-// ยอดต่อสินค้า แยก column ตามภูมิภาค
+// units per product, one column per region
 print(sales |> group(product) |> pivot(region, ["north", "south", "east"], sum(qty)) |> sort(product))
 
-// สินค้าขายดีที่สุดของแต่ละภูมิภาค
+// the best-selling product of each region
 sales
   |> window(by = region, order = desc(qty), place = row_number())
   |> where(place == 1)
@@ -154,7 +154,7 @@ print(describe(sales |> select(qty, price)))
 +--------+--------+-------+-------+--------------------+-------------------+-----+--------+-------+
 ```
 
-type ของตารางถูกติดตามตลอด pipeline:
+The type of a table is tracked through the whole pipeline:
 
 ```biggo error
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -173,9 +173,11 @@ error: undefined name `product`; the table has columns region, units
   |            ^^^^^^^
 ```
 
-หลัง `agg` ตารางเหลือแค่ `region` กับ `units`: compiler รู้ และบอกตั้งแต่ยังไม่ได้รัน
+After `agg` the table has only `region` and `units`. The compiler knows this, and says so before
+anything runs.
 
-test เขียนด้วยภาษาเดียวกัน (`biggo test` รันทุกฟังก์ชัน `test_...` ในไฟล์ `*_test.bgo`):
+Tests are written in the same language (`biggo test` runs every `test_...` function in the
+`*_test.bgo` files):
 
 ```biggo
 fn total(amounts: list<float>) -> float { fold(amounts, 0.0, fn(sum, x) { sum + x }) }
@@ -192,112 +194,118 @@ print("ok")
 ok
 ```
 
-## เครื่องมือ
+## Tools
 
-| คำสั่ง | หน้าที่ |
+| Command | What it does |
 | --- | --- |
-| `biggo run file.bgo` | รันโปรแกรม |
-| `biggo repl` | โหมดโต้ตอบ |
-| `biggo check file.bgo` | รายงาน syntax และ type error โดยไม่รัน |
-| `biggo explain file.bgo` | แสดงแผนของ query ก่อนและหลัง optimize โดยไม่รัน |
-| `biggo test [path]` | รัน test ในไฟล์ `*_test.bgo` |
-| `biggo fmt [--check] files` | จัดรูปแบบโค้ด |
-| `biggo build file.bgo -o app` | สร้าง executable ที่รันได้เอง |
-| `biggo lsp` | language server สำหรับ editor (error ขณะพิมพ์, hover, format) |
+| `biggo run file.bgo` | Runs a program |
+| `biggo repl` | Interactive mode |
+| `biggo check file.bgo` | Reports syntax and type errors without running the program |
+| `biggo explain file.bgo` | Shows each query's plan before and after optimization, without running it |
+| `biggo test [path]` | Runs the tests in `*_test.bgo` files |
+| `biggo fmt [--check] files` | Formats code |
+| `biggo build file.bgo -o app` | Builds a standalone executable |
+| `biggo lsp` | Language server for editors (errors as you type, hover, formatting) |
 
-extension ของ VS Code อยู่ใน [`editors/vscode`](editors/vscode)
+The VS Code extension is in [`editors/vscode`](editors/vscode).
 
-## ประสิทธิภาพ
+## Performance
 
-5 ล้านแถว, Apple M1 Pro 8 core, เวลาเป็นวินาที (ของ biggo รวมเวลาเปิดโปรแกรม):
+5 million rows on an Apple M1 Pro with 8 cores, in seconds. biggo's times include process
+start-up; the others' do not.
 
-| query | biggo | DuckDB 1.5.6 | Polars 2.0.0 |
+| Query | biggo | DuckDB 1.5.6 | Polars 2.0.0 |
 | --- | --- | --- | --- |
-| กรอง + จัดกลุ่ม (CSV) | 0.21 | 0.27 | 0.15 |
-| จัดกลุ่ม 1 ล้านกลุ่ม (CSV) | 0.38 | 0.29 | 0.14 |
-| join + จัดกลุ่ม (CSV) | 0.24 | 0.27 | 0.13 |
-| top 5 จากค่าที่คำนวณ (CSV) | 0.24 | 0.27 | 0.14 |
-| กรอง + จัดกลุ่ม (Parquet) | 0.06 | 0.02 | 0.02 |
-| pivot (CSV) | 0.24 | 0.27 | 0.15 |
-| window 1 ล้าน partition (CSV) | 0.47 | 0.47 | 0.45 |
-| กรอง + จัดกลุ่ม (JSON Lines) | 0.43 | 0.19 | 0.56 |
-| นับค่าไม่ซ้ำ (CSV) | 0.22 | 0.30 | 0.19 |
-| ผลรวม decimal (CSV) | 0.18 | 0.25 | 0.14 |
+| Filter + group (CSV) | 0.21 | 0.27 | 0.15 |
+| Group into 1 million groups (CSV) | 0.38 | 0.29 | 0.14 |
+| Join + group (CSV) | 0.24 | 0.27 | 0.13 |
+| Top 5 by a computed value (CSV) | 0.24 | 0.27 | 0.14 |
+| Filter + group (Parquet) | 0.06 | 0.02 | 0.02 |
+| Pivot (CSV) | 0.24 | 0.27 | 0.15 |
+| Window over 1 million partitions (CSV) | 0.47 | 0.47 | 0.45 |
+| Filter + group (JSON Lines) | 0.43 | 0.19 | 0.56 |
+| Count distinct (CSV) | 0.22 | 0.30 | 0.19 |
+| Decimal sum (CSV) | 0.18 | 0.25 | 0.14 |
 
-วิธีวัด ผลแบบละเอียด การขยายตาม thread ความเร็วของ VM และจุดที่ยังช้า:
-[ประสิทธิภาพ](docs/09-performance.md)
+The method, the detailed results, scaling with thread count, the speed of the VM, and the slow
+spots are in [Performance](docs/09-performance.md).
 
-## เอกสาร
+## Documentation
 
-| หน้า | เนื้อหา |
+| Page | Contents |
 | --- | --- |
-| [เริ่มต้นใช้งาน](docs/01-getting-started.md) | build, โปรแกรมแรก, REPL |
-| [ตัวภาษา](docs/02-language.md) | ไวยากรณ์, ตัวแปร, ฟังก์ชัน, lambda, `if`, `match`, list, record, map, `import` |
-| [ระบบ type](docs/03-types.md) | ชนิดข้อมูลทั้งหมด, nullable, การแปลงชนิด, การอนุมาน type |
-| [การทำงานกับตาราง](docs/04-tables.md) | `where` `select` `group` `agg` `join` `window` `pivot` สถิติ ฯลฯ |
-| [แหล่งข้อมูล](docs/05-data-sources.md) | CSV, Parquet, JSON, SQLite |
-| [built-in reference](docs/06-builtins.md) | ฟังก์ชันสำเร็จรูปทุกตัว |
-| [เครื่องมือ](docs/07-tools.md) | คำสั่งทั้งหมด, `biggo test`, formatter, editor |
-| [สถาปัตยกรรม](docs/08-architecture.md) | compiler และ engine ทำงานอย่างไร, วิธีเพิ่มความสามารถ |
-| [ประสิทธิภาพ](docs/09-performance.md) | benchmark, วิธีวัด, ข้อจำกัด |
-| [grammar](docs/10-grammar.md) | ไวยากรณ์แบบเป็นทางการ |
+| [Getting started](docs/01-getting-started.md) | Building, a first program, the REPL |
+| [The language](docs/02-language.md) | Syntax, variables, functions, lambdas, `if`, `match`, lists, records, maps, `import` |
+| [The type system](docs/03-types.md) | Every type, nullable types, conversions, type inference |
+| [Working with tables](docs/04-tables.md) | `where` `select` `group` `agg` `join` `window` `pivot`, statistics and more |
+| [Data sources](docs/05-data-sources.md) | CSV, Parquet, JSON, SQLite |
+| [Built-in reference](docs/06-builtins.md) | Every built-in function |
+| [Tools](docs/07-tools.md) | Every command, `biggo test`, the formatter, editors |
+| [Architecture](docs/08-architecture.md) | How the compiler and the engine work, and how to add a feature |
+| [Performance](docs/09-performance.md) | Benchmarks, method, limitations |
+| [Grammar](docs/10-grammar.md) | The formal grammar |
+| [Roadmap](ROADMAP.md) | What comes next |
 
-โปรแกรมตัวอย่างทุกอันในเอกสารถูกรันตอน `cargo test` และผลลัพธ์ที่แสดงถูกเทียบกับของจริง
+Every example program in the documentation is run by `cargo test`, and the output shown is
+compared with the real output.
 
-## โครงสร้างโปรเจกต์
+## Project layout
 
 ```text
 crates/
-  biggo-syntax/   lexer, parser, AST, diagnostic
-  biggo-types/    ตัวตรวจ type, HIR
-  biggo-plan/     schema, logical plan, optimizer
-  biggo-exec/     execution engine บน Apache Arrow
-  biggo-eval/     bytecode compiler, virtual machine, session
+  biggo-syntax/   lexer, parser, AST, diagnostics
+  biggo-types/    type checker, HIR
+  biggo-plan/     schemas, logical plans, optimizer
+  biggo-exec/     execution engine on Apache Arrow
+  biggo-eval/     bytecode compiler, virtual machine, sessions
   biggo-fmt/      formatter
   biggo-lsp/      language server
-  biggo-cli/      คำสั่ง biggo
-ROADMAP.md        แผนการพัฒนา
-docs/             เอกสาร และข้อมูลตัวอย่าง
-editors/vscode/   extension ของ VS Code
-bench/            benchmark และสคริปต์เทียบกับ DuckDB / Polars / CPython
-testdata/         โปรแกรมตัวอย่างและผลลัพธ์ที่คาดหวัง (golden)
+  biggo-cli/      the biggo command
+ROADMAP.md        what comes next
+docs/             documentation and sample data
+editors/vscode/   VS Code extension
+bench/            benchmarks, and scripts that compare with DuckDB / Polars / CPython
+testdata/         sample programs and their expected output (golden files)
 ```
 
-## การพัฒนา
+## Development
 
 ```sh
-cargo test                     # unit test, golden, เอกสาร, CLI
-BIGGO_BLESS=1 cargo test       # เขียนผลลัพธ์ที่คาดหวังใหม่ (แล้วอ่าน diff)
+cargo test                     # unit tests, golden files, documentation, CLI
+BIGGO_BLESS=1 cargo test       # rewrite the expected output (then read the diff)
 cargo clippy --all-targets
 cargo fmt
-python3 bench/run.py           # benchmark (ต้อง build --release และสร้างข้อมูลก่อน)
+python3 bench/run.py           # benchmarks (build with --release and generate the data first)
 ```
 
-## ข้อจำกัดที่ควรรู้
+## Known limitations
 
-- ข้อมูลของ query ที่ต้องเรียงทั้งตาราง, `window`, ฝั่งขวาของ `join` และ `group` ที่กลุ่มเยอะ
-  ต้องพอดีกับ RAM (ยังไม่มีการเขียนลงดิสก์ชั่วคราว)
-- ฐานข้อมูลที่ต่อได้มีแต่ SQLite; CSV คั่นด้วย `,` เท่านั้น; JSON ต้องเป็นหนึ่ง object ต่อบรรทัด
-- ไม่มีลูป `for`/`while` (ใช้ `map` `filter` `fold` `each` หรือ recursion), ไม่มีการแก้ค่าของตัวแปร
-- ฟังก์ชันที่เขียนเองรับ column ไม่ได้: ใน expression ของ column ใช้ได้แต่ตัวดำเนินการและ built-in
-- ฟังก์ชันของ string ยังมีน้อย (ไม่มี regular expression, substring, replace)
-- โปรแกรมรับ argument จาก command line ไม่ได้
-- language server ยังไม่มี autocomplete และ go to definition; extension ของ VS Code
-  ถูก package และทดสอบ grammar แล้ว แต่ยังไม่ได้ลองรันใน VS Code จริง
-- ทดสอบบน macOS (Apple Silicon) เท่านั้น
+- The data of a query that sorts a whole table, uses `window`, is the right side of a `join`, or
+  groups into many groups has to fit in RAM (nothing spills to disk yet).
+- SQLite is the only database. CSV files are comma-separated only. JSON has to be one object per
+  line.
+- There are no `for` or `while` loops (use `map`, `filter`, `fold`, `each`, or recursion), and a
+  variable cannot be assigned a new value.
+- A user-defined function cannot take a column: a column expression can use only operators and
+  built-in functions.
+- There are few string functions (no regular expressions, substring, or replace).
+- A program cannot take command-line arguments.
+- The language server has no autocomplete or go-to-definition yet. The VS Code extension has been
+  packaged and its grammar tested, but it has not been run inside VS Code.
+- Tested on macOS (Apple Silicon) only.
 
-## แผนการพัฒนา
+## Roadmap
 
-ลำดับงานถัดไป เรียงตามความสำคัญ ไม่มีกำหนดวัน รายละเอียด เหตุผล และเกณฑ์ว่าเสร็จของแต่ละรุ่นอยู่ใน
-[ROADMAP.md](ROADMAP.md)
+What comes next, in order of priority and with no dates. The details, the reasons, and what
+"done" means for each release are in [ROADMAP.md](ROADMAP.md).
 
-| รุ่น | เป้าหมาย | งานหลัก |
+| Release | Goal | Main work |
 | --- | --- | --- |
-| 0.2 | ติดตั้งง่าย ใช้ได้ทุกระบบ | CI บน Linux / macOS / Windows, ไฟล์ติดตั้งสำเร็จรูป, extension ใน Marketplace, argument ของโปรแกรม, ฟังก์ชัน string และ regular expression, ตัวเลือกของ CSV |
-| 0.3 | แหล่งข้อมูลมากขึ้น | PostgreSQL และ MySQL, Excel, หลายไฟล์ด้วย `*`, ไฟล์บีบอัด, `https://` และ S3, column แบบซ้อน |
-| 0.4 | engine เร็วขึ้น และรับข้อมูลใหญ่กว่า RAM | ข้าม row group ของ Parquet, `group` ที่กลุ่มเยอะ, `join` แบบขนาน, เขียนลงดิสก์ชั่วคราว |
-| 0.5 | ภาษาที่ใช้ซ้ำได้มากขึ้น | ฟังก์ชันที่เขียนเองใช้กับ column ได้, ฟังก์ชันที่รับตารางได้หลายรูป, generic, `import ... as` |
-| 1.0 | เสถียร | ตรึงตัวภาษา, fuzzing, เทียบผลกับ DuckDB |
+| 0.2 | Easy to install, works everywhere | CI on Linux / macOS / Windows, prebuilt binaries, the extension in the Marketplace, program arguments, string functions and regular expressions, CSV options |
+| 0.3 | More data sources | PostgreSQL and MySQL, Excel, many files with `*`, compressed files, `https://` and S3, nested columns |
+| 0.4 | A faster engine, and data larger than memory | Parquet row-group skipping, grouping into many groups, parallel `join`, spilling to disk |
+| 0.5 | A language with more reuse | User-defined functions on columns, functions that accept more than one table shape, generics, `import ... as` |
+| 1.0 | Stable | A frozen language, fuzzing, checking results against DuckDB |
 
-พบ bug หรืออยากเสนอความสามารถ เปิด issue ได้ที่
-<https://github.com/biggo-analytics/biggo/issues>
+Found a bug, or want to propose a feature? Open an issue at
+<https://github.com/biggo-analytics/biggo/issues>.

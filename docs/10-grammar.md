@@ -1,34 +1,35 @@
-# grammar
+# Grammar
 
-ไวยากรณ์ของ biggo แบบเป็นทางการ เขียนด้วย EBNF: `[ x ]` คือมีหรือไม่มีก็ได้, `{ x }` คือซ้ำกี่ครั้งก็ได้
-รวมศูนย์ครั้ง, `|` คือทางเลือก, ข้อความใน `"..."` คือ token ตามตัวอักษร
-คำอธิบายเชิงใช้งานอยู่ใน [ตัวภาษา](02-language.md)
+This is the formal grammar of biggo, written in EBNF: `[ x ]` means optional, `{ x }` means repeated any
+number of times (including zero), `|` means a choice, and text in `"..."` is a literal token.
+For a usage-oriented explanation, see [The language](02-language.md).
 
-## token
+## Tokens
 
 ```text
-NAME      = (ตัวอักษร | "_") { ตัวอักษร | ตัวเลข | "_" }      ไม่ใช่คำสงวน
-          | "`" { อักขระใดก็ได้ที่ไม่ใช่ "`" หรือการขึ้นบรรทัดใหม่ } "`"
-INT       = หลัก { หลัก | "_" }
-FLOAT     = INT "." INT [ เลขชี้กำลัง ] | INT เลขชี้กำลัง
-เลขชี้กำลัง = ("e" | "E") [ "+" | "-" ] หลัก { หลัก }
+NAME      = (letter | "_") { letter | digit | "_" }      not a keyword
+          | "`" { any char other than "`" or a newline } "`"
+INT       = digit { digit | "_" }
+FLOAT     = INT "." INT [ exponent ] | INT exponent
+exponent  = ("e" | "E") [ "+" | "-" ] digit { digit }
 DECIMAL   = INT [ "." INT ] "d"
-STRING    = '"' { อักขระ | escape } '"'                     อยู่ในบรรทัดเดียว
+STRING    = '"' { char | escape } '"'                    on a single line
 escape    = "\n" | "\t" | "\r" | "\0" | "\\" | '\"'
 DATE      = "@" YYYY "-" MM "-" DD
-DATETIME  = DATE "T" HH ":" MM [ ":" SS [ "." หลัก{1,6} ] ]
-comment   = "//" ถึงท้ายบรรทัด
+DATETIME  = DATE "T" HH ":" MM [ ":" SS [ "." digit{1,6} ] ]
+comment   = "//" to end of line
 ```
 
-- "ตัวอักษร" คืออักขระ Unicode ที่ขึ้นต้นชื่อได้ (XID_Start) และ "ตัวอักษร | ตัวเลข" ที่ตามมาคือ
-  XID_Continue ชื่อจึงเป็นภาษาไทยได้
-- คำสงวน: `let` `fn` `type` `import` `if` `else` `match` `and` `or` `not` `true` `false` `null`
-- `_` ตัวเดียวเป็นชื่อธรรมดา ยกเว้นใน pattern ของ `match` ซึ่งหมายถึง "ทุกค่า"
-- ตัวเลขที่ตามด้วยตัวอักษรทันที (`5days`) เป็น error
-- `DATE` และ `DATETIME` ต้องเป็นวันและเวลาที่มีจริง (`@2026-02-30` เป็น error)
-- `DECIMAL` มีได้ไม่เกิน 6 หลักหลังจุด และ 32 หลักหน้าจุด
+- `letter` is a Unicode character that can start a name (XID_Start). In `NAME`, the `letter | digit`
+  that follows stands for any character that can continue one (XID_Continue), so names can be
+  written in any script, such as Thai. Everywhere else, `digit` is one of `0` to `9`
+- Keywords: `let` `fn` `type` `import` `if` `else` `match` `and` `or` `not` `true` `false` `null`
+- A single `_` is an ordinary name, except in a `match` pattern, where it means "any value"
+- A number followed immediately by a letter (`5days`) is an error
+- `DATE` and `DATETIME` must be a date and time that really exist (`@2026-02-30` is an error)
+- `DECIMAL` can have at most 6 digits after the point and 32 digits before the point
 
-## statement
+## Statements
 
 ```text
 program   = { statement }
@@ -41,23 +42,24 @@ fn_decl   = "fn" NAME "(" [ param { "," param } [ "," ] ] ")" [ "->" type ] bloc
 param     = NAME ":" type
 ```
 
-- `import` และ `type_decl` อยู่ได้เฉพาะระดับบนสุดของไฟล์ และ `import` ต้องมาก่อน statement อื่น
-- `fn` ตามด้วย `NAME` คือการประกาศฟังก์ชัน; `fn` ตามด้วย `(` คือ lambda (เป็น expression)
-- statement คั่นด้วยการขึ้นบรรทัดใหม่ ไม่มี `;`
+- `import` and `type_decl` are allowed only at the top level of a file, and `import` must come before
+  any other statement
+- `fn` followed by `NAME` is a function declaration; `fn` followed by `(` is a lambda (an expression)
+- Statements are separated by newlines. There is no `;`
 
-### การขึ้นบรรทัดใหม่
+### Newlines
 
-การขึ้นบรรทัดใหม่จบ statement ยกเว้นเมื่อ
+A newline ends a statement, except when
 
-1. อยู่ภายใน `( )` หรือ `[ ]` ที่ยังไม่ปิด (รวมถึง argument ของการเรียกฟังก์ชัน)
-2. token สุดท้ายของบรรทัดเป็นตัวดำเนินการแบบสองข้าง หรือ `=` `:` `->` `=>` `,`
-3. token แรกของบรรทัดถัดไปเป็นตัวดำเนินการแบบสองข้างที่ขึ้นต้น expression ไม่ได้:
+1. it is inside a `( )` or `[ ]` that is not closed yet (including the arguments of a function call)
+2. the last token of the line is a binary operator, or `=` `:` `->` `=>` `,`
+3. the first token of the next line is a binary operator that cannot start an expression:
    `|>` `+` `*` `/` `%` `==` `!=` `<` `<=` `>` `>=` `??` `and` `or` `.`
 
-`-` `(` `[` ที่ต้นบรรทัดเริ่ม statement ใหม่เสมอ ภายใน `{ }` ของ block และของ `match`
-การขึ้นบรรทัดใหม่กลับมาคั่น statement/arm แม้ block นั้นอยู่ในวงเล็บ
+`-` `(` `[` at the start of a line always begin a new statement. Inside the `{ }` of a block and of a
+`match`, newlines separate statements/arms again, even when that block is inside parentheses.
 
-## type
+## Types
 
 ```text
 type       = type_atom [ "?" ]
@@ -67,14 +69,14 @@ type_atom  = NAME [ "<" type { "," type } [ "," ] ">" ]
 field_type = NAME ":" type
 ```
 
-- `NAME` ของ type ที่มีในตัว: `int` `float` `bool` `string` `date` `datetime` `duration` `decimal`
-  (ไม่มี argument), `list<T>` `table<T>` (หนึ่ง argument), `map<K, V>` (สอง) นอกนั้นคือ alias
-  ที่ประกาศด้วย `type`
-- `?` หลัง type ของฟังก์ชันเป็นของผลลัพธ์: `fn() -> int?` คือฟังก์ชันที่คืน `int?`
+- The `NAME`s of the built-in types: `int` `float` `bool` `string` `date` `datetime` `duration` `decimal`
+  (no argument), `list<T>` `table<T>` (one argument), `map<K, V>` (two). Any other name is an alias
+  declared with `type`
+- A `?` after a function type belongs to the result: `fn() -> int?` is a function that returns `int?`
 
-## expression
+## Expressions
 
-เรียงจากผูกหลวมที่สุดไปแน่นที่สุด:
+Listed from the loosest binding to the tightest:
 
 ```text
 expr       = pipe
@@ -89,18 +91,18 @@ term       = unary { ( "*" | "/" | "%" ) unary }
 unary      = "-" unary | postfix
 postfix    = primary { call_args | "." NAME | "[" expr "]" }
 
-call       = postfix ที่ลงท้ายด้วย call_args
+call       = postfix that ends with call_args
 call_args  = [ "<" type { "," type } ">" ] "(" [ arg { "," arg } [ "," ] ] ")"
 arg        = [ NAME "=" ] expr
 ```
 
-- ฝั่งขวาของ `|>` ต้องเป็นการเรียกฟังก์ชัน: `a |> f(b)` คือ `f(a, b)`
-- การเปรียบเทียบต่อกันไม่ได้ (`a < b < c` เป็น error)
-- `??` จัดกลุ่มจากขวา: `a ?? b ?? c` คือ `a ?? (b ?? c)`
-- `(` และ `[` ของ `postfix` ต้องอยู่บรรทัดเดียวกับสิ่งที่มันต่อท้าย
-- ใน `arg` ชื่อที่ตามด้วย `=` (ไม่ใช่ `==`) คือ argument แบบระบุชื่อ การเรียกฟังก์ชันทั่วไปต้องให้
-  argument ตามตำแหน่งมาก่อน ส่วน operation ของตารางรับ `name = expr` ปนกับชื่อ column
-  ในลำดับใดก็ได้
+- The right-hand side of `|>` must be a function call: `a |> f(b)` is `f(a, b)`
+- Comparisons cannot be chained (`a < b < c` is an error)
+- `??` groups from the right: `a ?? b ?? c` is `a ?? (b ?? c)`
+- The `(` and `[` of a `postfix` must be on the same line as the thing they follow
+- In `arg`, a name followed by `=` (not `==`) is a named argument. An ordinary function call must put
+  positional arguments first, whereas a table operation accepts `name = expr` mixed with column names
+  in any order
 
 ```text
 primary = INT | FLOAT | DECIMAL | STRING | DATE | DATETIME
@@ -112,35 +114,36 @@ primary = INT | FLOAT | DECIMAL | STRING | DATE | DATETIME
 list    = "[" [ expr { "," expr } [ "," ] ] "]"
 record  = "{" NAME ":" expr { "," NAME ":" expr } [ "," ] "}"
 map     = "{" key ":" expr { "," key ":" expr } [ "," ] "}"
-key     = literal ที่ไม่ใช่ null                              (key ตัวแรกบอกว่าเป็น map)
+key     = literal that is not null                           (the first key shows that it is a map)
 block   = "{" { statement } "}"
 if      = "if" expr block [ "else" ( if | block ) ]
 match   = "match" expr "{" { arm } "}"
-arm     = pattern { "|" pattern } "=>" expr                  arm คั่นด้วยบรรทัดใหม่หรือ ","
+arm     = pattern { "|" pattern } "=>" expr                  arms are separated by a newline or ","
 pattern = "_" | [ "-" ] literal
 lambda  = "fn" "(" [ lparam { "," lparam } [ "," ] ] ")" [ "->" type ] block
 lparam  = NAME [ ":" type ]
 ```
 
-การแยก `{`:
+Disambiguating `{`:
 
-| สิ่งที่ตามหลัง `{` | ความหมาย |
+| What follows `{` | Meaning |
 | --- | --- |
 | `NAME :` | record |
 | literal `:` | map |
-| อย่างอื่น (รวมถึง `}`) | block |
+| Anything else (including `}`) | block |
 
-`{}` จึงเป็น block ว่าง ซึ่งถูกตีความเป็น map ว่างเมื่ออยู่ในที่ที่ต้องการ map
-ตัวของ `if` และของฟังก์ชันเป็น block เสมอ
+`{}` is therefore an empty block, which is interpreted as an empty map when it appears where a map is
+expected. The body of an `if` and of a function is always a block.
 
-## ข้อจำกัดของ parser
+## Parser limitations
 
-- การซ้อน (วงเล็บ, block, type) ลึกได้ 256 ชั้น
-- เมื่อพบ syntax error parser ข้ามไปเริ่มใหม่ที่ statement ถัดไป จึงรายงานได้หลาย error ในรอบเดียว
+- Nesting (parentheses, blocks, types) can be up to 256 levels deep
+- When the parser finds a syntax error, it skips ahead and restarts at the next statement, so it can
+  report several errors in one pass
 
-## ตัวอย่างที่ parser มองเห็น
+## An example of what the parser sees
 
-`biggo parse file.bgo` พิมพ์ syntax tree ในรูป S-expression:
+`biggo parse file.bgo` prints the syntax tree as an S-expression:
 
 ```text
 $ cat demo.bgo

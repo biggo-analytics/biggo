@@ -1,31 +1,31 @@
-# แหล่งข้อมูล: CSV, Parquet, JSON, SQLite
+# Data sources: CSV, Parquet, JSON, SQLite
 
-biggo อ่านและเขียนข้อมูลได้ 4 รูปแบบ ทุกแบบใช้หลักเดียวกัน:
+biggo reads and writes data in 4 formats. All of them follow the same principles:
 
-- **อ่าน**: `read_xxx<ชนิดของแถว>(path)` ได้ตาราง โปรแกรมบอกว่าต้องการ column อะไร ชนิดอะไร
-  แล้ว engine ตรวจกับไฟล์ตอนรัน
-- **เขียน**: `write_xxx(ตาราง, path)` รัน query แล้วเขียนผลลัพธ์ทั้งหมด เขียนทับถ้ามีไฟล์อยู่แล้ว
-  และสร้างโฟลเดอร์ให้ถ้ายังไม่มี
-- **path** นับจากโฟลเดอร์ของไฟล์โปรแกรม ไม่ใช่จากที่ที่สั่งรัน โปรแกรมจึงย้ายไปรันจากที่ไหนก็ได้
-  พร้อมข้อมูลของมัน
-- การอ่านเป็นแบบ lazy: `read_xxx` ยังไม่เปิดไฟล์ ไฟล์ถูกอ่านเมื่อ query รัน และอ่านเฉพาะ column
-  ที่ query ใช้
+- **Read**: `read_xxx<row type>(path)` returns a table. The program says which columns it wants and
+  what their types are, and the engine checks them against the file at run time.
+- **Write**: `write_xxx(table, path)` runs the query and writes the whole result. It overwrites the
+  file if it already exists, and creates the folder if it does not exist yet.
+- **path** is relative to the folder of the program file, not to where you run the command. So you
+  can move a program, together with its data, and run it from anywhere.
+- Reading is lazy: `read_xxx` does not open the file yet. The file is read when the query runs, and
+  only the columns the query uses are read.
 
-| รูปแบบ | อ่าน | เขียน | อ่านขนานหลาย core | ข้าม column ที่ไม่ใช้ |
+| Format | Read | Write | Reads in parallel on multiple cores | Skips unused columns |
 | --- | --- | --- | --- | --- |
-| CSV | `read_csv` | `write_csv` | ✓ | ✓ (ไม่แปลงค่า) |
-| Parquet | `read_parquet` | `write_parquet` | ✓ | ✓ (ไม่อ่านจากดิสก์เลย) |
-| JSON (หนึ่ง object ต่อบรรทัด) | `read_json` | `write_json` | ✓ | ✓ |
-| SQLite | `read_sql` | `write_sql` | | (เขียนใน query เอง) |
+| CSV | `read_csv` | `write_csv` | ✓ | ✓ (values are not converted) |
+| Parquet | `read_parquet` | `write_parquet` | ✓ | ✓ (not read from disk at all) |
+| JSON (one object per line) | `read_json` | `write_json` | ✓ | ✓ |
+| SQLite | `read_sql` | `write_sql` | | (you write it in the query yourself) |
 
-## ชนิดของแถว
+## The row type
 
-type argument ใน `<...>` บอก column ที่โปรแกรมต้องการ:
+The type argument in `<...>` says which columns the program wants:
 
 ```biggo
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
 
-// ประกาศเท่าที่ใช้ก็ได้ ลำดับไม่ต้องตรงกับไฟล์ จับคู่ด้วยชื่อ column
+// declare only what you use; the order need not match the file; columns are matched by name
 let slim = read_csv<{ qty: int, product: string }>("data/sales.csv")
 print(slim |> take(2))
 print(read_csv<Sale>("data/sales.csv") |> count())
@@ -41,10 +41,13 @@ print(read_csv<Sale>("data/sales.csv") |> count())
 10
 ```
 
-- ไฟล์มี column มากกว่าที่ประกาศได้ ส่วนเกินถูกข้าม
-- column ที่ประกาศแต่ไฟล์ไม่มีเป็น error ตอนรัน พร้อมรายชื่อ column ที่ไฟล์มี
-- column ที่ประกาศว่าไม่เป็น null (`qty: int`) แต่ไฟล์มีค่าว่าง เป็น error ที่บอกให้ประกาศเป็น `int?`
-- ค่าที่แปลงเป็นชนิดที่ประกาศไม่ได้เป็น error ที่บอกบรรทัดและ column
+- The file can have more columns than you declare. The extra ones are skipped.
+- A column that you declare but the file does not have is an error at run time, with the list of
+  columns the file has.
+- A column declared as non-null (`qty: int`) when the file has missing values is an error that tells
+  you to declare it as `int?`.
+- A value that cannot be converted to the declared type is an error that gives the line and the
+  column.
 
 ```biggo error
 print(read_csv<{ product: string, qty: float, price: float }>("data/sales.csv"))
@@ -70,34 +73,36 @@ error: data/sales.csv, line 2: cannot read 'widget' as an int for column `produc
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ```
 
-error พวกนี้เกิดตอนรัน เพราะ compiler ไม่เปิดไฟล์ข้อมูล: โปรแกรมเดียวกันจึงตรวจผ่านได้แม้ยังไม่มีไฟล์
-และใช้กับไฟล์ที่เปลี่ยนไปทุกวันได้
+These errors happen at run time, because the compiler does not open data files: the same program
+therefore passes the check even when the file does not exist yet, and works with files that change
+every day.
 
-## รูปของค่าในไฟล์
+## How values look in files
 
-ค่าแต่ละชนิดมีรูปเดียวกันในทุกรูปแบบไฟล์ ไฟล์ที่ biggo เขียนจึงอ่านกลับได้เสมอ และตารางเดียวกัน
-เขียนเป็น CSV, JSON, Parquet หรือ SQLite แล้วอ่านกลับได้ค่าเท่าเดิมทุกค่า
+A value of each type looks the same in every file format. So a file that biggo writes can always be
+read back, and the same table written as CSV, JSON, Parquet or SQLite reads back with every value
+unchanged.
 
 | type | CSV | JSON | SQLite | Parquet |
 | --- | --- | --- | --- | --- |
 | `int` | `42` | `42` | `INTEGER` | `INT64` |
 | `float` | `2.5` | `2.5` | `REAL` | `DOUBLE` |
 | `bool` | `true` / `false` | `true` / `false` | `INTEGER` 1 / 0 | `BOOLEAN` |
-| `string` | ข้อความ | `"ข้อความ"` | `TEXT` | `STRING` |
+| `string` | text | `"text"` | `TEXT` | `STRING` |
 | `date` | `2026-01-31` | `"2026-01-31"` | `TEXT` | `DATE` |
-| `datetime` | `2026-01-31T18:30:00` | `"2026-01-31T18:30:00"` | `TEXT` | `TIMESTAMP` (ไมโครวินาที) |
+| `datetime` | `2026-01-31T18:30:00` | `"2026-01-31T18:30:00"` | `TEXT` | `TIMESTAMP` (microseconds) |
 | `decimal` | `19.99` | `"19.99"` | `TEXT` | `DECIMAL(38, 6)` |
-| `duration` | จำนวนวินาที `5400.0` | จำนวนวินาที `5400.0` | `REAL` (วินาที) | duration ของ Arrow |
-| null | ช่องว่าง | ไม่มี field หรือ `null` | `NULL` | null |
+| `duration` | number of seconds `5400.0` | number of seconds `5400.0` | `REAL` (seconds) | Arrow duration |
+| null | empty field | field absent or `null` | `NULL` | null |
 
-ตอนอ่าน ตัวอ่านยอมรับรูปที่กว้างกว่าที่เขียน:
+When reading, the reader accepts more forms than the ones it writes:
 
-- `datetime`: ใช้ช่องว่างแทน `T` ได้, มีเศษวินาทีได้ถึง 6 หลัก, วันที่อย่างเดียวคือเวลา 00:00
-  ถ้ามี time zone ต่อท้าย (`Z`, `+07:00`) ค่าถูกแปลงเป็น UTC แล้วทิ้ง zone **ต้องมีวินาที**
-  (`18:30:00` ไม่ใช่ `18:30`)
-- `decimal`: ใน JSON เป็นตัวเลขหรือ string ก็ได้ ทศนิยมเกิน 6 ตำแหน่งถูกปัด
-- `bool` ใน CSV: `true` / `false` ตัวพิมพ์ใดก็ได้ (`1`/`0` ไม่ได้)
-- `duration`: ตัวเลขทุกชนิดถูกอ่านเป็นจำนวนวินาที
+- `datetime`: a space can replace `T`, fractional seconds can have up to 6 digits, and a date alone
+  means time 00:00. If a time zone follows (`Z`, `+07:00`), the value is converted to UTC and the
+  zone is dropped. **Seconds are required** (`18:30:00`, not `18:30`).
+- `decimal`: in JSON it can be a number or a string. More than 6 decimal places are rounded.
+- `bool` in CSV: `true` / `false` in any letter case (`1`/`0` are not accepted).
+- `duration`: any kind of number is read as a number of seconds.
 
 ## CSV
 
@@ -124,7 +129,7 @@ print(read_csv<{ region: string, units: int, best: float?, latest: date }>("out/
 +--------+-------+-------+------------+
 ```
 
-ไฟล์ที่ได้:
+The resulting file:
 
 ```text
 region,units,best,latest
@@ -133,24 +138,27 @@ north,21,100.0,2026-03-15
 south,17,2.5,2026-03-01
 ```
 
-ข้อกำหนดของ CSV ที่อ่านได้:
+Requirements for a CSV file that can be read:
 
-- บรรทัดแรกเป็นชื่อ column (header) เสมอ
-- คั่นด้วย `,` เท่านั้น
-- ค่าที่มี `,` การขึ้นบรรทัดใหม่ หรือ `"` ต้องอยู่ใน `"..."` และ `"` ข้างในเขียนซ้ำเป็น `""`
-- เข้ารหัสแบบ UTF-8; BOM ต้นไฟล์ถูกข้าม
-- ช่องว่างเปล่าคือ null ยกเว้น column ชนิด `string` ที่ไม่เป็น nullable ซึ่งได้ string ว่าง `""`
-- ทุกบรรทัดต้องมีจำนวนช่องเท่ากับ header
+- The first line is always the column names (the header).
+- The separator is `,` only.
+- A value that contains `,`, a line break, or `"` must be inside `"..."`, and a `"` inside it is
+  doubled as `""`.
+- The encoding is UTF-8; a BOM at the start of the file is skipped.
+- An empty field is null, except in a non-nullable `string` column, where it is the empty string
+  `""`.
+- Every line must have the same number of fields as the header.
 
-**ความเร็ว:** ไฟล์ถูก map เข้าหน่วยความจำแล้วตัดเป็นชิ้นละ 2 MiB ที่ขอบบรรทัด (นับเครื่องหมาย `"`
-เพื่อไม่ตัดกลางค่าที่มีการขึ้นบรรทัดใหม่) แต่ละชิ้นถูกแปลงบน core ของตัวเอง column ที่ query ไม่ใช้
-ไม่ถูกแปลงเป็นค่า และตัวกรองของ `where` ถูกใช้ตั้งแต่ในชิ้น
+**Speed:** the file is mapped into memory and cut into 2 MiB chunks at line boundaries (counting `"`
+characters so that a value containing a line break is not cut in the middle). Each chunk is parsed
+on its own core. Columns the query does not use are not converted to values, and the `where` filter
+is applied already inside each chunk.
 
 ## Parquet
 
-Parquet เป็นรูปแบบแบบ column ที่บีบอัดและมี type ในตัว เร็วกว่า CSV มาก
-(ใน [benchmark](09-performance.md) อ่านเร็วกว่าราว 3–4 เท่า) เพราะไม่ต้องแปลงข้อความเป็นค่า
-และข้าม column ที่ไม่ใช้ได้โดยไม่อ่านจากดิสก์
+Parquet is a columnar format that is compressed and carries its own types. It is much faster than
+CSV (in the [benchmark](09-performance.md), reading is about 3–4 times faster), because there is no
+text to convert into values, and unused columns are skipped without being read from disk.
 
 ```biggo
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -171,16 +179,19 @@ read_parquet<{ region: string, qty: int }>("out/sales.parquet")
 +--------+-----+
 ```
 
-- column จับคู่ด้วยชื่อ ชนิดในไฟล์ต่างจากที่ประกาศได้ถ้าแปลงได้ (เช่นไฟล์เป็น `INT32` ประกาศ `int`)
-- เขียนด้วยการบีบอัด Snappy แบ่งเป็น row group ละ 131,072 แถว ซึ่งเป็นหน่วยที่อ่านขนานกันได้
-- ไฟล์ที่เขียนจากเครื่องมืออื่น (pandas, Polars, DuckDB, Spark) อ่านได้ และกลับกัน
+- Columns are matched by name. The type in the file can differ from the declared type if it can be
+  converted (for example, the file has `INT32` and you declare `int`).
+- Files are written with Snappy compression and split into row groups of 131,072 rows each, which
+  are the units that can be read in parallel.
+- Files written by other tools (pandas, Polars, DuckDB, Spark) can be read, and vice versa.
 
-งานที่อ่านไฟล์ CSV เดิมซ้ำหลายรอบ ควรแปลงเป็น Parquet ครั้งเดียวแล้วอ่านจาก Parquet
+A job that reads the same CSV file many times should convert it to Parquet once and then read from
+the Parquet file.
 
 ## JSON
 
-`read_json` อ่านไฟล์แบบ *JSON Lines* (NDJSON): หนึ่ง object ต่อหนึ่งบรรทัด
-ตัวอย่างไฟล์ [`data/events.json`](data/events.json):
+`read_json` reads *JSON Lines* (NDJSON) files: one object per line.
+The example file [`data/events.json`](data/events.json):
 
 ```text
 {"id": 1, "kind": "click", "at": "2026-01-05T09:00:00", "cost": "0.25", "ok": true}
@@ -217,27 +228,27 @@ print(read_json<{ id: int, day: date, cost: decimal? }>("out/ok.json"))
 +----+------------+------+
 ```
 
-- field ที่ object ไม่มี หรือมีค่า `null` อ่านเป็น null
-- field ที่ไม่ได้ประกาศถูกข้าม บรรทัดว่างถูกข้าม
-- ค่าต้องเป็นค่าเดี่ยว: field ที่เป็น object หรือ array ซ้อนอ่านเป็น column ไม่ได้
-- ไฟล์ที่เป็น array ใหญ่ก้อนเดียว (`[{...}, {...}]`) ไม่ใช่ JSON Lines และอ่านไม่ได้
-  แปลงก่อนด้วยเครื่องมืออย่าง `jq -c '.[]'`
-- `write_json` เขียนหนึ่ง object ต่อบรรทัด field ที่เป็น null ถูกละไว้
+- A field that the object does not have, or whose value is `null`, is read as null.
+- Fields that are not declared are skipped. Blank lines are skipped.
+- Values must be scalar values: a field that is a nested object or array cannot be read as a column.
+- A file that is one big array (`[{...}, {...}]`) is not JSON Lines and cannot be read.
+  Convert it first with a tool such as `jq -c '.[]'`.
+- `write_json` writes one object per line. Fields that are null are omitted.
 
 ## SQLite
 
-`read_sql<T>(path, query)` รัน query บนไฟล์ฐานข้อมูล SQLite แล้วได้ผลเป็นตาราง
-`write_sql(table, path, name)` เขียนตารางลงฐานข้อมูลภายใต้ชื่อ `name`
+`read_sql<T>(path, query)` runs a query on a SQLite database file and returns the result as a table.
+`write_sql(table, path, name)` writes a table to the database under the name `name`.
 
 ```biggo
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
 let sales = read_csv<Sale>("data/sales.csv")
 
-// เขียนสองตารางลงฐานข้อมูลเดียว (สร้างไฟล์ให้ถ้ายังไม่มี)
+// write two tables to one database (the file is created if it does not exist yet)
 write_sql(sales, "out/shop.db", "sales")
 write_sql(sales |> group(product) |> agg(units = sum(qty)), "out/shop.db", "product_units")
 
-// query เป็น SQL ของ SQLite เต็มรูปแบบ ชื่อ column ของผลลัพธ์ต้องตรงกับที่ประกาศ
+// the query is full SQLite SQL; the result's column names must match the declared ones
 type Row = { region: string, day: date, revenue: float }
 read_sql<Row>(
   "out/shop.db",
@@ -245,7 +256,7 @@ read_sql<Row>(
 )
   |> print()
 
-// ผลของ query ใช้ต่อใน pipeline ได้เหมือนตารางอื่น
+// the query result can be used in a pipeline like any other table
 read_sql<{ product: string, units: int }>("out/shop.db", "select * from product_units")
   |> where(units > 5)
   |> sort(desc(units))
@@ -268,29 +279,32 @@ read_sql<{ product: string, units: int }>("out/shop.db", "select * from product_
 +---------+-------+
 ```
 
-- ใช้ได้กับไฟล์ SQLite เท่านั้น (ตัว SQLite ถูกฝังมาใน `biggo` ไม่ต้องติดตั้งเพิ่ม)
-  ยังไม่รองรับฐานข้อมูลแบบ server อย่าง PostgreSQL หรือ MySQL
-- ฐานข้อมูลถูกเปิดแบบอ่านอย่างเดียวตอน `read_sql`
-- column ของผลลัพธ์จับคู่ด้วยชื่อ ใช้ `as` ใน SQL ตั้งชื่อให้ตรงกับ type ที่ประกาศ
-- ค่าถูกแปลงตามชนิดที่ประกาศ: `TEXT` ถูกแปลงเป็น `date` `datetime` `decimal` หรือตัวเลขได้,
-  `INTEGER` เป็น `bool` (0 คือ `false`) หรือ `float` ได้
-- `write_sql` **แทนที่** ตารางชื่อนั้นทั้งตาราง (ตารางอื่นในฐานข้อมูลไม่ถูกแตะ)
-  การเขียนอยู่ใน transaction เดียว ถ้าล้มเหลวกลางทางตารางเดิมยังอยู่
-- `where` ที่ต่อหลัง `read_sql` ทำงานใน biggo ไม่ได้ถูกส่งเข้าไปใน SQL: ถ้าตารางใหญ่ให้กรองใน query
-- การอ่านจาก SQLite ทำงานบน thread เดียว
+- This works with SQLite files only (SQLite itself is embedded in `biggo`, so there is nothing extra
+  to install). Server databases such as PostgreSQL or MySQL are not supported yet.
+- The database is opened read-only during `read_sql`.
+- Result columns are matched by name. Use `as` in the SQL to give them names that match the declared
+  type.
+- Values are converted to the declared type: `TEXT` can be converted to `date`, `datetime`,
+  `decimal` or a number, and `INTEGER` to `bool` (0 is `false`) or `float`.
+- `write_sql` **replaces** the whole table of that name (other tables in the database are not
+  touched). The write happens in a single transaction: if it fails partway, the old table is still
+  there.
+- A `where` that follows `read_sql` runs in biggo and is not pushed into the SQL: if the table is
+  large, filter in the query.
+- Reading from SQLite runs on a single thread.
 
-## error ที่พบบ่อย
+## Common errors
 
-| ข้อความ | สาเหตุ |
+| Message | Cause |
 | --- | --- |
-| `cannot open x.csv: No such file or directory` | path ผิด — นับจากโฟลเดอร์ของไฟล์โปรแกรม |
-| `x.csv has no column `c`; its columns are a, b` | ชื่อ column ไม่ตรงกับ header (ตัวพิมพ์เล็ก/ใหญ่ถือว่าต่างกัน) |
-| `column `c` of x.csv has missing values, but is declared `int`; declare it `int?`` | มีค่าว่างใน column ที่ไม่ได้ประกาศเป็น nullable |
-| `x.csv, line 12: cannot read 'abc' as an int for column `c`` | ค่าในบรรทัดนั้นไม่ใช่ชนิดที่ประกาศ |
-| `x.csv, line 12: the row has 3 fields, but the header has 5` | จำนวนช่องไม่เท่า header มักเกิดจาก `,` หรือ `"` ในค่าที่ไม่ได้ครอบด้วย `"..."` |
-| `x.json: cannot read "abc" as an int for field `c`` | ค่าของ field ไม่ใช่ชนิดที่ประกาศ |
-| `x.json: every line must be one JSON object` | ไฟล์ไม่ใช่ JSON Lines |
-| `x.db: no such table: t` | ข้อความจาก SQLite โดยตรง |
+| `cannot open x.csv: No such file or directory` | Wrong path: paths are relative to the folder of the program file |
+| `x.csv has no column `c`; its columns are a, b` | The column name does not match the header (upper and lower case are treated as different) |
+| `column `c` of x.csv has missing values, but is declared `int`; declare it `int?`` | There are missing values in a column that is not declared nullable |
+| `x.csv, line 12: cannot read 'abc' as an int for column `c`` | The value on that line is not of the declared type |
+| `x.csv, line 12: the row has 3 fields, but the header has 5` | The number of fields differs from the header. This usually comes from a `,` or `"` in a value that is not wrapped in `"..."` |
+| `x.json: cannot read "abc" as an int for field `c`` | The field's value is not of the declared type |
+| `x.json: every line must be one JSON object` | The file is not JSON Lines |
+| `x.db: no such table: t` | A message straight from SQLite |
 
-error จากข้อมูลชี้ไปที่บรรทัดของโปรแกรมที่ *รัน* query (เช่น `print`) ไม่ใช่บรรทัดที่เขียน
-`read_csv` เพราะไฟล์ถูกอ่านเมื่อ query รัน
+Errors from data point to the program line that *runs* the query (such as `print`), not the line
+where `read_csv` is written, because the file is read when the query runs.

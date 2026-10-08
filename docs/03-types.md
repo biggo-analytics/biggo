@@ -1,39 +1,44 @@
-# ระบบ type
+# The type system
 
-biggo ตรวจ type ทั้งโปรแกรมก่อนรัน (static typing) ทุก expression มี type ที่รู้ตอน compile
-รวมถึงตาราง ซึ่ง type ของมันคือรายชื่อ column พร้อมชนิด ผลคือ
+biggo checks the types of the whole program before the program runs (static typing). Every
+expression has a type that is known at compile time, including tables, whose type is the list of
+columns with their types. As a result:
 
-- พิมพ์ชื่อ column ผิด เอา string ไปบวกเลข หรือลืมจัดการ null รู้ตั้งแต่ก่อนอ่านข้อมูล
-- engine รู้ชนิดของทุก column ล่วงหน้า จึงเลือกวิธีคำนวณที่เร็วที่สุดได้โดยไม่ต้องตรวจตอนรัน
+- A mistyped column name, a string added to a number, or a forgotten null check is caught before
+  any data is read.
+- The engine knows the type of every column in advance, so it can choose the fastest way to compute
+  without checking at run time.
 
-ส่วนใหญ่ไม่ต้องเขียน type เอง: compiler อนุมานให้จากค่า ที่ต้องเขียนคือ parameter ของฟังก์ชัน
-และชนิดของแถวในไฟล์ข้อมูล
+Most of the time you do not write types yourself: the compiler infers them from values. What you do
+have to write are function parameters and the row types of data files.
 
-## type ทั้งหมด
+## All types
 
-| type | ค่า | เป็น column ได้ |
+| Type | Values | Can be a column |
 | --- | --- | --- |
-| `int` | จำนวนเต็ม 64 บิต | ✓ |
-| `float` | ทศนิยม 64 บิต | ✓ |
+| `int` | 64-bit integer | ✓ |
+| `float` | 64-bit floating-point number | ✓ |
 | `bool` | `true` / `false` | ✓ |
-| `string` | ข้อความ UTF-8 | ✓ |
-| `date` | วันที่ | ✓ |
-| `datetime` | วันที่และเวลา ละเอียดถึงไมโครวินาที ไม่มี time zone | ✓ |
-| `duration` | ช่วงเวลา ละเอียดถึงไมโครวินาที | ✓ |
-| `decimal` | เลขทศนิยมแม่นยำ 6 ตำแหน่ง รวม 38 หลัก | ✓ |
-| `T?` | ค่าชนิด `T` หรือ null | ✓ |
-| `list<T>` | ลำดับของค่าชนิด `T` | |
-| `map<K, V>` | คู่ key–value | |
-| `{ a: T, b: U }` | record: ค่าที่มี field ตามชื่อ | |
-| `table<{ a: T, ... }>` | ตารางที่มี column ตามนั้น | |
-| `fn(T, U) -> R` | ฟังก์ชัน | |
+| `string` | UTF-8 text | ✓ |
+| `date` | a date | ✓ |
+| `datetime` | a date and time, with microsecond precision, no time zone | ✓ |
+| `duration` | a span of time, with microsecond precision | ✓ |
+| `decimal` | exact decimal number with 6 decimal places, 38 digits in total | ✓ |
+| `T?` | a value of type `T`, or null | ✓ |
+| `list<T>` | a sequence of values of type `T` | |
+| `map<K, V>` | key-value pairs | |
+| `{ a: T, b: U }` | record: a value with named fields | |
+| `table<{ a: T, ... }>` | a table with those columns | |
+| `fn(T, U) -> R` | a function | |
 
-นอกจากนี้มี type สองตัวที่เขียนในโปรแกรมไม่ได้แต่เห็นใน error message: `unit` (type ของ expression
-ที่ไม่มีค่า เช่น `print(...)`) และ *grouped table* (ผลของ `group` ซึ่งต้องส่งต่อให้ `agg`)
+There are also two types that you cannot write in a program but that appear in error messages:
+`unit` (the type of an expression that has no value, such as `print(...)`) and *grouped table* (the
+result of `group`, which must be passed on to `agg`).
 
-## type alias
+## Type aliases
 
-`type ชื่อ = type` ตั้งชื่อให้ type เพื่อใช้ซ้ำ ประกาศได้ที่ระดับบนสุดของไฟล์เท่านั้น
+`type Name = type` gives a type a name so that you can reuse it. You can declare an alias only at
+the top level of a file.
 
 ```biggo
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -57,16 +62,16 @@ print(top(sales, 2))
 +------------+--------+---------+-----+-------+
 ```
 
-alias เป็นแค่ชื่อเรียก: `Sale` กับ `{ date: date, ... }` ที่เขียนเต็มเป็น type เดียวกัน
-type ของ record ที่ใช้เป็นชนิดของแถว (ใน `read_csv<...>` หรือ `table<...>`) ต้องมีแต่ field ที่เป็น
-column ได้
+An alias is only a name: `Sale` and `{ date: date, ... }` written out in full are the same type.
+A record type that is used as a row type (in `read_csv<...>` or `table<...>`) must have only fields
+that can be columns.
 
-## ตัวเลข: int, float, decimal
+## Numbers: int, float, decimal
 
 ```biggo
-print(9223372036854775807, -9223372036854775807 - 1)   // ขอบเขตของ int
-print(0.1 + 0.2, 1e308 * 10, 0 / 0)                    // float: มี inf และ NaN
-print(0.1d + 0.2d, 1d / 3, 2d / 3)                     // decimal: แม่นยำ ปัดที่ตำแหน่งที่ 6
+print(9223372036854775807, -9223372036854775807 - 1)   // the limits of int
+print(0.1 + 0.2, 1e308 * 10, 0 / 0)                    // float: has inf and NaN
+print(0.1d + 0.2d, 1d / 3, 2d / 3)                     // decimal: exact, rounded at the 6th place
 ```
 
 ```text output
@@ -77,19 +82,20 @@ print(0.1d + 0.2d, 1d / 3, 2d / 3)                     // decimal: แม่น�
 
 | | `int` | `float` | `decimal` |
 | --- | --- | --- | --- |
-| เก็บเป็น | จำนวนเต็ม 64 บิต | IEEE 754 64 บิต | จำนวนเต็ม 128 บิต × 10⁻⁶ |
-| ความแม่นยำ | แม่นยำ | ประมาณ 15–17 หลัก | แม่นยำ 6 ตำแหน่งหลังจุด |
-| เมื่อเกินขอบเขต | error `integer overflow` | `inf` | error `decimal overflow` |
-| หารด้วยศูนย์ | `/` ได้ `inf`, `%` เป็น error | `inf` หรือ `NaN` | error `division by zero` |
-| เหมาะกับ | จำนวนนับ, id | การวัด, สถิติ | เงิน |
+| Stored as | 64-bit integer | 64-bit IEEE 754 | 128-bit integer × 10⁻⁶ |
+| Precision | exact | about 15–17 digits | exact to 6 places after the point |
+| Out of range | error `integer overflow` | `inf` | error `decimal overflow` |
+| Division by zero | `/` gives `inf`, `%` is an error | `inf` or `NaN` | error `division by zero` |
+| Good for | counts, ids | measurements, statistics | money |
 
-ใช้ `decimal` เมื่อผลรวมต้องตรงทุกสตางค์ ใช้ `float` เมื่อความเร็วสำคัญกว่าและค่าคลาดเคลื่อนระดับ
-10⁻¹⁵ ยอมรับได้ `float` เร็วกว่าเพราะ CPU คำนวณได้โดยตรง
+Use `decimal` when totals must be exact down to the last cent. Use `float` when speed matters
+more and an error on the order of 10⁻¹⁵ is acceptable. `float` is faster because the CPU computes
+it directly.
 
-literal ของ `decimal` มีได้ไม่เกิน 6 ตำแหน่งหลังจุดและ 32 หลักหน้าจุด ผลของ `*` และ `/` ที่มีตำแหน่ง
-มากกว่านั้นถูกปัดครึ่งออกจากศูนย์ (round half away from zero) ที่ตำแหน่งที่ 6
+A `decimal` literal can have at most 6 places after the point and 32 digits before it. Results of
+`*` and `/` that have more places than that are rounded half away from zero at the 6th place.
 
-## วันที่และเวลา: date, datetime, duration
+## Dates and times: date, datetime, duration
 
 ```biggo
 let start = @2026-01-31T22:30:00
@@ -100,7 +106,7 @@ print(start + hours(2), start - days(31))      // datetime ± duration = datetim
 print(days(1) + hours(12), hours(1) == minutes(60), took > hours(2))
 print(year(start), month(start), day(start), hour(start), minute(start), second(stop))
 
-// date ใช้แทน datetime ได้: นับเป็นเวลา 00:00 ของวันนั้น
+// a date can stand in for a datetime: it counts as 00:00 on that day
 print(@2026-03-01 - @2026-02-01, @2026-02-01 + days(1), start > @2026-01-31)
 print(to_date(start), to_datetime(@2026-05-05))
 ```
@@ -114,34 +120,40 @@ print(to_date(start), to_datetime(@2026-05-05))
 2026-01-31 2026-05-05T00:00:00
 ```
 
-- `date` คือวันในปฏิทิน ปี 0000 ถึง 9999
-- `datetime` คือวันและเวลาแบบไม่มี time zone ("เวลาที่เห็นบนนาฬิกา") ละเอียดถึงไมโครวินาที
-- `duration` คือช่วงเวลา เป็นลบได้ พิมพ์เป็น `HH:MM:SS` นำหน้าด้วย `Nd` เมื่อเกินหนึ่งวัน
+- `date` is a calendar day, from year 0000 to 9999.
+- `datetime` is a date and time with no time zone ("the time you see on the clock"), with
+  microsecond precision.
+- `duration` is a span of time. It can be negative. It prints as `HH:MM:SS`, prefixed with `Nd`
+  when it is longer than one day.
 
-การคำนวณที่ทำได้:
+The arithmetic that is allowed:
 
-| expression | ผลลัพธ์ |
+| Expression | Result |
 | --- | --- |
 | `datetime - datetime`, `date - date` | `duration` |
 | `datetime + duration`, `datetime - duration` | `datetime` |
 | `date + duration`, `date - duration` | `datetime` |
 | `duration + duration`, `duration - duration` | `duration` |
-| เปรียบเทียบ `date`/`datetime` ด้วยกัน, `duration` ด้วยกัน | `bool` |
+| comparing `date`/`datetime` with each other, `duration` with each other | `bool` |
 
-`duration` คูณหรือหารด้วยตัวเลขโดยตรงไม่ได้ ให้ผ่านจำนวนวินาที:
-`seconds(total_seconds(d) * 2)` สร้าง duration ด้วย `days(n)` `hours(n)` `minutes(n)`
-`seconds(n)` ซึ่งรับ `int` หรือ `float` ไม่มีหน่วยเดือนหรือปีเพราะความยาวไม่คงที่
+You cannot multiply or divide a `duration` by a number directly. Go through the number of seconds:
+`seconds(total_seconds(d) * 2)`. Create a duration with `days(n)` `hours(n)` `minutes(n)`
+`seconds(n)`, which take an `int` or a `float`. There are no month or year units because their
+length is not fixed.
 
-## nullable: `T?`
+## Nullable: `T?`
 
-`T?` คือ "ค่าชนิด `T` หรือ null" ทุก type ที่เป็นข้อมูลมี `?` ได้ (ฟังก์ชันและตารางไม่ได้)
-รายละเอียดการใช้งานอยู่ใน [ตัวภาษา](02-language.md#null) สรุปกฎของ type:
+`T?` means "a value of type `T`, or null". Every type that is data can have a `?` (functions and
+tables cannot). How to use it is described in [The language](02-language.md#null). The type rules
+in brief:
 
-- ค่าชนิด `T` ใช้ในที่ที่ต้องการ `T?` ได้เสมอ กลับกันไม่ได้: ต้องแกะด้วย `??` ก่อน
-- การคำนวณกับ `T?` ได้ผลเป็น type ที่มี `?`
-- `a ?? b` ได้ type ของ `b` (ถ้า `b` ไม่มี `?` ผลก็ไม่มี `?`)
-- `is_null(x)` ได้ `bool` ที่ไม่มี `?` เสมอ
-- เงื่อนไขของ `if`, `where` ที่เป็น `bool?`: `if` ไม่รับ ส่วน `where` นับ null เป็น "ไม่ผ่าน"
+- A value of type `T` can always be used where a `T?` is expected. The reverse is not allowed: you
+  must unwrap it with `??` first.
+- Computing with a `T?` gives a type that has a `?`.
+- `a ?? b` has the type of `b` (if `b` has no `?`, the result has no `?` either).
+- `is_null(x)` always gives a `bool` with no `?`.
+- A condition of `if` or `where` that is a `bool?`: `if` does not accept it, while `where` counts
+  null as "does not pass".
 
 ```biggo
 let maybe: int? = 5
@@ -168,17 +180,18 @@ print(numbers, scores, user, nested)
 [1, 2, 3] {"ann": 9.5, "bo": 7.0} {name: "ann", tags: ["a"]} [{id: 1, at: [@2026-01-01]}]
 ```
 
-- สมาชิกของ list, value ของ map และ field ของ record เป็นข้อมูลชนิดใดก็ได้ ซ้อนกันได้ไม่จำกัด
-  แต่เก็บฟังก์ชันหรือตารางไม่ได้
-- key ของ map เป็น `string`, `int`, `bool` หรือ `date`
-- record สอง type เป็นชนิดเดียวกันเมื่อ field ชื่อเดียวกัน ลำดับเดียวกัน type เดียวกัน
-- `[]` (list ว่าง) และ `{}` ในฐานะ map ว่างไม่มี type ของตัวเอง ต้องมีบริบทบอก เช่น
-  `let xs: list<int> = []`
+- The elements of a list, the values of a map, and the fields of a record can be data of any type,
+  nested without limit, but they cannot hold functions or tables.
+- A map key is a `string`, `int`, `bool`, or `date`.
+- Two record types are the same type when their fields have the same names, the same order, and
+  the same types.
+- `[]` (the empty list) and `{}` as an empty map have no type of their own. The context has to
+  supply one, for example `let xs: list<int> = []`.
 
-## type ของตาราง
+## Table types
 
-type ของตารางคือ schema ของมัน: ชื่อ ชนิด และลำดับของ column
-ทุก operation ของตารางคำนวณ type ของผลลัพธ์ตอน compile
+The type of a table is its schema: the names, types, and order of its columns.
+Every table operation computes the type of its result at compile time.
 
 ```biggo
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -188,7 +201,7 @@ fn units(t: table<{ qty: int }>) -> int {
   to_rows(t |> agg(total = sum(qty)))[0].total
 }
 
-// ส่งตารางที่มี column ตรงกับที่ฟังก์ชันประกาศ
+// pass a table whose columns match what the function declares
 print(units(sales |> select(qty)))
 ```
 
@@ -196,8 +209,8 @@ print(units(sales |> select(qty)))
 45
 ```
 
-ตารางที่ส่งเข้าฟังก์ชันต้องมี column *ตรงกันพอดี* กับ type ของ parameter (ชื่อ ชนิด ลำดับ)
-ไม่ใช่แค่ "มีอย่างน้อยเท่านี้" จึงมักต้อง `select` ก่อนส่ง:
+A table that you pass to a function must have columns that match the parameter type *exactly*
+(names, types, order), not just "at least these". So you often need to `select` before passing it:
 
 ```biggo error
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -213,14 +226,14 @@ error: `units` expects table<{qty: int}> for `t`, found table<{date: date, regio
   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ```
 
-วาง cursor บนตัวแปรใน editor เพื่อดู type ของตาราง ณ จุดนั้นของ pipeline ได้
-(ดู [เครื่องมือ](07-tools.md#language-server-และ-editor))
+Place the cursor on a variable in your editor to see the type of the table at that point in the
+pipeline (see [Tools](07-tools.md#language-server-and-editors)).
 
-## type ของฟังก์ชัน
+## Function types
 
-`fn(int, string) -> bool` คือฟังก์ชันที่รับ `int` กับ `string` แล้วให้ `bool`
-ไม่เขียน `->` คือฟังก์ชันที่ไม่มีค่า ฟังก์ชันสองตัวมี type เดียวกันเมื่อ type ของ parameter และผลลัพธ์ตรงกัน
-ชื่อ parameter ไม่เกี่ยว
+`fn(int, string) -> bool` is a function that takes an `int` and a `string` and gives a `bool`.
+Without `->`, it is a function that has no value. Two functions have the same type when their
+parameter types and result type match. Parameter names do not matter.
 
 ```biggo
 let ops: map<string, int> = { "double": 2, "triple": 3 }
@@ -233,19 +246,20 @@ print(apply_all(5, scale_by(ops["double"] ?? 1), scale_by(ops["triple"] ?? 1)))
 30
 ```
 
-## การแปลงชนิดอัตโนมัติ
+## Automatic conversions
 
-compiler แปลงค่าให้เองเฉพาะกรณีที่ **ไม่เสียข้อมูล** มี 4 ทิศ:
+The compiler converts values for you only when **no information is lost**. There are 4 directions:
 
-| จาก | เป็น | ตัวอย่าง |
+| From | To | Example |
 | --- | --- | --- |
 | `int` | `float` | `1 + 2.5` → `3.5` |
 | `int` | `decimal` | `1 + 2.5d` → `3.5d` |
 | `decimal` | `float` | `1.5 + 2.5d` → `4.0` |
 | `date` | `datetime` | `@2026-01-01 < @2026-01-01T12:00:00` |
 
-และค่าชนิด `T` ใช้เป็น `T?` ได้เสมอ การแปลงเกิดขึ้นในทุกที่ที่ type สองฝั่งต้องเข้ากัน:
-ตัวดำเนินการ, argument ของฟังก์ชัน, `let` ที่ระบุ type, branch ของ `if`, arm ของ `match`, สมาชิกของ list
+And a value of type `T` can always be used as a `T?`. Conversion happens everywhere two types have
+to agree: operators, function arguments, a `let` with a type, the branches of an `if`, the arms of
+a `match`, the elements of a list.
 
 ```biggo
 let x: float = 1                  // int -> float
@@ -263,7 +277,8 @@ print(1 + 2.5d, 1.5 + 2.5d, 2.5d / 2, 5 / 2, 7d % 2)
 3.5 4.0 1.25 2.5 1
 ```
 
-ทิศที่เสียข้อมูลได้ (`float` → `int`, `string` → ตัวเลข ฯลฯ) ต้องเรียกฟังก์ชันแปลงเอง:
+For the directions that can lose information (`float` → `int`, `string` → number, and so on), you
+have to call a conversion function yourself:
 
 ```biggo error
 let count: int = 2.5
@@ -277,16 +292,17 @@ error: expected int, found float
   |                  ^^^
 ```
 
-### list, record, map ที่เขียนออกมาตรง ๆ
+### Lists, records, and maps written out directly
 
-ค่าที่ *เขียนออกมาในที่นั้น* (literal) ถูกแปลงทีละส่วนให้เข้ากับ type ที่ต้องการ
-ส่วนค่าที่อยู่ในตัวแปรแล้วมี type ตายตัว แปลงได้เฉพาะแบบที่ไม่ต้องแตะข้อมูลข้างใน คือการเพิ่ม `?`
+A value that is *written out in place* (a literal) is converted piece by piece to fit the expected
+type. A value that is already in a variable has a fixed type. It can be converted only in the way
+that does not touch the data inside, which is adding `?`.
 
 ```biggo
 type Point = { x: float, y: float }
-let a: Point = { x: 1, y: 2 }             // literal: int กลายเป็น float ทีละ field
+let a: Point = { x: 1, y: 2 }             // literal: int becomes float, field by field
 let ints = [1, 2, 3]
-let optional: list<int?> = ints            // ตัวแปร: เพิ่ม ? ได้
+let optional: list<int?> = ints            // variable: adding ? is allowed
 print(a, optional)
 ```
 
@@ -296,20 +312,20 @@ print(a, optional)
 
 ```biggo error
 let ints = [1, 2, 3]
-let floats: list<float> = ints             // ตัวแปร: int -> float ทั้ง list ไม่ได้
+let floats: list<float> = ints             // variable: int -> float for a whole list is not allowed
 ```
 
 ```text output
 error: expected list<float>, found list<int>
  --> example.bgo:2:27
   |
-2 | let floats: list<float> = ints             // ตัวแปร: int -> float ทั้ง list ไม่ได้
+2 | let floats: list<float> = ints             // variable: int -> float for a whole list is not allowed
   |                           ^^^^
 ```
 
-วิธีแปลง list ทั้งก้อนคือ `map(ints, fn(n) { to_float(n) })`
+The way to convert a whole list is `map(ints, fn(n) { to_float(n) })`.
 
-## การแปลงชนิดด้วยฟังก์ชัน
+## Conversion functions
 
 ```biggo
 print(to_int(3.9), to_int(-3.9), to_int("42"), to_int(true), to_int(19.99d))
@@ -329,60 +345,62 @@ print(to_datetime("2026-03-04T05:06:07"), to_datetime("2026-03-04 05:06:07.25"),
 2026-03-04T05:06:07 2026-03-04T05:06:07.25 2026-03-04T00:00:00
 ```
 
-| ฟังก์ชัน | รับ | หมายเหตุ |
+| Function | Accepts | Notes |
 | --- | --- | --- |
-| `to_int(x)` | `float` `decimal` `string` `bool` `int` | ตัดเศษทิ้ง (เข้าหาศูนย์) ไม่ปัด; `true` เป็น `1` |
+| `to_int(x)` | `float` `decimal` `string` `bool` `int` | drops the fraction (toward zero), does not round; `true` becomes `1` |
 | `to_float(x)` | `int` `decimal` `string` `float` | |
-| `to_decimal(x)` | `int` `float` `string` `decimal` | เกิน 6 ตำแหน่งถูกปัด |
-| `to_string(x)` | ทุกชนิดที่เป็น column ได้ | ข้อความเดียวกับที่ `print` แสดง |
-| `to_date(x)` | `string` `datetime` `date` | string ต้องเป็น `YYYY-MM-DD`; datetime ตัดเวลาทิ้ง |
-| `to_datetime(x)` | `string` `date` `datetime` | string เป็น `YYYY-MM-DDTHH:MM:SS` หรือใช้ช่องว่างแทน `T`, มีเศษวินาทีได้ |
+| `to_decimal(x)` | `int` `float` `string` `decimal` | more than 6 places is rounded |
+| `to_string(x)` | every type that can be a column | the same text that `print` shows |
+| `to_date(x)` | `string` `datetime` `date` | a string must be `YYYY-MM-DD`; a datetime drops its time |
+| `to_datetime(x)` | `string` `date` `datetime` | a string is `YYYY-MM-DDTHH:MM:SS`, or with a space in place of `T`, and can have fractional seconds |
 
-ถ้า string แปลงไม่ได้ โปรแกรมหยุดด้วย error ที่บอกค่า (ไม่ได้ null เงียบ ๆ):
+If a string cannot be converted, the program stops with an error that names the value (you do not
+silently get null):
 
 ```biggo error
-print(to_int("12 บาท"))
+print(to_int("12 baht"))
 ```
 
 ```text output
-error: cannot convert '12 บาท' to an int
+error: cannot convert '12 baht' to an int
  --> example.bgo:1:7
   |
-1 | print(to_int("12 บาท"))
-  |       ^^^^^^^^^^^^^^^^
+1 | print(to_int("12 baht"))
+  |       ^^^^^^^^^^^^^^^^^
 ```
 
-ทุกฟังก์ชันส่งต่อ null: `to_int(x)` เมื่อ `x` เป็น null ได้ null ฟังก์ชันเหล่านี้ใช้กับ column ทั้ง
-column ได้เหมือนกัน เช่น `derive(amount = to_decimal(amount_text))`
+Every function passes null through: `to_int(x)` gives null when `x` is null. These functions work
+on a whole column in the same way, for example `derive(amount = to_decimal(amount_text))`.
 
-## การอนุมาน type
+## Type inference
 
-compiler อ่านโปรแกรมจากบนลงล่างและรู้ type ของทุก expression จากส่วนประกอบของมัน:
+The compiler reads the program from top to bottom and knows the type of every expression from its
+parts:
 
-| สิ่งที่เขียน | type ที่ได้ |
+| What you write | Resulting type |
 | --- | --- |
-| `let x = expr` | type ของ `expr` |
-| `fn f(a: T) { body }` | ผลลัพธ์คือ type ของ expression สุดท้ายใน `body` |
-| `[a, b, c]` | `list` ของ type ที่ทุกตัวแปลงไปหาได้ |
-| `if c { a } else { b }`, arm ของ `match` | type ที่ทุก branch แปลงไปหาได้ |
-| `fn(x) { ... }` ที่เป็น argument | type ของ `x` มาจาก parameter ที่รับ lambda |
-| `t \|> derive(c = expr)` | ตารางเดิมบวก column `c` ที่มี type ของ `expr` |
+| `let x = expr` | the type of `expr` |
+| `fn f(a: T) { body }` | the result is the type of the last expression in `body` |
+| `[a, b, c]` | a `list` of the type that every element can convert to |
+| `if c { a } else { b }`, the arms of a `match` | the type that every branch can convert to |
+| `fn(x) { ... }` as an argument | the type of `x` comes from the parameter that receives the lambda |
+| `t \|> derive(c = expr)` | the original table plus a column `c` with the type of `expr` |
 
-กรณีที่ compiler ขอให้บอก type เอง:
+Cases where the compiler asks you to state the type yourself:
 
-- `null` ล้วน ๆ: `let x = null` ไม่รู้ว่าเป็น null ของอะไร → `let x: int? = null`
-- list ว่างหรือ map ว่าง: `let xs: list<int> = []`
-- ฟังก์ชัน recursive: ต้องเขียน `-> T`
-- lambda ที่ไม่ได้อยู่ในบริบทที่บอก type ของ parameter
+- A bare `null`: with `let x = null`, it does not know what the null is a null of → `let x: int? = null`
+- An empty list or an empty map: `let xs: list<int> = []`
+- A recursive function: you must write `-> T`
+- A lambda that is not in a context that gives the type of its parameter
 
-## การเปรียบเทียบและความเท่ากัน
+## Comparison and equality
 
-`==` และ `!=` ใช้กับตัวเลข `string` `bool` `date` `datetime` `duration` ส่วน `<` `<=` `>` `>=`
-ใช้ได้กับทุกชนิดในนั้นยกเว้น `bool` สองฝั่งต้องเป็นชนิดเดียวกันหรือแปลงหากันได้ตามตารางข้างบน
-(`1 == 1.0` ได้ `true`; `1 == "1"` เป็น compile error)
+`==` and `!=` work on numbers, `string`, `bool`, `date`, `datetime`, and `duration`. `<` `<=` `>`
+`>=` work on all of those types except `bool`. Both sides must be the same type or convertible to
+each other according to the table above (`1 == 1.0` gives `true`; `1 == "1"` is a compile error).
 
-list, record และ map เปรียบเทียบด้วย `==` ไม่ได้ ใน test ใช้ `assert_eq(a, b)` ซึ่งเทียบลึกทั้งโครงสร้าง
-รวมถึงตารางสองตาราง ดู [เครื่องมือ](07-tools.md#biggo-test)
+Lists, records, and maps cannot be compared with `==`. In tests, use `assert_eq(a, b)`, which
+compares the whole structure deeply, including two tables. See [Tools](07-tools.md#biggo-test).
 
-string เรียงตามลำดับ byte ของ UTF-8 (ตัวพิมพ์ใหญ่มาก่อนตัวพิมพ์เล็ก; ภาษาไทยเรียงตามรหัสอักขระ
-ไม่ใช่ตามพจนานุกรม)
+Strings sort by UTF-8 byte order (uppercase letters come before lowercase letters; Thai text sorts
+by character code, not in dictionary order).

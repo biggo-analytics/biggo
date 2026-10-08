@@ -1,87 +1,101 @@
-# แผนการพัฒนา biggo
+# biggo roadmap
 
-เอกสารนี้บอกว่า biggo วันนี้ทำอะไรได้ ยังขาดอะไร และจะทำอะไรต่อตามลำดับ
+This document says what biggo can do today, what it lacks, and what comes next, in order.
 
-- รุ่นปัจจุบันคือ **0.1.0** ซึ่งเป็นรุ่นแรก ตัวภาษาและคำสั่งยังเปลี่ยนได้โดยไม่รักษาความเข้ากันได้ย้อนหลัง
-  จนกว่าจะถึงรุ่น 1.0
-- รายการเรียงตามลำดับความสำคัญ **ไม่มีกำหนดวัน** และปรับได้ตามปัญหาที่ผู้ใช้เจอจริง
-- ทุกรายการคือสิ่งที่ **ยังไม่มี** ในโค้ดวันนี้ สิ่งที่มีแล้วอยู่ใน [README](README.md) และ [docs](docs)
+- The current version is **0.1.0**, the first release. Until 1.0, the language and the commands
+  can change without staying compatible with earlier versions.
+- Items are listed in order of priority. There are **no dates**, and the order can change with
+  the problems people actually run into.
+- Every item is something the code does **not** do today. What exists is described in the
+  [README](README.md) and in [docs](docs).
 
-## สารบัญ
+## Contents
 
-- [ตอนนี้อยู่ตรงไหน](#ตอนนี้อยู่ตรงไหน-010)
-- [หลักที่ใช้ตัดสินใจ](#หลักที่ใช้ตัดสินใจ)
-- [รุ่น 0.2: ติดตั้งง่าย ใช้ได้ทุกระบบ](#รุ่น-02-ติดตั้งง่าย-ใช้ได้ทุกระบบ)
-- [รุ่น 0.3: แหล่งข้อมูลมากขึ้น](#รุ่น-03-แหล่งข้อมูลมากขึ้น)
-- [รุ่น 0.4: engine เร็วขึ้น และรับข้อมูลใหญ่กว่า RAM](#รุ่น-04-engine-เร็วขึ้น-และรับข้อมูลใหญ่กว่า-ram)
-- [รุ่น 0.5: ภาษาที่เขียนครั้งเดียวใช้ซ้ำได้มากขึ้น](#รุ่น-05-ภาษาที่เขียนครั้งเดียวใช้ซ้ำได้มากขึ้น)
-- [เครื่องมือ](#เครื่องมือ-ทำคู่ไปกับทุกรุ่น)
-- [รุ่น 1.0: เสถียร](#รุ่น-10-เสถียร)
-- [ยังไม่อยู่ในแผน](#ยังไม่อยู่ในแผน)
-- [เสนอความเห็น](#เสนอความเห็น)
+- [Where things stand](#where-things-stand-010)
+- [Principles](#principles)
+- [0.2: Easy to install, works everywhere](#02-easy-to-install-works-everywhere)
+- [0.3: More data sources](#03-more-data-sources)
+- [0.4: A faster engine, and data larger than memory](#04-a-faster-engine-and-data-larger-than-memory)
+- [0.5: A language with more reuse](#05-a-language-with-more-reuse)
+- [Tooling](#tooling-alongside-every-release)
+- [1.0: Stable](#10-stable)
+- [Not planned for now](#not-planned-for-now)
+- [Feedback](#feedback)
 
-## ตอนนี้อยู่ตรงไหน (0.1.0)
+## Where things stand (0.1.0)
 
-| ส่วน | สิ่งที่มีแล้ว |
+| Area | What exists |
 | --- | --- |
-| ตัวภาษา | static typing ทั้งภาษา, ฟังก์ชัน, lambda, `match`, list, record, map, `import` |
-| ชนิดข้อมูล | `int` `float` `bool` `string` `date` `datetime` `duration` `decimal` และแบบ nullable ของทุกชนิด |
-| ตาราง | `where` `select` `derive` `group` + `agg` `join` (6 แบบ) `sort` `window` `pivot` `unpivot` `explode` `union` `distinct` และสถิติ (`corr` `linreg` `describe` `histogram`) |
-| แหล่งข้อมูล | CSV, Parquet, JSON Lines, SQLite ทั้งอ่านและเขียน |
-| engine | คำนวณทีละ column บน Apache Arrow, optimizer แบบกฎ, ขนานทุกขั้น, ผลลัพธ์เหมือนกันไม่ว่าใช้กี่ thread |
-| เครื่องมือ | `run` `repl` `check` `explain` `test` `fmt` `build` `lsp` และ extension ของ VS Code |
-| การทดสอบ | test อัตโนมัติ 125 ตัว ซึ่งรวมการรันโปรแกรมตัวอย่างทั้ง 94 อันในเอกสารแล้วเทียบผลกับที่เอกสารแสดง |
+| Language | Static typing throughout, functions, lambdas, `match`, lists, records, maps, `import` |
+| Types | `int` `float` `bool` `string` `date` `datetime` `duration` `decimal`, and a nullable form of each |
+| Tables | `where` `select` `derive` `group` + `agg` `join` (6 kinds) `sort` `window` `pivot` `unpivot` `explode` `union` `distinct`, and statistics (`corr` `linreg` `describe` `histogram`) |
+| Data sources | CSV, Parquet, JSON Lines, SQLite, for both reading and writing |
+| Engine | Column-at-a-time execution on Apache Arrow, a rule-based optimizer, every stage in parallel, the same result for any number of threads |
+| Tools | `run` `repl` `check` `explain` `test` `fmt` `build` `lsp`, and a VS Code extension |
+| Testing | 125 automated tests, one of which runs all 94 example programs in the documentation and compares their output with what the documentation shows |
 
-ข้อจำกัดหลักของรุ่นนี้ ซึ่งเป็นที่มาของแผนข้างล่าง:
+The main limitations of this release, which the plan below comes from:
 
-- ทดสอบบน macOS (Apple Silicon) เท่านั้น ยังไม่มี CI และยังไม่มีไฟล์ติดตั้งสำเร็จรูป ต้อง build เองด้วย Rust
-- extension ของ VS Code ถูก package และทดสอบ grammar แล้ว แต่ยังไม่เคยรันใน VS Code จริง
-- ฐานข้อมูลที่ต่อได้มีแต่ SQLite และ CSV คั่นด้วย `,` ได้อย่างเดียว
-- ข้อมูลของ `sort`, `window`, ฝั่งขวาของ `join` และ `group` ที่กลุ่มเยอะ ต้องพอดีกับ RAM
-- บางงานยังช้ากว่าคู่เทียบ: อ่าน Parquet ช้ากว่า DuckDB และ Polars 2.6 เท่า, จัดกลุ่ม 1 ล้านกลุ่มช้ากว่า
-  Polars 2.7 เท่า, อ่าน JSON ช้ากว่า DuckDB 2.2 เท่า (ตัวเลขและวิธีวัดอยู่ใน
-  [docs/09-performance.md](docs/09-performance.md))
-- ฟังก์ชันที่เขียนเองใช้กับ column ไม่ได้ และฟังก์ชันของ string ยังมีน้อย
+- It has been tested on macOS (Apple Silicon) only. There is no CI and there are no prebuilt
+  binaries: you build it yourself with Rust.
+- The VS Code extension has been packaged and its grammar tested, but it has never been run
+  inside VS Code.
+- SQLite is the only database, and CSV files can only be comma-separated.
+- The data of a `sort`, a `window`, the right side of a `join`, or a `group` with many groups has
+  to fit in RAM.
+- Some work is slower than in other engines: reading Parquet is 2.6 times slower than DuckDB and
+  Polars, grouping into 1 million groups is 2.7 times slower than Polars, and reading JSON is 2.2
+  times slower than DuckDB (the numbers and the method are in
+  [docs/09-performance.md](docs/09-performance.md)).
+- A user-defined function cannot be used on a column, and there are few string functions.
 
-## หลักที่ใช้ตัดสินใจ
+## Principles
 
-งานใหม่ทุกชิ้นต้องไม่ทำให้ข้อใดข้างล่างเสียไป เมื่อสองข้อขัดกัน ข้อที่อยู่บนชนะ
+No new work may break any of these. When two of them conflict, the one listed first wins.
 
-1. **ผิดแล้วรู้ก่อนรัน** ชื่อและชนิดของทุก column ต้องตรวจได้ตอน compile ความสามารถใหม่ที่ทำให้ type
-   ของตารางรู้ได้เฉพาะตอนรันจะไม่ถูกเพิ่มเข้าตัวภาษาหลัก
-2. **ผลลัพธ์ทำซ้ำได้** query เดียวกันบนข้อมูลเดียวกันให้ผลเหมือนกันทุก bit ไม่ว่าใช้กี่ thread
-3. **ความเร็วของ engine มาก่อนความสะดวกในการเขียน engine** เมื่อต้องเลือก
-4. **เอกสารต้องจริง** ตัวอย่างทุกอันในเอกสารถูกรันตอน `cargo test` ความสามารถใหม่จึงมาพร้อมเอกสาร
-   และ test เสมอ
-5. **ไฟล์เดียวจบ** ตัวรัน, formatter, ตัวรัน test และ language server อยู่ใน executable เดียว
-   ไม่ต้องติดตั้งอย่างอื่นเพิ่ม
+1. **Errors are caught before the program runs.** The name and type of every column must be
+   checkable at compile time. A feature that makes the type of a table known only at run time
+   does not go into the core language.
+2. **Results are reproducible.** The same query on the same data gives the same result, bit for
+   bit, for any number of threads.
+3. **Engine speed comes before convenience in writing the engine**, when the two pull apart.
+4. **The documentation is true.** Every example in it is run by `cargo test`, so a new feature
+   always arrives with documentation and tests.
+5. **One file does it all.** The runner, the formatter, the test runner and the language server
+   are one executable, with nothing else to install.
 
-## รุ่น 0.2: ติดตั้งง่าย ใช้ได้ทุกระบบ
+## 0.2: Easy to install, works everywhere
 
-**เป้าหมาย:** คนที่ไม่มี Rust ติดตั้ง biggo แล้วใช้กับไฟล์ข้อมูลของตัวเองได้ บน Linux, macOS และ Windows
+**Goal:** someone without Rust can install biggo and use it on their own data files, on Linux,
+macOS and Windows.
 
-ติดตั้งและความเข้ากันได้
+Installation and compatibility
 
-- [ ] CI บน GitHub Actions: รัน `cargo test`, `cargo clippy` และ `cargo fmt --check` บน Linux, macOS
-      และ Windows ทุกครั้งที่ push หรือเปิด pull request
-- [ ] ตรวจและแก้พฤติกรรมที่ต่างกันตามระบบ เช่น path ของ Windows และไฟล์ที่ขึ้นบรรทัดแบบ CRLF
-- [ ] ไฟล์ติดตั้งสำเร็จรูปใน GitHub Releases สำหรับ macOS (arm64, x86_64), Linux (x86_64, arm64)
-      และ Windows (x86_64) พร้อมสคริปต์ติดตั้งและ Homebrew
-- [ ] extension ของ VS Code: ลองใน VS Code จริง แก้สิ่งที่พบ แล้วเผยแพร่ใน Marketplace และ Open VSX
-- [ ] ลองการตั้งค่า Neovim และ Helix ที่เขียนไว้ใน [docs/07-tools.md](docs/07-tools.md) ให้ใช้ได้จริง
+- [ ] CI on GitHub Actions: run `cargo test`, `cargo clippy` and `cargo fmt --check` on Linux,
+      macOS and Windows for every push and pull request
+- [ ] Find and fix behavior that differs between systems, such as Windows paths and files with
+      CRLF line endings
+- [ ] Prebuilt binaries in GitHub Releases for macOS (arm64, x86_64), Linux (x86_64, arm64) and
+      Windows (x86_64), with an install script and a Homebrew formula
+- [ ] The VS Code extension: try it in VS Code, fix what turns up, then publish it to the
+      Marketplace and Open VSX
+- [ ] Try the Neovim and Helix settings written in [docs/07-tools.md](docs/07-tools.md) and make
+      them work
 
-ช่องว่างที่เจอทันทีเมื่อใช้กับข้อมูลจริง
+Gaps you hit right away with real data
 
-- [ ] โปรแกรมรับ argument และ environment variable ได้ เพื่อให้สคริปต์เดียวใช้ได้กับหลายไฟล์หลายช่วงเวลา
-- [ ] ฟังก์ชันของ string: ตัดช่วง (substring), แทนที่, แยก (split), เติมให้ครบความยาว, หาตำแหน่ง
-      และ regular expression (ค้น, ดึงส่วนที่ตรง, แทนที่)
-- [ ] ตัวเลือกของ CSV: ตัวคั่นอื่น (tab, `;`, `|`), ไฟล์ที่ไม่มีบรรทัดหัว, กำหนดข้อความที่หมายถึง null
-      และ encoding อื่นนอกจาก UTF-8 (เช่น TIS-620 / Windows-874 ที่พบบ่อยในข้อมูลไทย)
-- [ ] JSON ที่ทั้งไฟล์เป็น array เดียว (`[{...}, {...}]`) นอกเหนือจาก JSON Lines
-- [ ] `biggo infer data.csv`: อ่านตัวอย่างข้อมูลแล้วพิมพ์การประกาศ `type` ให้คัดลอกไปใช้
-      แทนการพิมพ์ชนิดของทุก column ด้วยมือ
+- [ ] Programs can read command-line arguments and environment variables, so one script works
+      for many files and many periods
+- [ ] String functions: substring, replace, split, pad, find a position, and regular expressions
+      (match, extract, replace)
+- [ ] CSV options: other separators (tab, `;`, `|`), files with no header line, choosing which
+      text means null, and encodings other than UTF-8 (such as TIS-620 / Windows-874, which is
+      common in Thai data)
+- [ ] JSON files that are one array (`[{...}, {...}]`), in addition to JSON Lines
+- [ ] `biggo infer data.csv`: read a sample of the data and print a `type` declaration to copy,
+      instead of typing the type of every column by hand
 
-รูปแบบที่เสนอ (อาจเปลี่ยน):
+A proposed form (it may change):
 
 ```text
 // report.bgo
@@ -90,117 +104,140 @@ let sales = read_csv<Sale>("sales.tsv", delimiter = "\t")
 sales |> where(starts_with(to_string(date), month)) |> print()
 ```
 
-**เสร็จเมื่อ:** CI ผ่านทั้งสามระบบ, ติดตั้งได้ด้วยคำสั่งเดียวโดยไม่ต้องมี Rust
-และ extension ติดตั้งจาก Marketplace ได้
+**Done when:** CI passes on all three systems, biggo installs with one command and no Rust, and
+the extension installs from the Marketplace.
 
-## รุ่น 0.3: แหล่งข้อมูลมากขึ้น
+## 0.3: More data sources
 
-**เป้าหมาย:** อ่านข้อมูลจากที่ที่มันอยู่จริง โดยไม่ต้อง export เป็น CSV ก่อน
+**Goal:** read data from where it actually lives, without exporting it to CSV first.
 
-- [ ] PostgreSQL และ MySQL ผ่าน `read_sql` / `write_sql` ด้วย connection URL
-      โดยรหัสผ่านมาจาก environment variable ไม่เขียนลงในโปรแกรม
-- [ ] ส่ง `where`, `select` และ `take` ของ biggo เข้าไปเป็น SQL ให้ฐานข้อมูลทำ (pushdown)
-      รวมถึง SQLite ซึ่งวันนี้กรองหลังจากอ่านแถวออกมาแล้ว
-- [ ] Excel (`.xlsx`) ทั้งอ่านและเขียน
-- [ ] หลายไฟล์ในคำสั่งเดียว เช่น `read_csv<T>("logs/2026-*.csv")` และโฟลเดอร์ Parquet ที่แบ่ง partition
-- [ ] ไฟล์บีบอัด: `.csv.gz`, `.json.gz`, `.zst`
-- [ ] อ่านจาก `https://` และ object storage แบบ S3 โดยอ่าน Parquet เฉพาะช่วง byte ที่ query ใช้
-- [ ] Arrow IPC (Feather) เพื่อส่งข้อมูลให้ Python และ R โดยไม่ต้องแปลงรูปแบบ
-- [ ] column แบบซ้อน: ให้ `list<T>` และ record เป็น column ได้ เพื่ออ่าน JSON และ Parquet ที่มีโครงสร้างซ้อน
-      (วันนี้ column เป็นได้เฉพาะชนิดพื้นฐาน และ `explode` ทำงานกับ string ที่คั่นด้วยตัวคั่น)
+- [ ] PostgreSQL and MySQL through `read_sql` / `write_sql` with a connection URL, where the
+      password comes from an environment variable and is never written in the program
+- [ ] Push biggo's `where`, `select` and `take` into the SQL so the database does that work.
+      This includes SQLite, where today the filter runs after the rows have been read out
+- [ ] Excel (`.xlsx`), for both reading and writing
+- [ ] Many files in one call, such as `read_csv<T>("logs/2026-*.csv")`, and partitioned Parquet
+      directories
+- [ ] Compressed files: `.csv.gz`, `.json.gz`, `.zst`
+- [ ] Reading from `https://` and S3-style object storage, fetching only the byte ranges of a
+      Parquet file that the query uses
+- [ ] Arrow IPC (Feather), to hand data to Python and R without converting it
+- [ ] Nested columns: let `list<T>` and records be columns, to read JSON and Parquet with nested
+      structure (today a column can only have a basic type, and `explode` works on a string of
+      separated values)
 
-**เสร็จเมื่อ:** ทุกแหล่งใหม่มี test แบบไปกลับ (เขียนแล้วอ่านกลับได้ค่าเดิมครบทุกชนิดข้อมูล)
-แบบเดียวกับที่สี่รูปแบบปัจจุบันมี และมีหน้าเอกสารพร้อมตัวอย่างที่รันได้
+**Done when:** every new source has a round-trip test (write, read back, and get the same values
+for every data type), as the four current formats do, and a documentation page with examples
+that run.
 
-## รุ่น 0.4: engine เร็วขึ้น และรับข้อมูลใหญ่กว่า RAM
+## 0.4: A faster engine, and data larger than memory
 
-**เป้าหมาย:** ปิดช่องว่างกับ DuckDB และ Polars ในงานที่ยังแพ้ชัดเจน และไม่ล้มเมื่อข้อมูลใหญ่กว่าหน่วยความจำ
+**Goal:** close the gap with DuckDB and Polars where biggo clearly loses today, and stop failing
+when the data is larger than memory.
 
-| งาน | วันนี้ (5 ล้านแถว, M1 Pro) | เป้า |
+| Work | Today (5 million rows, M1 Pro) | Target |
 | --- | --- | --- |
-| Parquet: ข้าม row group ด้วยสถิติ min/max และถอดรหัสเฉพาะแถวที่ผ่านตัวกรอง | ช้ากว่า DuckDB และ Polars 2.6 เท่า | ต่างไม่เกิน 1.5 เท่า |
-| `group` ที่กลุ่มเยอะ: ทางลัดเมื่อ key เป็น `int` หรือ `string` ตัวเดียว แทนการเข้ารหัส key เป็น byte ทุกครั้ง | ช้ากว่า Polars 2.7 เท่า | ต่างไม่เกิน 1.5 เท่า |
-| JSON: ตัวอ่านของ biggo เองแทนตัวอ่านทั่วไปของ Arrow | ช้ากว่า DuckDB 2.2 เท่า | ต่างไม่เกิน 1.5 เท่า |
-| VM: ลดต้นทุนของการเรียกฟังก์ชันและ lambda | ช้ากว่า CPython 1.0–1.5 เท่า | ไม่ช้ากว่า CPython ในทั้งสามโปรแกรมวัด |
+| Parquet: skip row groups using their min/max statistics, and decode only the rows that pass the filter | 2.6 times slower than DuckDB and Polars | Within 1.5 times |
+| `group` with many groups: a fast path when the key is a single `int` or `string`, instead of encoding the key as bytes every time | 2.7 times slower than Polars | Within 1.5 times |
+| JSON: biggo's own reader in place of Arrow's general one | 2.2 times slower than DuckDB | Within 1.5 times |
+| VM: make function and lambda calls cheaper | 1.0 to 1.5 times slower than CPython | Not slower than CPython on any of the three benchmark programs |
 
-- [ ] `join`: สร้าง hash table แบบขนาน และเลือกฝั่งที่เล็กกว่าเป็นฝั่งสร้างให้เอง
-      (วันนี้สร้างบน thread เดียว และผู้เขียนต้องวางตารางเล็กไว้ทางขวา)
-- [ ] optimizer ที่ใช้สถิติ: จำนวนแถวและ min/max จาก metadata ของไฟล์ เพื่อเลือกลำดับของ join
-- [ ] ข้อมูลใหญ่กว่า RAM: `sort` แบบ external, `group` และ `join` ที่เขียนลงดิสก์ชั่วคราวเมื่อเกินเพดาน
-      และตั้งเพดานหน่วยความจำได้
-- [ ] ตารางที่ถูกใช้มากกว่าหนึ่งครั้งอ่านไฟล์ครั้งเดียวโดยอัตโนมัติ (วันนี้ต้องเรียก `collect` เอง)
-- [ ] SQLite: อ่านแบบขนานโดยแบ่งช่วงของ rowid
-- [ ] benchmark ที่กว้างขึ้น: ชุด query ของ TPC-H, ข้อมูลใหญ่กว่า RAM, วัดบน Linux
-      และรันใน CI เพื่อจับความเร็วที่ถดถอย
+- [ ] `join`: build the hash table in parallel, and pick the smaller side as the build side
+      automatically (today it is built on one thread, and the author has to put the small table
+      on the right)
+- [ ] An optimizer that uses statistics: row counts and min/max from file metadata, to choose the
+      order of joins
+- [ ] Data larger than RAM: an external `sort`, a `group` and a `join` that spill to disk past a
+      limit, and a setting for the memory limit
+- [ ] A table that is used more than once reads its file once, automatically (today you have to
+      call `collect` yourself)
+- [ ] SQLite: read in parallel by splitting the rowid range
+- [ ] Wider benchmarks: the TPC-H queries, data larger than RAM, measurements on Linux, and a run
+      in CI to catch speed regressions
 
-ทุกข้อในรุ่นนี้ต้องคงหลักข้อ 2 ไว้: เส้นทางเร็วแต่ละเส้นมี test ที่ยืนยันว่าผลเท่ากับเส้นทางเดิมทุกค่า
-แบบเดียวกับที่การเรียงแบบขนานและฟังก์ชันใน VM มีอยู่แล้ว
+Everything in this release has to keep principle 2. Each fast path gets a test that confirms it
+gives the same result as the plain path for every value, as the parallel sort and the VM's
+scalar functions already have.
 
-**เสร็จเมื่อ:** ตัวเลขในตารางถึงเป้าเมื่อวัดด้วย `bench/run.py` และ `bench/compare.py`
-และ query ที่เรียงข้อมูลใหญ่กว่า RAM สองเท่ารันจนจบได้
+**Done when:** the numbers in the table reach their targets when measured with `bench/run.py`
+and `bench/compare.py`, and a query that sorts data twice the size of RAM runs to the end.
 
-## รุ่น 0.5: ภาษาที่เขียนครั้งเดียวใช้ซ้ำได้มากขึ้น
+## 0.5: A language with more reuse
 
-**เป้าหมาย:** ย้ายตรรกะที่ใช้ซ้ำไปไว้ในฟังก์ชันและไฟล์ที่ import ได้ โดยไม่เสียการตรวจ type และไม่ช้าลง
+**Goal:** move repeated logic into functions and imported files, without losing type checking
+and without getting slower.
 
-- [ ] **ฟังก์ชันที่เขียนเองใช้กับ column ได้** วันนี้ `derive(m = margin(price, cost))` เป็น compile error
-      เพราะใน expression ของ column ใช้ได้แต่ตัวดำเนินการและ built-in แผนคือแทรกตัวฟังก์ชันเข้าไปในแผนของ
-      query ตอน compile จึงเร็วเท่ากับเขียน expression ตรง ๆ
-- [ ] **ฟังก์ชันที่รับตารางซึ่งมี "อย่างน้อย" column ที่ระบุ** วันนี้ parameter แบบ `table<{region: string, qty: int}>`
-      ไม่รับตารางที่มี column เกินมา ทำให้เขียน pipeline ที่ใช้ซ้ำกับหลายตารางไม่ได้
-- [ ] generic function ที่เขียนเอง เช่น `fn first<T>(xs: list<T>) -> T?`
-- [ ] `import` แบบมีชื่อ: `import "lib/geo.bgo" as geo` แล้วเรียก `geo.area(...)`
-      (วันนี้ชื่อจากทุกไฟล์อยู่รวมกันในที่เดียว)
-- [ ] `match` ที่ครอบคลุมขึ้น: ช่วงของค่า, เงื่อนไขประกอบ (guard) และการแกะ field ของ record
-      (วันนี้ pattern เป็นได้แค่ค่าคงที่และ `_`)
-- [ ] แทรกค่าในข้อความ (string interpolation)
-- [ ] time zone ของ `datetime` และ `decimal` ที่เลือกจำนวนตำแหน่งทศนิยมได้ (วันนี้ตายตัวที่ 6 ตำแหน่ง)
-- [ ] aggregate ที่เขียนเอง
-- [ ] `pivot` ที่หาค่าของ column เองตอนรัน สำหรับใช้ใน REPL ซึ่งผลลัพธ์ถูกพิมพ์เลยและไม่ถูกส่งต่อ
-      (ในโปรแกรมยังต้องระบุค่าตามหลักข้อ 1)
+- [ ] **User-defined functions on columns.** Today `derive(m = margin(price, cost))` is a compile
+      error, because a column expression can use only operators and built-in functions. The plan
+      is to inline the function's body into the query plan at compile time, so it is as fast as
+      writing the expression out.
+- [ ] **Functions that take a table with "at least" the named columns.** Today a parameter of
+      type `table<{region: string, qty: int}>` rejects a table that has extra columns, so you
+      cannot write a pipeline once and reuse it across tables.
+- [ ] User-defined generic functions, such as `fn first<T>(xs: list<T>) -> T?`
+- [ ] Named imports: `import "lib/geo.bgo" as geo`, then `geo.area(...)` (today the names of
+      every file share one namespace)
+- [ ] A fuller `match`: ranges of values, guards, and taking a record's fields apart (today a
+      pattern can only be a literal or `_`)
+- [ ] String interpolation
+- [ ] Time zones for `datetime`, and a `decimal` with a chosen number of decimal places (today it
+      is fixed at 6)
+- [ ] User-defined aggregates
+- [ ] A `pivot` that finds the column values at run time, for the REPL, where the result is
+      printed at once and not passed on (in a program the values still have to be listed, by
+      principle 1)
 
-**เสร็จเมื่อ:** ตัวอย่างในเอกสารที่ต้องเขียน expression เดิมซ้ำหลายที่ ถูกเขียนใหม่ด้วยฟังก์ชันได้
-และ benchmark เดิมไม่ช้าลง
+**Done when:** the documentation examples that repeat one expression in several places can be
+rewritten with a function, and the existing benchmarks are no slower.
 
-## เครื่องมือ (ทำคู่ไปกับทุกรุ่น)
+## Tooling (alongside every release)
 
-- [ ] language server: autocomplete (รวมชื่อ column ที่มีอยู่ ณ จุดนั้นของ pipeline ซึ่งตัวตรวจ type รู้อยู่แล้ว),
-      go to definition, rename และการแสดง type ของตารางระหว่างขั้นของ pipeline
-- [ ] REPL: แก้ไขบรรทัดด้วยปุ่มลูกศรและเรียกคำสั่งก่อนหน้า
-- [ ] `biggo test`: เลือกรัน test ตามชื่อ และรันหลายไฟล์พร้อมกัน
-- [ ] ผลลัพธ์เป็นกราฟ: ฟังก์ชันที่เขียนกราฟเป็นไฟล์ SVG หรือ HTML จากตาราง
-- [ ] Jupyter kernel สำหรับใช้ biggo ใน notebook
-- [ ] playground บนเว็บ (compile เป็น WebAssembly) ให้ลองภาษาได้โดยไม่ต้องติดตั้ง
-- [ ] เอกสารภาษาอังกฤษ (วันนี้เอกสารทั้งหมดเป็นภาษาไทย)
+- [ ] Language server: autocomplete (including the column names available at that point in a
+      pipeline, which the type checker already knows), go to definition, rename, and showing the
+      type of the table between the stages of a pipeline
+- [ ] REPL: line editing with the arrow keys, and recalling earlier input
+- [ ] `biggo test`: choose tests by name, and run several files at once
+- [ ] Charts: functions that write a chart from a table as an SVG or HTML file
+- [ ] A Jupyter kernel, to use biggo in notebooks
+- [ ] A web playground (compiled to WebAssembly), to try the language without installing it
 
-## รุ่น 1.0: เสถียร
+## 1.0: Stable
 
-**เป้าหมาย:** ใช้ในงานประจำได้โดยไม่ต้องกลัวว่ารุ่นถัดไปจะทำให้โปรแกรมเดิมพัง
+**Goal:** use biggo for routine work without worrying that the next version breaks existing
+programs.
 
-- [ ] ตรึงตัวภาษา: โปรแกรมที่ผ่าน `biggo check` ใน 1.0 ต้องผ่านและให้ผลเดิมในทุกรุ่น 1.x
-- [ ] นโยบายการเลิกใช้: สิ่งที่จะถูกถอดต้องมีคำเตือนล่วงหน้าอย่างน้อยหนึ่งรุ่น
-- [ ] fuzzing ของ lexer, parser และตัวตรวจ type และการเทียบผลของ query ที่สุ่มสร้างกับ DuckDB
-      เพื่อหาผลลัพธ์ที่ผิด
-- [ ] ทบทวนความปลอดภัยของส่วนที่แตะโลกภายนอก: การต่อฐานข้อมูล, path ของไฟล์ และ executable ที่ `biggo build` สร้าง
-- [ ] รหัสประจำ error แต่ละชนิด พร้อมหน้าอธิบายสาเหตุและวิธีแก้
+- [ ] Freeze the language: a program that passes `biggo check` in 1.0 must pass, and give the
+      same result, in every 1.x release
+- [ ] A deprecation policy: anything to be removed gets a warning at least one release ahead
+- [ ] Fuzzing of the lexer, the parser and the type checker, and comparing the results of
+      randomly generated queries with DuckDB, to find wrong results
+- [ ] A security review of the parts that touch the outside world: database connections, file
+      paths, and the executables that `biggo build` produces
+- [ ] A code for each kind of error, with a page that explains the cause and the fix
 
-## ยังไม่อยู่ในแผน
+## Not planned for now
 
-สิ่งเหล่านี้ไม่ได้ถูกปฏิเสธถาวร แต่จะไม่ทำจนกว่าจะมีกรณีใช้งานจริงที่ทำด้วยสิ่งที่มีอยู่ไม่ได้
+None of these is rejected for good, but none will be done until there is a real use that cannot
+be met with what exists.
 
-- **การทำงานกระจายหลายเครื่อง** biggo ตั้งใจใช้เครื่องเดียวให้เต็มที่
-- **ลูป `for` / `while` และตัวแปรที่แก้ค่าได้** ตัวภาษาใช้ `map` `filter` `fold` `each` และ recursion
-  และค่าทุกค่าแก้ไม่ได้ ซึ่งทำให้ตรวจ type และขนานงานได้ง่าย
-- **JIT ของ VM** งานหนักควรอยู่ในตารางซึ่ง engine ทำเร็วอยู่แล้ว VM มีไว้ประกอบ pipeline
-- **การเป็นภาษาใช้งานทั่วไป** เช่น เขียน web server หรือโปรแกรมที่มีหน้าจอ
+- **Running across several machines.** biggo aims to use one machine fully.
+- **`for` / `while` loops and variables that can be reassigned.** The language uses `map`,
+  `filter`, `fold`, `each` and recursion, and every value is immutable, which keeps type checking
+  and parallel execution simple.
+- **A JIT for the VM.** Heavy work belongs in tables, which the engine already runs fast. The VM
+  is there to put pipelines together.
+- **Being a general-purpose language**, for writing web servers or programs with a user
+  interface, for example.
 
-## เสนอความเห็น
+## Feedback
 
-พบ bug หรืออยากได้ความสามารถใด เปิด issue ได้ที่ <https://github.com/biggo-analytics/biggo/issues>
+Found a bug, or want a feature? Open an issue at <https://github.com/biggo-analytics/biggo/issues>.
 
-- **bug:** แนบโปรแกรม `.bgo` ที่สั้นที่สุดที่ทำให้เกิดปัญหา ข้อมูลตัวอย่างไม่กี่แถว ผลที่ได้ และผลที่คาดไว้
-- **ความสามารถใหม่:** เล่างานที่กำลังทำและสิ่งที่ติดขัด มากกว่าเสนอรูปแบบคำสั่ง
-  และบอกว่าตรงกับหัวข้อใดในแผนนี้ถ้ามี
+- **Bugs:** attach the shortest `.bgo` program that shows the problem, a few rows of sample data,
+  what you got, and what you expected.
+- **Features:** describe the work you are doing and where you got stuck, rather than proposing a
+  syntax, and say which part of this roadmap it belongs to, if any.
 
-สำหรับผู้ที่อยากแก้โค้ดเอง [docs/08-architecture.md](docs/08-architecture.md) อธิบายโครงสร้างของ compiler
-และ engine พร้อมขั้นตอนการเพิ่ม built-in และ operation ของตาราง
+If you want to change the code yourself, [docs/08-architecture.md](docs/08-architecture.md)
+explains how the compiler and the engine are built, and the steps for adding a built-in function
+or a table operation.

@@ -1,36 +1,37 @@
-# built-in reference
+# Built-in reference
 
-รายการฟังก์ชันสำเร็จรูปทั้งหมดของ biggo จัดตามหมวด รายละเอียดเชิงอธิบายอยู่ในหน้าอื่น
-หน้านี้ไว้เปิดหาเร็ว ๆ
+A list of all of biggo's built-in functions, organized by category. The explanatory detail is on
+the other pages. This page is for quick lookup.
 
-สัญลักษณ์ในตาราง: *number* คือ `int` `float` หรือ `decimal`; *moment* คือ `date` หรือ `datetime`;
-*any* คือชนิดใดก็ได้ที่เป็น column ได้ ทุกฟังก์ชันของค่าเดี่ยวส่งต่อ null: ถ้า argument เป็น null
-ผลลัพธ์เป็น null (ยกเว้น `is_null`)
+Notation in the tables: *number* means `int`, `float` or `decimal`; *moment* means `date` or
+`datetime`; *any* means any type that can be a column. Every scalar function propagates null: if an
+argument is null, the result is null (except `is_null`).
 
-built-in ถูกเรียกได้อย่างเดียว ใช้เป็นค่าไม่ได้ (`map(xs, upper)` ไม่ได้ ต้องเขียน
-`map(xs, fn(s) { upper(s) })`) และตั้งชื่อฟังก์ชันของตัวเองซ้ำกับ built-in ไม่ได้
+A built-in function can only be called. It cannot be used as a value (`map(xs, upper)` does not
+work; write `map(xs, fn(s) { upper(s) })` instead), and you cannot give your own function the same
+name as a built-in function.
 
-## ฟังก์ชันของค่าเดี่ยว
+## Scalar functions
 
-ใช้ได้ทั้งกับค่าทั่วไปและใน expression ของ column (ซึ่งคำนวณทั้ง column ในคราวเดียว)
+These work both on ordinary values and in column expressions (which compute a whole column at once).
 
 ### null
 
-| ฟังก์ชัน | ผลลัพธ์ |
+| Function | Result |
 | --- | --- |
-| `is_null(x)` | `true` ถ้า `x` เป็น null — ได้ `bool` ที่ไม่เป็น null เสมอ |
-| `a ?? b` | (ตัวดำเนินการ) `a` ถ้าไม่เป็น null ไม่อย่างนั้น `b` |
+| `is_null(x)` | `true` if `x` is null; always returns a non-null `bool` |
+| `a ?? b` | (operator) `a` if it is not null, otherwise `b` |
 
-### ตัวเลข
+### Numbers
 
-| ฟังก์ชัน | รับ | ได้ | ความหมาย |
+| Function | Takes | Returns | Meaning |
 | --- | --- | --- | --- |
-| `abs(x)` | number | ชนิดเดิม | ค่าสัมบูรณ์ |
-| `round(x)` | number | `float` (`decimal` ถ้ารับ `decimal`) | ปัดเป็นจำนวนเต็ม ครึ่งปัดออกจากศูนย์ |
-| `round(x, digits)` | number, `int` | เหมือนข้างบน | ปัดให้เหลือ `digits` ตำแหน่ง; ค่าลบปัดหลักหน้าจุด |
-| `floor(x)` | number | `float` | ปัดลง |
-| `ceil(x)` | number | `float` | ปัดขึ้น |
-| `sqrt(x)` | number | `float` | รากที่สอง (`NaN` ถ้า `x` ติดลบ) |
+| `abs(x)` | number | same type | Absolute value |
+| `round(x)` | number | `float` (`decimal` if given a `decimal`) | Rounds to a whole number; halves round away from zero |
+| `round(x, digits)` | number, `int` | same as above | Rounds to `digits` decimal places; a negative value rounds digits before the decimal point |
+| `floor(x)` | number | `float` | Rounds down |
+| `ceil(x)` | number | `float` | Rounds up |
+| `sqrt(x)` | number | `float` | Square root (`NaN` if `x` is negative) |
 
 ```biggo
 print(abs(-3), abs(-2.5), abs(-1.5d))
@@ -44,19 +45,19 @@ print(floor(2.7), ceil(2.1), floor(-2.7), sqrt(2), sqrt(-1))
 2.0 3.0 -3.0 1.4142135623730951 NaN
 ```
 
-`digits` ของ `round` ต้องเป็นค่าของโปรแกรม ไม่ใช่ column
+The `digits` argument of `round` must be a program value, not a column.
 
 ### string
 
-| ฟังก์ชัน | ได้ | ความหมาย |
+| Function | Returns | Meaning |
 | --- | --- | --- |
-| `length(s)` | `int` | จำนวนอักขระ (Unicode code point) |
-| `lower(s)` `upper(s)` | `string` | ตัวพิมพ์เล็ก / ใหญ่ |
-| `trim(s)` | `string` | ตัดช่องว่างหัวท้าย |
-| `contains(s, part)` | `bool` | `s` มี `part` อยู่ข้างใน |
-| `starts_with(s, part)` | `bool` | `s` ขึ้นต้นด้วย `part` |
-| `ends_with(s, part)` | `bool` | `s` ลงท้ายด้วย `part` |
-| `a + b` | `string` | (ตัวดำเนินการ) ต่อ string |
+| `length(s)` | `int` | Number of characters (Unicode code points) |
+| `lower(s)` `upper(s)` | `string` | Lowercase / uppercase |
+| `trim(s)` | `string` | Removes whitespace at both ends |
+| `contains(s, part)` | `bool` | `s` has `part` inside it |
+| `starts_with(s, part)` | `bool` | `s` starts with `part` |
+| `ends_with(s, part)` | `bool` | `s` ends with `part` |
+| `a + b` | `string` | (operator) Concatenates strings |
 
 ```biggo
 print(length("biggo"), length("ภาษาไทย"), upper("Abc"), lower("Abc"), trim("  a b  ") + "|")
@@ -68,16 +69,17 @@ print(contains("biggo", "gg"), starts_with("biggo", "big"), ends_with("biggo", "
 true true false
 ```
 
-การค้นหาเป็นแบบตรงตัว แยกตัวพิมพ์เล็ก/ใหญ่ ยังไม่มี regular expression, การตัด substring หรือการแทนที่
+The second `length` call in the example takes Thai text, which has 7 characters. Search is literal
+and case-sensitive. There are no regular expressions, substring extraction or replacement yet.
 
-### วันที่และเวลา
+### Dates and times
 
-| ฟังก์ชัน | รับ | ได้ | ความหมาย |
+| Function | Takes | Returns | Meaning |
 | --- | --- | --- | --- |
-| `year(d)` `month(d)` `day(d)` | moment | `int` | ปี, เดือน (1–12), วันของเดือน |
-| `hour(t)` `minute(t)` `second(t)` | moment | `int` | ชั่วโมง (0–23), นาที, วินาที; ของ `date` คือ 0 |
-| `days(n)` `hours(n)` `minutes(n)` `seconds(n)` | `int` หรือ `float` | `duration` | ช่วงเวลายาว `n` หน่วย |
-| `total_seconds(d)` | `duration` | `float` | ความยาวเป็นวินาที |
+| `year(d)` `month(d)` `day(d)` | moment | `int` | Year, month (1–12), day of the month |
+| `hour(t)` `minute(t)` `second(t)` | moment | `int` | Hour (0–23), minute, second; for a `date` these are 0 |
+| `days(n)` `hours(n)` `minutes(n)` `seconds(n)` | `int` or `float` | `duration` | A span of time `n` units long |
+| `total_seconds(d)` | `duration` | `float` | Length in seconds |
 
 ```biggo
 let t = @2026-12-25T18:30:45
@@ -92,40 +94,40 @@ print(t + days(7), t - @2026-01-01, total_seconds(t - @2026-12-25) / 3600)
 2027-01-01T18:30:45 358d 18:30:45 18.5125
 ```
 
-### การแปลงชนิด
+### Conversions
 
-| ฟังก์ชัน | รับ | ได้ |
+| Function | Takes | Returns |
 | --- | --- | --- |
-| `to_int(x)` | `int` `float` `decimal` `string` `bool` | `int` (ตัดเศษทิ้ง) |
+| `to_int(x)` | `int` `float` `decimal` `string` `bool` | `int` (the fraction is dropped) |
 | `to_float(x)` | `int` `float` `decimal` `string` | `float` |
 | `to_decimal(x)` | `int` `float` `decimal` `string` | `decimal` |
 | `to_string(x)` | any | `string` |
 | `to_date(x)` | `string` `date` `datetime` | `date` |
 | `to_datetime(x)` | `string` `date` `datetime` | `datetime` |
 
-string ที่แปลงไม่ได้ทำให้โปรแกรมหยุดด้วย error รายละเอียดและตัวอย่างอยู่ใน
-[ระบบ type](03-types.md#การแปลงชนิดด้วยฟังก์ชัน)
+A string that cannot be converted stops the program with an error. Details and examples are in
+[The type system](03-types.md#conversion-functions).
 
-## aggregate
+## Aggregate
 
-ใช้ภายใน `agg(...)`, `pivot(...)` และ (ยกเว้นสี่ตัวสุดท้าย) ภายใน `window(...)`
-ย่อค่าของกลุ่มเหลือค่าเดียว ข้าม null
+Used inside `agg(...)`, `pivot(...)` and (except the last four) inside `window(...)`.
+They reduce the values of a group to a single value, and skip nulls.
 
-| ฟังก์ชัน | รับ | ได้ |
+| Function | Takes | Returns |
 | --- | --- | --- |
-| `count()` | — | `int` จำนวนแถว |
-| `count(x)` | any | `int` จำนวนค่าที่ไม่เป็น null |
-| `count_distinct(x)` | any | `int` จำนวนค่าที่ต่างกัน |
-| `sum(x)` | number, `duration` | ชนิดเดิม |
+| `count()` | — | `int` number of rows |
+| `count(x)` | any | `int` number of non-null values |
+| `count_distinct(x)` | any | `int` number of distinct values |
+| `sum(x)` | number, `duration` | same type |
 | `mean(x)` | number | `float` |
 | `median(x)` | number | `float` |
-| `stddev(x)` | number | `float?` ส่วนเบี่ยงเบนมาตรฐานของตัวอย่าง; null ถ้ามีไม่ถึง 2 ค่า |
-| `min(x)` `max(x)` | any ยกเว้น `bool` | ชนิดเดิม |
-| `first(x)` `last(x)` | any | ชนิดเดิม ค่าของแถวแรก / สุดท้ายของกลุ่ม |
-| `corr(y, x)` | number, number | `float?` สหสัมพันธ์ของ Pearson |
-| `cov(y, x)` | number, number | `float?` ความแปรปรวนร่วมของตัวอย่าง |
-| `slope(y, x)` | number, number | `float?` ความชันของเส้นกำลังสองน้อยที่สุด |
-| `intercept(y, x)` | number, number | `float?` จุดตัดแกน y ของเส้นเดียวกัน |
+| `stddev(x)` | number | `float?` sample standard deviation; null if there are fewer than 2 values |
+| `min(x)` `max(x)` | any except `bool` | same type |
+| `first(x)` `last(x)` | any | same type; the value of the first / last row of the group |
+| `corr(y, x)` | number, number | `float?` Pearson correlation |
+| `cov(y, x)` | number, number | `float?` sample covariance |
+| `slope(y, x)` | number, number | `float?` slope of the least-squares line |
+| `intercept(y, x)` | number, number | `float?` y-intercept of the same line |
 
 ```biggo
 let t = from_rows([
@@ -160,87 +162,89 @@ t
 +---+---+----+-------+-------------------+-----+--------+------+-------+-------+-------+
 ```
 
-รายละเอียด: [group และ agg](04-tables.md#สรุปเป็นกลุ่ม-group-และ-agg), [สถิติ](04-tables.md#สถิติ)
+Details: [group and agg](04-tables.md#summarizing-by-group-group-and-agg), [statistics](04-tables.md#statistics)
 
-## window function
+## Window function
 
-ใช้ภายใน `window(...)` เท่านั้น ให้ค่าหนึ่งค่าต่อแถว
+Used only inside `window(...)`. They give one value per row.
 
-| ฟังก์ชัน | ได้ | ความหมาย |
+| Function | Returns | Meaning |
 | --- | --- | --- |
-| `row_number()` | `int` | ลำดับของแถวใน partition เริ่มที่ 1 |
-| `rank()` | `int` | อันดับตาม `order`; ค่าเท่ากันได้อันดับเท่ากัน |
-| `lag(x)`, `lag(x, n)` | ชนิดของ `x` (nullable) | ค่าในแถวก่อนหน้า `n` แถว |
-| `lead(x)`, `lead(x, n)` | ชนิดของ `x` (nullable) | ค่าในแถวถัดไป `n` แถว |
-| `cumsum(x)` | ชนิดของ `x` | ผลรวมสะสม (`int` หรือ `float`) |
-| `moving_avg(x, n)` | `float` | ค่าเฉลี่ยของ `n` แถวล่าสุด |
-| aggregate ใด ๆ | ตามตัวมัน | ค่าของทั้ง partition |
+| `row_number()` | `int` | Position of the row in its partition, starting at 1 |
+| `rank()` | `int` | Rank by `order`; equal values get the same rank |
+| `lag(x)`, `lag(x, n)` | type of `x` (nullable) | The value `n` rows earlier |
+| `lead(x)`, `lead(x, n)` | type of `x` (nullable) | The value `n` rows later |
+| `cumsum(x)` | type of `x` | Cumulative sum (`int` or `float`) |
+| `moving_avg(x, n)` | `float` | Average of the latest `n` rows |
+| any aggregate | same as the aggregate | Its value over the whole partition |
 
-รายละเอียด: [window](04-tables.md#window)
+Details: [window](04-tables.md#window)
 
-## operation ของตาราง
+## Table operations
 
-ทุกตัวรับตารางเป็น argument แรก จึงใช้กับ `|>` ได้ และคืนตาราง (ยกเว้นที่ระบุ)
+Each one takes a table as its first argument, so it works with `|>`, and returns a table (unless
+noted).
 
-| operation | ผลลัพธ์ |
+| Operation | Result |
 | --- | --- |
-| `where(t, cond)` | แถวที่ `cond` เป็นจริง |
-| `select(t, a, b = expr, ...)` | เฉพาะ column ที่ระบุหรือคำนวณ |
-| `drop(t, a, ...)` | ทุก column ยกเว้นที่ระบุ |
-| `rename(t, new = old, ...)` | เปลี่ยนชื่อ column |
-| `derive(t, c = expr, ...)` | เพิ่มหรือแทนที่ column |
-| `sort(t, key, desc(key), asc(key), ...)` | เรียงแถว null อยู่ท้าย |
-| `take(t, n)` | `n` แถวแรก |
-| `skip(t, n)` | ข้าม `n` แถวแรก |
-| `distinct(t)`, `distinct(t, a, ...)` | แถวหรือค่าที่ไม่ซ้ำ |
-| `group(t, a, k = expr, ...)` | ตารางที่จัดกลุ่มแล้ว ส่งต่อให้ `agg` หรือ `pivot` |
-| `agg(t, name = aggregate, ...)` | หนึ่งแถวต่อกลุ่ม |
-| `join(a, b, on = k, how = "inner")` | จับคู่แถวของสองตาราง; `how`: `inner` `left` `right` `full` `semi` `anti` |
-| `window(t, by = k, order = k, name = fn, ...)` | เพิ่ม column ที่คำนวณจากแถวข้างเคียง |
-| `union(a, b, ...)` | ต่อแถวของหลายตาราง |
-| `pivot(t, column, [values], aggregate)` | ค่าของ `column` กลายเป็น column |
-| `unpivot(t, a, b, names = "name", values = "value")` | column กลายเป็นแถว |
-| `explode(t, column)`, `explode(t, column, sep)` | แยก string ที่มีหลายค่าเป็นหลายแถว |
-| `collect(t)` | รันแล้วเก็บผลไว้ในหน่วยความจำ |
-| `count(t)` | จำนวนแถว (`int`) |
+| `where(t, cond)` | Rows where `cond` is true |
+| `select(t, a, b = expr, ...)` | Only the columns named or computed |
+| `drop(t, a, ...)` | Every column except the ones named |
+| `rename(t, new = old, ...)` | Renames columns |
+| `derive(t, c = expr, ...)` | Adds or replaces columns |
+| `sort(t, key, desc(key), asc(key), ...)` | Sorts rows; nulls go last |
+| `take(t, n)` | The first `n` rows |
+| `skip(t, n)` | Skips the first `n` rows |
+| `distinct(t)`, `distinct(t, a, ...)` | Unique rows or values |
+| `group(t, a, k = expr, ...)` | A grouped table, to pass on to `agg` or `pivot` |
+| `agg(t, name = aggregate, ...)` | One row per group |
+| `join(a, b, on = k, how = "inner")` | Matches rows of two tables; `how`: `inner` `left` `right` `full` `semi` `anti` |
+| `window(t, by = k, order = k, name = fn, ...)` | Adds columns computed from neighboring rows |
+| `union(a, b, ...)` | Appends the rows of several tables |
+| `pivot(t, column, [values], aggregate)` | The values of `column` become columns |
+| `unpivot(t, a, b, names = "name", values = "value")` | Columns become rows |
+| `explode(t, column)`, `explode(t, column, sep)` | Splits a string that holds several values into several rows |
+| `collect(t)` | Runs the query and keeps the result in memory |
+| `count(t)` | Number of rows (`int`) |
 
-`desc` และ `asc` ไม่ใช่ฟังก์ชัน เป็นเครื่องหมายกำกับ key ของ `sort` และ `order` ของ `window`
+`desc` and `asc` are not functions. They are markers on the keys of `sort` and on the `order` of
+`window`.
 
-รายละเอียด: [การทำงานกับตาราง](04-tables.md)
+Details: [Working with tables](04-tables.md)
 
-## อ่านและเขียนข้อมูล
+## Reading and writing data
 
-| ฟังก์ชัน | ความหมาย |
+| Function | Meaning |
 | --- | --- |
-| `read_csv<T>(path)` | ตารางจากไฟล์ CSV |
-| `read_parquet<T>(path)` | ตารางจากไฟล์ Parquet |
-| `read_json<T>(path)` | ตารางจากไฟล์ JSON Lines |
-| `read_sql<T>(path, query)` | ผลของ query บนฐานข้อมูล SQLite |
-| `write_csv(t, path)` | เขียนตารางเป็น CSV |
-| `write_parquet(t, path)` | เขียนตารางเป็น Parquet |
-| `write_json(t, path)` | เขียนตารางเป็น JSON Lines |
-| `write_sql(t, path, name)` | เขียนตารางลงฐานข้อมูล SQLite ชื่อตาราง `name` |
+| `read_csv<T>(path)` | A table from a CSV file |
+| `read_parquet<T>(path)` | A table from a Parquet file |
+| `read_json<T>(path)` | A table from a JSON Lines file |
+| `read_sql<T>(path, query)` | The result of a query on a SQLite database |
+| `write_csv(t, path)` | Writes a table as CSV |
+| `write_parquet(t, path)` | Writes a table as Parquet |
+| `write_json(t, path)` | Writes a table as JSON Lines |
+| `write_sql(t, path, name)` | Writes a table to a SQLite database, as the table named `name` |
 
-`T` คือชนิดของแถว เช่น `{ id: int, name: string? }` รายละเอียด: [แหล่งข้อมูล](05-data-sources.md)
+`T` is the row type, such as `{ id: int, name: string? }`. Details: [Data sources](05-data-sources.md)
 
-## list และ map
+## Lists and maps
 
-| ฟังก์ชัน | ได้ | ความหมาย |
+| Function | Returns | Meaning |
 | --- | --- | --- |
-| `len(x)` | `int` | จำนวนสมาชิกของ list หรือจำนวน key ของ map |
-| `range(n)` | `list<int>` | `0` ถึง `n − 1` |
-| `range(a, b)` | `list<int>` | `a` ถึง `b − 1` |
-| `map(xs, f)` | `list<U>` | `f(x)` ของแต่ละสมาชิก |
-| `filter(xs, f)` | `list<T>` | สมาชิกที่ `f(x)` เป็น `true` |
-| `fold(xs, start, f)` | ชนิดของ `start` | สะสมค่าด้วย `f(acc, x)` |
-| `each(xs, f)` | — | เรียก `f(x)` ทีละตัว ไม่มีค่า |
-| `keys(m)` | `list<K>` | key ตามลำดับที่ถูกใส่ |
-| `values(m)` | `list<V>` | value ตามลำดับเดียวกัน |
-| `put(m, k, v)` | `map<K, V>` | map ใหม่ที่ `k` มีค่า `v` |
-| `has_key(m, k)` | `bool` | map มี key `k` |
-| `xs[i]`, `m[k]`, `xs + ys` | | (ตัวดำเนินการ) index และต่อ list |
-| `to_rows(t)` | `list<{...}>` | แถวของตารางเป็น list ของ record |
-| `from_rows(xs)`, `from_rows<T>(xs)` | ตาราง | ตารางจาก list ของ record |
+| `len(x)` | `int` | Number of elements in a list, or number of keys in a map |
+| `range(n)` | `list<int>` | `0` to `n − 1` |
+| `range(a, b)` | `list<int>` | `a` to `b − 1` |
+| `map(xs, f)` | `list<U>` | `f(x)` for each element |
+| `filter(xs, f)` | `list<T>` | The elements for which `f(x)` is `true` |
+| `fold(xs, start, f)` | type of `start` | Accumulates a value with `f(acc, x)` |
+| `each(xs, f)` | — | Calls `f(x)` on each element in turn; returns no value |
+| `keys(m)` | `list<K>` | The keys, in the order they were inserted |
+| `values(m)` | `list<V>` | The values, in the same order |
+| `put(m, k, v)` | `map<K, V>` | A new map in which `k` has the value `v` |
+| `has_key(m, k)` | `bool` | The map has the key `k` |
+| `xs[i]`, `m[k]`, `xs + ys` | | (operators) Indexing and list concatenation |
+| `to_rows(t)` | `list<{...}>` | The rows of a table as a list of records |
+| `from_rows(xs)`, `from_rows<T>(xs)` | table | A table from a list of records |
 
 ```biggo
 let m = { "a": 1, "b": 2 }
@@ -259,31 +263,31 @@ ab ["a", "b"] [1, 2]
 [{id: 1}, {id: 2}]
 ```
 
-รายละเอียด: [list](02-language.md#list), [map](02-language.md#map),
-[ตารางกับ list ของ record](04-tables.md#ตารางกับ-list-ของ-record)
+Details: [list](02-language.md#list), [map](02-language.md#map),
+[tables and lists of records](04-tables.md#tables-and-lists-of-records)
 
-## สรุปและสถิติ
+## Summaries and statistics
 
-| ฟังก์ชัน | ได้ | ความหมาย |
+| Function | Returns | Meaning |
 | --- | --- | --- |
-| `describe(t)` | ตาราง | สถิติสรุปของทุก column |
-| `histogram(t, column)`, `histogram(t, column, bins = n)` | ตาราง | จำนวนค่าในแต่ละช่วง |
-| `linreg(t, y, x)` | `{ slope, intercept, r2 }` | เส้นถดถอยเชิงเส้นของ `y` บน `x` |
+| `describe(t)` | table | Summary statistics for every column |
+| `histogram(t, column)`, `histogram(t, column, bins = n)` | table | Number of values in each interval |
+| `linreg(t, y, x)` | `{ slope, intercept, r2 }` | Linear regression line of `y` on `x` |
 
-รายละเอียด: [สถิติ](04-tables.md#สถิติ)
+Details: [statistics](04-tables.md#statistics)
 
-## แสดงผลและตรวจสอบ
+## Output and checks
 
-| ฟังก์ชัน | ความหมาย |
+| Function | Meaning |
 | --- | --- |
-| `print(a, b, ...)` | พิมพ์ค่าคั่นด้วยช่องว่าง แล้วขึ้นบรรทัดใหม่; ตารางถูกรันและพิมพ์ 50 แถวแรก |
-| `explain(t)` | พิมพ์แผนของ query ทั้งก่อนและหลังปรับ โดยไม่รัน |
-| `assert(cond)`, `assert(cond, message)` | หยุดโปรแกรมด้วย error ถ้า `cond` ไม่เป็น `true` |
-| `assert_eq(a, b)` | หยุดโปรแกรมถ้าสองค่าไม่เท่ากัน; เทียบ list record map และตารางได้ |
+| `print(a, b, ...)` | Prints the values separated by spaces, then a newline; a table is run and its first 50 rows are printed |
+| `explain(t)` | Prints the query's plan, both before and after it is optimized, without running it |
+| `assert(cond)`, `assert(cond, message)` | Stops the program with an error if `cond` is not `true` |
+| `assert_eq(a, b)` | Stops the program if the two values are not equal; it can compare lists, records, maps and tables |
 
 ```biggo
 print("total:", 42, [1, 2], { ok: true })
-assert(1 + 1 == 2, "เลขคณิตพัง")
+assert(1 + 1 == 2, "arithmetic is broken")
 assert_eq(map([1, 2], fn(n) { n * 2 }), [2, 4])
 assert_eq(from_rows([{ id: 1 }]) |> derive(twice = id * 2), from_rows([{ id: 1, twice: 2 }]))
 explain(from_rows([{ id: 1 }, { id: 2 }]) |> where(id > 1) |> select(id))
@@ -300,6 +304,6 @@ optimized plan:
     Table: 2 rows
 ```
 
-`print` แสดง string และวันที่แบบเปล่า ๆ เมื่อเป็นค่าระดับบนสุด และแสดงแบบ literal
-(มี `"` หรือ `@`) เมื่ออยู่ใน list, record หรือ map รายละเอียดของ `assert`:
+`print` shows strings and dates bare when they are top-level values, and as literals
+(with `"` or `@`) when they are inside a list, record or map. Details of `assert`:
 [biggo test](07-tools.md#biggo-test)

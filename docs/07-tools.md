@@ -1,7 +1,7 @@
-# เครื่องมือ
+# Tools
 
-ทุกอย่างอยู่ใน executable ตัวเดียวชื่อ `biggo`: ตัวรัน ตัวตรวจ REPL formatter ตัวรัน test
-ตัวสร้าง executable และ language server สำหรับ editor
+Everything is in a single executable named `biggo`: the runner, the checker, the REPL, the
+formatter, the test runner, the executable builder, and the language server for editors.
 
 ```text
 usage: biggo <command> [args]
@@ -19,13 +19,13 @@ commands:
   version                  print the version
 ```
 
-| exit code | ความหมาย |
+| Exit code | Meaning |
 | --- | --- |
-| 0 | สำเร็จ |
-| 1 | โปรแกรมมี error (syntax, type, หรือตอนรัน), test ไม่ผ่าน, หรือ `fmt --check` เจอไฟล์ที่ยังไม่จัด |
-| 2 | ใช้คำสั่งผิด |
+| 0 | success |
+| 1 | the program has an error (syntax, type, or at run time), a test fails, or `fmt --check` finds a file that is not formatted yet |
+| 2 | the command is used incorrectly |
 
-ผลลัพธ์ของโปรแกรมออกทาง standard output ส่วน error ออกทาง standard error
+Program output goes to standard output. Errors go to standard error.
 
 ## biggo run
 
@@ -33,12 +33,15 @@ commands:
 biggo run report.bgo
 ```
 
-รันโปรแกรม ก่อนรันจะตรวจ syntax และ type ของทั้งไฟล์ (และไฟล์ที่ `import`) ถ้าพบ error
-จะรายงานทั้งหมดแล้วไม่รันอะไรเลย โปรแกรมที่ type ผิดจึงไม่มีทางรันไปครึ่งทางแล้วเขียนไฟล์ค้างไว้
+Runs a program. Before the program runs, biggo checks the syntax and types of the whole file (and
+of the files it `import`s). If it finds errors, it reports all of them and runs nothing at all. So
+a program with a type error can never run halfway and leave a half-written file behind.
 
-path ของไฟล์ข้อมูลในโปรแกรมนับจากโฟลเดอร์ของไฟล์ `.bgo` ไม่ใช่โฟลเดอร์ที่สั่งรัน
+Paths to data files in a program are relative to the folder of the `.bgo` file, not the folder you
+run the command from.
 
-จำนวน thread ที่ engine ใช้กำหนดด้วย `RAYON_NUM_THREADS` (ค่าเริ่มต้นคือจำนวน core ทั้งหมด):
+The number of threads the engine uses is set with `RAYON_NUM_THREADS` (the default is the total
+number of cores):
 
 ```sh
 RAYON_NUM_THREADS=2 biggo run report.bgo
@@ -50,8 +53,8 @@ RAYON_NUM_THREADS=2 biggo run report.bgo
 biggo check bad.bgo
 ```
 
-ตรวจ syntax และ type โดยไม่รัน ไม่แตะไฟล์ข้อมูล จึงเร็วและใช้ได้แม้ข้อมูลยังไม่พร้อม
-รายงานทุก error ที่พบในรอบเดียว:
+Checks syntax and types without running the program. It does not touch data files, so it is fast
+and works even when the data is not ready yet. It reports every error it finds in a single pass:
 
 ```text
 error: cannot apply `>` to int and string
@@ -69,7 +72,7 @@ error: the table has no column `amount`; its columns are region, qty
 2 errors in bad.bgo
 ```
 
-เหมาะกับการใส่ไว้ใน CI หรือ pre-commit hook คู่กับ `biggo fmt --check`
+It fits well in CI or in a pre-commit hook, together with `biggo fmt --check`.
 
 ## biggo explain
 
@@ -77,16 +80,17 @@ error: the table has no column `amount`; its columns are region, qty
 biggo explain report.bgo
 ```
 
-รันโปรแกรมในโหมดที่ **ไม่มี query ไหนถูกรันจริง**: ทุกจุดที่โปรแกรมจะพิมพ์ เขียน นับ หรือดึงแถวของตาราง
-จะพิมพ์แผนของ query นั้นแทน ทั้งแผนตามที่เขียน (`plan`) และแผนหลังปรับ (`optimized plan`)
-โค้ดส่วนที่ไม่ใช่ตารางรันตามปกติ ใช้ดูว่า
+Runs the program in a mode where **no query is actually run**: at every point where the program
+would print, write, count, or fetch the rows of a table, it prints the plan of that query instead,
+both the plan as written (`plan`) and the optimized plan (`optimized plan`).
+Code that is not about tables runs as usual. Use it to see whether:
 
-- ตัวกรองถูกดันลงไปถึงขั้นอ่านไฟล์หรือไม่ (`Scan ... where ...`)
-- อ่าน column เท่าที่จำเป็นหรือไม่ (รายชื่อหลัง `Scan`)
-- `sort` + `take` ถูกรวมเป็น top-n หรือไม่ (`Sort: qty desc (first 3)`)
+- a filter is pushed down into the step that reads the file (`Scan ... where ...`)
+- only the columns that are needed are read (the list after `Scan`)
+- `sort` + `take` are combined into a top-n (`Sort: qty desc (first 3)`)
 
-ตัวอย่างผลลัพธ์อยู่ใน [เริ่มต้นใช้งาน](01-getting-started.md#ดูว่า-engine-จะทำอะไร)
-ในโปรแกรมเองเรียก `explain(table)` เพื่อพิมพ์แผนของตารางเดียวได้
+Example output is in [Getting started](01-getting-started.md#see-what-the-engine-will-do).
+Inside a program, you can call `explain(table)` to print the plan of a single table.
 
 ## biggo repl
 
@@ -113,22 +117,23 @@ error: cannot apply `>` to int and string
 10
 ```
 
-- แต่ละรายการถูกตรวจ type แล้วรันทันที ค่าของ expression ถูกแสดงในรูป literal (string มี `"`)
-- `let` `fn` `type` และ `import` ที่ป้อนไว้ใช้ได้ต่อไปจนจบ session
-- รายการที่ยังไม่จบ (วงเล็บไม่ปิด, จบด้วยตัวดำเนินการ) จะขึ้น prompt `..` รอบรรทัดต่อไป
-  ป้อนบรรทัดว่างเพื่อส่งทั้งที่ยังไม่จบ
-- error ไม่ทำให้ session จบ สิ่งที่ประกาศไว้ก่อนหน้ายังอยู่
-- path ของไฟล์นับจากโฟลเดอร์ที่เปิด REPL
-- รับ input จาก pipe ได้: `echo 'print(1 + 1)' | biggo repl` (ไม่มี prompt)
+- Each entry is type-checked and then run immediately. The value of an expression is shown in
+  literal form (strings have `"`).
+- A `let`, `fn`, `type`, or `import` that you enter stays available until the session ends.
+- An entry that is not finished (an unclosed bracket, a trailing operator) shows the `..` prompt
+  and waits for the next line. Enter a blank line to submit it even though it is not finished.
+- An error does not end the session. What you declared earlier is still there.
+- File paths are relative to the folder where you started the REPL.
+- It accepts input from a pipe: `echo 'print(1 + 1)' | biggo repl` (no prompt).
 
 ## biggo fmt
 
 ```sh
-biggo fmt report.bgo other.bgo     # จัดรูปแบบแล้วเขียนทับไฟล์
-biggo fmt --check *.bgo            # ไม่แก้ไฟล์ แค่พิมพ์ชื่อไฟล์ที่ยังไม่จัด (exit 1 ถ้ามี)
+biggo fmt report.bgo other.bgo     # format the files and overwrite them
+biggo fmt --check *.bgo            # change no files, only print the names of files not yet formatted (exit 1 if any)
 ```
 
-จัดรูปแบบโค้ดเป็นแบบมาตรฐานแบบเดียว ไม่มีตัวเลือกให้ตั้ง ก่อนและหลัง:
+Formats code into one standard style. There are no options to set. Before and after:
 
 ```text
 type Sale={region:string,qty:int}
@@ -146,35 +151,41 @@ let big = read_csv<Sale>("sales.csv")
 print(big)
 ```
 
-กฎของรูปแบบ:
+The style rules:
 
-- เยื้อง 2 ช่องว่าง บรรทัดยาวไม่เกิน 100 ตัวอักษร
-- pipeline ที่ไม่พอดีบรรทัด หรือที่ผู้เขียนขึ้นบรรทัดใหม่ไว้ ถูกจัดเป็นหนึ่งขั้นต่อบรรทัด
-- argument ที่ไม่พอดีบรรทัดถูกจัดเป็นหนึ่งตัวต่อบรรทัด มี `,` ปิดท้าย
-- lambda หลายบรรทัดที่เป็น argument สุดท้ายเริ่มบนบรรทัดเดียวกับการเรียก: `each(xs, fn(x) {`
-- comment ถูกเก็บไว้ทุกอัน บรรทัดว่างเดี่ยวระหว่าง statement ถูกเก็บไว้ (หลายบรรทัดถูกยุบเหลือหนึ่ง)
-- วงเล็บที่ไม่จำเป็นถูกเอาออก ยกเว้นที่ผู้เขียนใส่รอบ expression ประกอบเพื่อความชัดเจน
-- literal ถูกคงไว้ตามที่เขียน (`1_000`, `1.50d`)
+- Indentation is 2 spaces. Lines are at most 100 characters long.
+- A pipeline that does not fit on one line, or in which the author put a newline, is laid out one
+  step per line.
+- Arguments that do not fit on one line are laid out one per line, with a trailing `,`.
+- A multi-line lambda that is the last argument starts on the same line as the call:
+  `each(xs, fn(x) {`
+- Every comment is kept. A single blank line between statements is kept (several are collapsed
+  into one).
+- Unnecessary parentheses are removed, except those the author put around a compound expression
+  for clarity.
+- Literals are kept as written (`1_000`, `1.50d`).
 
-formatter รับประกันสองอย่าง ซึ่งถูกทดสอบกับทุกโปรแกรมตัวอย่างในโปรเจกต์:
-ความหมายของโปรแกรมไม่เปลี่ยน (syntax tree และ comment เหมือนเดิม) และจัดซ้ำได้ผลเดิม
-ไฟล์ที่มี syntax error ถูกรายงานและไม่ถูกแตะ
+The formatter guarantees two things, which are tested against every example program in the
+project: the meaning of the program does not change (the syntax tree and the comments stay the
+same), and formatting again gives the same result.
+A file with a syntax error is reported and left untouched.
 
 ## biggo test
 
 ```sh
-biggo test                  # ทุกไฟล์ *_test.bgo ใต้โฟลเดอร์ปัจจุบัน
-biggo test tests/ lib/      # ใต้โฟลเดอร์ที่ระบุ
-biggo test pricing_test.bgo # ไฟล์เดียว
+biggo test                  # every *_test.bgo file under the current folder
+biggo test tests/ lib/      # under the given folders
+biggo test pricing_test.bgo # a single file
 ```
 
-test เขียนด้วยภาษา biggo เอง:
+Tests are written in biggo itself:
 
-- **ไฟล์ test** คือไฟล์ที่ชื่อลงท้ายด้วย `_test.bgo`
-- **test** คือฟังก์ชันระดับบนสุดที่ชื่อขึ้นต้นด้วย `test_` และไม่มี parameter
-- test ผ่านเมื่อรันจนจบโดยไม่มี error ใช้ `assert` และ `assert_eq` ตรวจผล
+- A **test file** is a file whose name ends with `_test.bgo`.
+- A **test** is a top-level function whose name starts with `test_` and that has no parameters.
+- A test passes when it runs to the end without an error. Use `assert` and `assert_eq` to check
+  results.
 
-สมมติมีไฟล์ `pricing.bgo`:
+Suppose you have a file `pricing.bgo`:
 
 ```biggo check
 fn discount(amount: float, percent: float) -> float {
@@ -182,7 +193,7 @@ fn discount(amount: float, percent: float) -> float {
 }
 ```
 
-ไฟล์ test `pricing_test.bgo` ที่อยู่ข้างกัน:
+The test file `pricing_test.bgo` next to it:
 
 ```biggo fragment
 import "pricing.bgo"
@@ -219,40 +230,41 @@ FAIL  pricing_test.bgo::test_rounding
 2 passed, 1 failed
 ```
 
-วิธีทำงาน:
+How it works:
 
-1. แต่ละไฟล์ test ถูกรันทั้งไฟล์ก่อนหนึ่งครั้ง (เพื่อประกาศฟังก์ชันและตัวแปร) ถ้าขั้นนี้ล้มเหลว
-   ทั้งไฟล์นับเป็นหนึ่ง test ที่ไม่ผ่าน
-2. จากนั้นเรียกฟังก์ชัน `test_...` ทีละตัวตามลำดับที่ประกาศ test ที่ล้มเหลวไม่หยุด test ตัวอื่น
-3. สิ่งที่ test พิมพ์ถูกเก็บไว้ และแสดงเฉพาะเมื่อ test นั้นไม่ผ่าน
-4. ไฟล์ test ที่ไม่มีฟังก์ชัน `test_...` นับเป็นหนึ่ง test ที่ผ่านถ้ารันจนจบ
-   (ใช้เขียน test แบบ script ที่มี `assert` ระดับบนสุด)
-5. โฟลเดอร์ที่ชื่อขึ้นต้นด้วย `.` และโฟลเดอร์ `target`, `node_modules` ถูกข้าม
+1. Each test file is first run once as a whole (to declare its functions and variables). If this
+   step fails, the whole file counts as one failed test.
+2. Then the `test_...` functions are called one at a time, in the order they are declared. A test
+   that fails does not stop the other tests.
+3. What a test prints is captured, and shown only when that test fails.
+4. A test file with no `test_...` function counts as one passing test if it runs to the end
+   (use this to write script-style tests that have `assert` at the top level).
+5. Folders whose names start with `.`, and the folders `target` and `node_modules`, are skipped.
 
-exit code เป็น 1 ถ้ามี test ไม่ผ่าน
+The exit code is 1 if any test fails.
 
-### assert และ assert_eq
+### assert and assert_eq
 
 ```biggo
 assert(1 + 1 == 2)
-assert(len([1, 2]) == 2, "ต้องมีสองตัว")           // ข้อความที่แสดงเมื่อไม่ผ่าน
-assert_eq([1.0, 2.0], [1, 2])                      // เทียบลึกทั้งโครงสร้าง แปลงชนิดให้เหมือน ==
+assert(len([1, 2]) == 2, "must have two")          // the message shown on failure
+assert_eq([1.0, 2.0], [1, 2])                      // deep structural comparison, converts like ==
 assert_eq({ name: "a", tags: ["x"] }, { name: "a", tags: ["x"] })
-assert_eq(put({ "a": 1 }, "b", 2), { "b": 2, "a": 1 })   // map ไม่สนลำดับของ key
+assert_eq(put({ "a": 1 }, "b", 2), { "b": 2, "a": 1 })   // maps ignore the order of keys
 
-// ตาราง: column เหมือนกัน และแถวเหมือนกันตามลำดับ
+// tables: the same columns, and the same rows in order
 let totals = from_rows([{ k: "a", v: 1 }, { k: "a", v: 2 }, { k: "b", v: 5 }])
   |> group(k)
   |> agg(total = sum(v))
 assert_eq(totals, from_rows([{ k: "a", total: 3 }, { k: "b", total: 5 }]))
-print("ผ่านทั้งหมด")
+print("all passed")
 ```
 
 ```text output
-ผ่านทั้งหมด
+all passed
 ```
 
-เมื่อไม่ผ่าน error บอกทั้งสองค่า หรือสำหรับตาราง บอกแถวแรกที่ต่างกัน:
+When an assertion fails, the error shows both values or, for tables, the first row that differs:
 
 ```biggo error
 let got = from_rows([{ id: 1, name: "a" }, { id: 2, name: "b" }])
@@ -269,28 +281,33 @@ error: assertion failed: row 1 differs
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ```
 
-`assert_eq` เทียบ `float` แบบตรงตัว: ค่าที่ผ่านการคำนวณควร `round` ก่อนเทียบ
-และการเทียบตารางรัน query ทั้งสองฝั่งแล้วโหลดทุกแถว จึงเหมาะกับตารางขนาด test
+`assert_eq` compares `float` values exactly: you should `round` computed values before comparing
+them. Comparing tables runs the queries on both sides and loads every row, so it suits test-sized
+tables.
 
 ## biggo build
 
 ```sh
-biggo build report.bgo             # ได้ executable ชื่อ report
-biggo build report.bgo -o bin/app  # ตั้งชื่อเอง
+biggo build report.bgo             # produces an executable named report
+biggo build report.bgo -o bin/app  # choose the name yourself
 ./report
 ```
 
-สร้าง executable ที่รันโปรแกรมนั้นได้เองโดยไม่ต้องมี `biggo` หรือไฟล์ `.bgo` บนเครื่องปลายทาง
+Builds an executable that runs the program on its own, with no need for `biggo` or the `.bgo` file
+on the target machine.
 
-- executable คือสำเนาของ `biggo` ที่ฝัง source ของโปรแกรม **และของทุกไฟล์ที่มัน `import`** ไว้ข้างใน
-  ขนาดจึงเท่ากับ `biggo` เอง (ราว 22 MB) ไม่ว่าโปรแกรมจะเล็กแค่ไหน
-- โปรแกรมถูกตรวจ type ก่อน ถ้ามี error จะไม่สร้าง
-- ตอนรัน source ถูก compile เป็น bytecode ใหม่ทุกครั้ง ซึ่งใช้เวลาระดับมิลลิวินาที
-- path ของไฟล์ข้อมูลใน executable นับจาก **โฟลเดอร์ที่รัน** (ไม่มีไฟล์ `.bgo` ให้นับจากแล้ว)
-- argument บน command line ถูกละเลย: โปรแกรมยังรับ argument ไม่ได้
-- ขนาด source รวมที่ฝังได้สูงสุดราว 256 KiB
-- บน macOS executable ถูกเซ็นแบบ ad-hoc ด้วย `codesign` (ต้องมี Xcode Command Line Tools)
-- executable ใช้ได้กับระบบปฏิบัติการและ CPU เดียวกับ `biggo` ที่ใช้สร้าง (ไม่ cross-compile)
+- The executable is a copy of `biggo` with the source of the program **and of every file it
+  `import`s** embedded inside. So its size is the same as `biggo` itself (about 22 MB), no matter
+  how small the program is.
+- The program is type-checked first. If it has errors, nothing is built.
+- At run time, the source is compiled to bytecode again every time, which takes milliseconds.
+- Paths to data files in the executable are relative to **the folder you run it from** (there is
+  no `.bgo` file to be relative to anymore).
+- Command-line arguments are ignored: programs cannot take arguments yet.
+- The total size of the embedded source is limited to about 256 KiB.
+- On macOS, the executable is ad-hoc signed with `codesign` (requires the Xcode Command Line Tools).
+- The executable works on the same operating system and CPU as the `biggo` that built it (no
+  cross-compilation).
 
 ## biggo parse
 
@@ -298,34 +315,36 @@ biggo build report.bgo -o bin/app  # ตั้งชื่อเอง
 biggo parse report.bgo
 ```
 
-พิมพ์ syntax tree ของโปรแกรมในรูป S-expression ใช้ตรวจว่า parser อ่านโค้ดอย่างไร
-(ลำดับของตัวดำเนินการ, จุดจบของ statement) เช่น `let total = [1, 2] |> map(fn(n) { n * 2 })` ได้
+Prints the syntax tree of a program as an S-expression. Use it to check how the parser reads code
+(operator precedence, where a statement ends). For example,
+`let total = [1, 2] |> map(fn(n) { n * 2 })` gives:
 
 ```text
 (let total (|> (list 1 2) (call map (lambda (n) (block (* n 2))))))
 ```
 
-## language server และ editor
+## Language server and editors
 
-`biggo lsp` คือ language server ที่พูด Language Server Protocol ผ่าน standard input/output
-editor ใดก็ตามที่รองรับ LSP ใช้ได้ ความสามารถ:
+`biggo lsp` is a language server that speaks the Language Server Protocol over standard
+input/output. Any editor that supports LSP can use it. Features:
 
-| ความสามารถ | รายละเอียด |
+| Feature | Details |
 | --- | --- |
-| diagnostics | syntax และ type error ขณะพิมพ์ จากตัวตรวจเดียวกับ `biggo check` |
-| hover | type ของ expression ใต้ cursor — สำหรับตารางคือรายชื่อ column ณ จุดนั้นของ pipeline |
-| formatting | จัดรูปแบบทั้งไฟล์ด้วยตัวเดียวกับ `biggo fmt` |
+| diagnostics | syntax and type errors as you type, from the same checker as `biggo check` |
+| hover | the type of the expression under the cursor (for a table, the list of columns at that point in the pipeline) |
+| formatting | formats the whole file with the same formatter as `biggo fmt` |
 
-ไฟล์ที่ `import` ถูกอ่านจากเนื้อหาที่เปิดค้างใน editor ก่อน (แม้ยังไม่ save) ถ้าไม่ได้เปิดจึงอ่านจากดิสก์
-error ในไฟล์ที่ถูก import แสดงที่บรรทัด `import` ของไฟล์ที่กำลังแก้
+A file that you `import` is read first from the content that is open in the editor (even if it is
+not saved yet). If it is not open, it is read from disk.
+Errors in an imported file are shown on the `import` line of the file you are editing.
 
-ยังไม่มี: autocomplete, go to definition, rename
+Not available yet: autocomplete, go to definition, rename.
 
 ### VS Code
 
-extension อยู่ในโฟลเดอร์ [`editors/vscode`](../editors/vscode) ให้ syntax highlighting,
-การจับคู่วงเล็บ, ทุกความสามารถของ language server ข้างบน และคำสั่ง
-**biggo: Run File**, **biggo: Explain Query Plans of File**, **biggo: Run Tests**
+The extension is in the [`editors/vscode`](../editors/vscode) folder. It provides syntax
+highlighting, bracket matching, every language server feature above, and the commands
+**biggo: Run File**, **biggo: Explain Query Plans of File**, **biggo: Run Tests**.
 
 ```sh
 cd editors/vscode
@@ -334,11 +353,11 @@ npx vsce package --allow-missing-repository --skip-license
 code --install-extension biggo-0.1.0.vsix
 ```
 
-extension เรียก `biggo` จาก `PATH` หรือจาก path ที่ตั้งใน setting `biggo.path`
+The extension runs `biggo` from `PATH`, or from the path set in the `biggo.path` setting.
 
-### editor อื่น
+### Other editors
 
-Neovim 0.11 ขึ้นไป:
+Neovim 0.11 or later:
 
 ```lua
 vim.filetype.add({ extension = { bgo = "biggo" } })
@@ -366,7 +385,7 @@ indent = { tab-width = 2, unit = "  " }
 language-servers = ["biggo"]
 ```
 
-> สถานะการทดสอบ: language server ถูกทดสอบอัตโนมัติด้วยข้อความ LSP จริง (`cargo test -p biggo-lsp`)
-> และ grammar ของ VS Code ถูกทดสอบด้วย engine ตัวเดียวกับที่ VS Code ใช้ (`vscode-textmate`)
-> extension ถูก package เป็น `.vsix` ได้สำเร็จ แต่ **ยังไม่ได้ลองรันใน VS Code จริง**
-> และการตั้งค่าของ Neovim/Helix ข้างบนเขียนตามเอกสารของ editor นั้น ๆ ยังไม่ได้ลองรัน
+> Test status: the language server is tested automatically with real LSP messages (`cargo test -p biggo-lsp`),
+> and the VS Code grammar is tested with the same engine that VS Code uses (`vscode-textmate`).
+> The extension packages into a `.vsix` successfully, but it **has not been run in a real VS Code yet**.
+> The Neovim/Helix settings above are written from each editor's documentation and have not been run yet.

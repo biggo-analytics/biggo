@@ -1,16 +1,18 @@
-# ตัวภาษา
+# The language
 
-หน้านี้อธิบายไวยากรณ์และความหมายของภาษา biggo ส่วนที่ไม่เกี่ยวกับตาราง: ค่า ตัวแปร ตัวดำเนินการ
-`if` `match` ฟังก์ชัน lambda list record map และ `import` เรื่องตารางอยู่ใน
-[การทำงานกับตาราง](04-tables.md) และรายละเอียดของ type อยู่ใน [ระบบ type](03-types.md)
+This page explains the syntax and semantics of the parts of the biggo language that do not involve
+tables: values, variables, operators, `if`, `match`, functions, lambdas, lists, records, maps and
+`import`. Tables are covered in [Working with tables](04-tables.md), and the details of types are in
+[The type system](03-types.md).
 
-ตัวอย่างทุกอันในเอกสารถูกรันจริงตอน `cargo test` ผลลัพธ์ที่เห็นคือผลลัพธ์จริง
+Every example in the documentation is actually run during `cargo test`. The output you see is the
+real output.
 
-## โครงสร้างของโปรแกรม
+## Program structure
 
-โปรแกรมคือลำดับของ *statement* ซึ่งมี 5 แบบ:
+A program is a sequence of *statements*, of which there are 5 kinds:
 
-| statement | ตัวอย่าง |
+| Statement | Example |
 | --- | --- |
 | `import` | `import "lib/shapes.bgo"` |
 | `type` | `type Sale = { region: string, qty: int }` |
@@ -18,15 +20,16 @@
 | `fn` | `fn double(n: int) -> int { n * 2 }` |
 | expression | `print(total)` |
 
-โปรแกรมรันจากบนลงล่าง ไม่มีฟังก์ชัน `main`
+A program runs from top to bottom. There is no `main` function.
 
-### การจบ statement
+### Where a statement ends
 
-หนึ่ง statement จบที่ท้ายบรรทัด ไม่มี `;` statement จะต่อไปบรรทัดถัดไปเมื่อเห็นได้ชัดว่ายังไม่จบ คือ
+A statement ends at the end of the line. There is no `;`. A statement continues onto the next line
+when it is clearly not finished, that is, when:
 
-- อยู่ในวงเล็บ `(...)` หรือ `[...]` ที่ยังไม่ปิด
-- บรรทัดจบด้วยตัวดำเนินการ เช่น `1 +`
-- บรรทัดถัดไปขึ้นต้นด้วยตัวดำเนินการ เช่น `|>` `+` `and` `??` `.`
+- it is inside `(...)` or `[...]` brackets that are not closed yet
+- the line ends with an operator, such as `1 +`
+- the next line starts with an operator, such as `|>` `+` `and` `??` `.`
 
 ```biggo
 let total = 1 +
@@ -41,19 +44,19 @@ print(total, longer)
 3 18
 ```
 
-ข้อยกเว้นคือ `-` `(` และ `[` ที่ต้นบรรทัดถือว่าเริ่ม statement ใหม่เสมอ เพราะทั้งสามขึ้นต้น expression
-ได้ด้วยตัวเอง (`-x`, `(a + b)`, `[1, 2]`)
+The exceptions are `-`, `(` and `[`: at the start of a line they always begin a new statement,
+because each of the three can start an expression by itself (`-x`, `(a + b)`, `[1, 2]`).
 
 ### comment
 
-`//` ถึงท้ายบรรทัดเป็น comment ไม่มี comment แบบหลายบรรทัด
+`//` to the end of the line is a comment. There are no multi-line comments.
 
-## ค่าพื้นฐาน
+## Basic values
 
 ```biggo
 print(42, 1_000_000, 3.14, 2.5e3)
 print(19.99d)
-print("สวัสดี", "tab\there", "quote: \"x\"")
+print("hello", "tab\there", "quote: \"x\"")
 print(true, false, null)
 print(@2026-01-31, @2026-01-31T18:30:00)
 ```
@@ -61,37 +64,38 @@ print(@2026-01-31, @2026-01-31T18:30:00)
 ```text output
 42 1000000 3.14 2500.0
 19.99
-สวัสดี tab	here quote: "x"
+hello tab	here quote: "x"
 true false null
 2026-01-31 2026-01-31T18:30:00
 ```
 
-| ชนิด | literal | หมายเหตุ |
+| Type | Literal | Notes |
 | --- | --- | --- |
-| `int` | `42`, `1_000_000` | จำนวนเต็ม 64 บิต `_` ใช้คั่นหลักได้ |
-| `float` | `3.14`, `2.5e3` | ทศนิยม 64 บิต (IEEE 754) |
-| `decimal` | `19.99d`, `5d` | ทศนิยมแม่นยำ 6 ตำแหน่ง ลงท้ายด้วย `d` |
-| `string` | `"text"` | UTF-8 escape ที่ใช้ได้: `\n` `\t` `\r` `\0` `\\` `\"` |
+| `int` | `42`, `1_000_000` | 64-bit integer. `_` can separate digits |
+| `float` | `3.14`, `2.5e3` | 64-bit floating point (IEEE 754) |
+| `decimal` | `19.99d`, `5d` | Exact decimal with 6 decimal places. Ends with `d` |
+| `string` | `"text"` | UTF-8. Supported escapes: `\n` `\t` `\r` `\0` `\\` `\"` |
 | `bool` | `true`, `false` | |
-| `date` | `@2026-01-31` | วันที่ตามปฏิทิน ต้องเป็นวันที่มีจริง |
-| `datetime` | `@2026-01-31T18:30:00` | วินาทีใส่หรือไม่ก็ได้ มีเศษวินาทีได้ถึง 6 หลัก ไม่มี time zone |
-| null | `null` | "ไม่มีค่า" ใช้ได้กับ type ที่ลงท้ายด้วย `?` เท่านั้น |
+| `date` | `@2026-01-31` | A calendar date. It must be a date that exists |
+| `datetime` | `@2026-01-31T18:30:00` | Seconds are optional. Up to 6 digits of fractional seconds. No time zone |
+| null | `null` | "No value". Allowed only with a type that ends in `?` |
 
-string เขียนข้ามบรรทัดไม่ได้ ถ้าต้องการขึ้นบรรทัดใหม่ใช้ `\n`
+A string cannot span lines. If you need a newline, use `\n`.
 
-`duration` (ช่วงเวลา) ไม่มี literal สร้างจากฟังก์ชัน `days(n)` `hours(n)` `minutes(n)` `seconds(n)`
-หรือจากการลบ datetime สองค่า ดู [ระบบ type](03-types.md#วันที่และเวลา-date-datetime-duration)
+`duration` (a span of time) has no literal. You create one with the functions `days(n)`, `hours(n)`,
+`minutes(n)`, `seconds(n)`, or by subtracting two datetime values. See
+[The type system](03-types.md#dates-and-times-date-datetime-duration).
 
-## ตัวแปร
+## Variables
 
-`let` ผูกชื่อกับค่า ค่าของตัวแปรเปลี่ยนไม่ได้ (ไม่มีการกำหนดค่าซ้ำ) แต่ประกาศชื่อเดิมซ้ำได้
-ซึ่งเป็นตัวแปรตัวใหม่ที่บังตัวเก่า
+`let` binds a name to a value. The value of a variable cannot change (there is no reassignment), but
+you can declare the same name again, which creates a new variable that shadows the old one.
 
 ```biggo
 let price = 100
-let price = price * 1.07      // ตัวใหม่ คำนวณจากตัวเก่า
-let label: string = "total"   // ระบุ type ก็ได้
-let nothing: int? = null      // null ต้องบอก type เสมอ
+let price = price * 1.07      // a new variable, computed from the old one
+let label: string = "total"   // you can state the type
+let nothing: int? = null      // null always needs a type
 print(label, price, nothing)
 ```
 
@@ -99,25 +103,25 @@ print(label, price, nothing)
 total 107.0 null
 ```
 
-ปกติไม่ต้องเขียน type เพราะ compiler อนุมานจากค่าให้ ต้องเขียนเมื่อค่าบอก type ไม่ครบ เช่น `null` หรือ
-list ว่าง `[]`
+Usually you do not need to write the type, because the compiler infers it from the value. You must
+write it when the value does not determine the type fully, such as `null` or the empty list `[]`.
 
-## ตัวดำเนินการ
+## Operators
 
-เรียงจากผูกแน่นที่สุดไปหลวมที่สุด:
+Listed from the tightest binding to the loosest:
 
-| ลำดับ | ตัวดำเนินการ | ความหมาย | การจัดกลุ่ม |
+| Level | Operator | Meaning | Associativity |
 | --- | --- | --- | --- |
-| 1 | `f(x)` `x.name` `x[i]` | เรียกฟังก์ชัน, field, index | ซ้ายไปขวา |
-| 2 | `-x` | ค่าลบ | |
-| 3 | `*` `/` `%` | คูณ หาร เศษ | ซ้ายไปขวา |
-| 4 | `+` `-` | บวก ลบ | ซ้ายไปขวา |
-| 5 | `??` | ถ้าซ้ายเป็น null ใช้ขวา | ขวาไปซ้าย |
-| 6 | `==` `!=` `<` `<=` `>` `>=` | เปรียบเทียบ | ต่อกันไม่ได้ |
-| 7 | `not` | นิเสธ | |
-| 8 | `and` | และ | ซ้ายไปขวา |
-| 9 | `or` | หรือ | ซ้ายไปขวา |
-| 10 | `\|>` | ส่งค่าเข้าฟังก์ชัน | ซ้ายไปขวา |
+| 1 | `f(x)` `x.name` `x[i]` | function call, field, index | left to right |
+| 2 | `-x` | negative value | |
+| 3 | `*` `/` `%` | multiply, divide, remainder | left to right |
+| 4 | `+` `-` | add, subtract | left to right |
+| 5 | `??` | if the left side is null, use the right side | right to left |
+| 6 | `==` `!=` `<` `<=` `>` `>=` | comparison | cannot be chained |
+| 7 | `not` | logical negation | |
+| 8 | `and` | logical and | left to right |
+| 9 | `or` | logical or | left to right |
+| 10 | `\|>` | pass a value into a function | left to right |
 
 ```biggo
 print(1 + 2 * 3, (1 + 2) * 3, -2 * 3, 10 - 4 - 3)
@@ -133,28 +137,30 @@ true true
 database [1, 2, 3]
 ```
 
-กฎที่ควรรู้:
+Rules worth knowing:
 
-- **`/` ให้ `float` เสมอ** แม้หารลงตัว (`6 / 3` คือ `2.0`) ถ้าต้องการจำนวนเต็มใช้ `to_int(a / b)`
-  ยกเว้นเมื่อตัวตั้งหรือตัวหารเป็น `decimal` ผลจะเป็น `decimal`
-- **`int` ล้นแล้วหยุด** ไม่วนกลับเงียบ ๆ: `9223372036854775807 + 1` เป็น runtime error
-  `integer overflow` และ `x % 0` เป็น `division by zero` ส่วน `float` หารด้วยศูนย์ได้ `inf`
-- **การเปรียบเทียบต่อกันไม่ได้**: `1 < x < 10` เป็น syntax error ให้เขียน `1 < x and x < 10`
-- `+` ใช้ต่อ string และต่อ list ได้
-- `int` กับ `float` ผสมกันได้ ฝั่ง `int` ถูกแปลงเป็น `float` ให้เอง กฎเต็มอยู่ใน
-  [ระบบ type](03-types.md#การแปลงชนิดอัตโนมัติ)
-- `and` / `or` ประเมินฝั่งขวาเฉพาะเมื่อจำเป็น
+- **`/` always gives a `float`**, even when the division is exact (`6 / 3` is `2.0`). If you want an
+  integer, use `to_int(a / b)`. The exception is when the dividend or the divisor is a `decimal`:
+  the result is then a `decimal`.
+- **An `int` that overflows stops the program**. It does not wrap around silently:
+  `9223372036854775807 + 1` is the runtime error `integer overflow`, and `x % 0` is
+  `division by zero`. Dividing a `float` by zero gives `inf`.
+- **Comparisons cannot be chained**: `1 < x < 10` is a syntax error. Write `1 < x and x < 10`.
+- `+` can concatenate strings and concatenate lists.
+- You can mix `int` and `float`. The `int` side is converted to `float` automatically. The full
+  rules are in [The type system](03-types.md#automatic-conversions).
+- `and` / `or` evaluate the right side only when necessary.
 
 ## null
 
-ค่าที่ "อาจไม่มี" มี type ลงท้ายด้วย `?` เช่น `int?` กฎของ null เหมือน SQL: **การคำนวณที่มี null
-ได้ผลเป็น null**
+A value that "may be missing" has a type that ends in `?`, such as `int?`. The rule for null is the
+same as in SQL: **a computation that involves null gives null**.
 
 ```biggo
 let n: int? = null
 print(n + 1, n > 1, upper("a") + (if is_null(n) { "!" } else { "?" }))
 print(n ?? 0, is_null(n), not is_null(n))
-// and / or รู้คำตอบได้แม้อีกฝั่งเป็น null
+// and / or can know the answer even when the other side is null
 print(false and n > 1, true or n > 1, true and n > 1)
 ```
 
@@ -164,12 +170,13 @@ null null A!
 false true null
 ```
 
-เครื่องมือสำหรับจัดการ null มีสองอย่าง:
+There are two tools for handling null:
 
-- `a ?? b` — ใช้ `a` ถ้าไม่ใช่ null ไม่อย่างนั้นใช้ `b` (ผลลัพธ์ไม่เป็น null ถ้า `b` ไม่เป็น null)
-- `is_null(a)` — ได้ `true`/`false` เสมอ
+- `a ?? b`: uses `a` if it is not null, otherwise uses `b` (the result is not null if `b` is not
+  null)
+- `is_null(a)`: always gives `true`/`false`
 
-และมีข้อห้ามสองข้อที่ compiler ตรวจให้:
+There are also two things that are not allowed, which the compiler checks for you:
 
 ```biggo error
 let n: int? = null
@@ -184,8 +191,8 @@ error: this condition can be null; say what null means, for example with `?? fal
   |    ^^^^^
 ```
 
-เงื่อนไขของ `if` ต้องเป็น `bool` ที่ไม่เป็น null โปรแกรมต้องบอกเองว่า null หมายถึงอะไร เช่น
-`if n > 1 ?? false { ... }`
+The condition of an `if` must be a `bool` that is not null. The program has to say for itself what
+null means, for example `if n > 1 ?? false { ... }`.
 
 ```biggo error
 let n: int? = null
@@ -200,11 +207,12 @@ error: comparing with `null` always gives null; use `is_null(...)` to test for n
   |       ^^^^^^^^^
 ```
 
-`x == null` ได้ null เสมอตามกฎข้างบน ซึ่งแทบไม่เคยเป็นสิ่งที่ตั้งใจ จึงเป็น error ตั้งแต่ตอน compile
+By the rule above, `x == null` always gives null, which is almost never what you intend, so it is an
+error at compile time.
 
 ## if
 
-`if` เป็น expression: มีค่า และค่านั้นคือค่าของ branch ที่ถูกเลือก
+`if` is an expression: it has a value, and that value is the value of the branch that is chosen.
 
 ```biggo
 let qty = 7
@@ -222,12 +230,14 @@ print(size, if qty > 5 { 1 } else { 2.5 })
 large 1.0
 ```
 
-ทุก branch ต้องมี type ที่เข้ากันได้ (`1` กับ `2.5` รวมเป็น `float`; ค่ากับ `null` รวมเป็น type ที่มี `?`)
-`if` ที่ไม่มี `else` ไม่มีค่า ใช้เพื่อผลข้างเคียงอย่างการ `print` เท่านั้น
+Every branch must have a compatible type (`1` and `2.5` combine into `float`; a value and `null`
+combine into a type with `?`). An `if` without an `else` has no value. Use it only for side effects
+such as `print`.
 
 ## match
 
-`match` เทียบค่ากับ pattern ทีละ arm จากบนลงล่าง แล้วให้ค่าของ arm แรกที่ตรง
+`match` compares a value against patterns, one arm at a time from top to bottom, and gives the value
+of the first arm that matches.
 
 ```biggo
 fn size(qty: int) -> string {
@@ -245,20 +255,21 @@ print(map([0, 2, 50, -1], size))
 ["none", "small", "large", "returned"]
 ```
 
-- pattern เป็น literal (ตัวเลข string bool วันที่ `null`) หรือ `_` ซึ่งตรงกับทุกค่า
-- `a | b` คือ "ตรงกับ `a` หรือ `b`"
-- arm คั่นด้วยการขึ้นบรรทัดใหม่หรือ `,`
-- **ต้องครอบคลุมทุกค่า**: ต้องมี arm `_` ปิดท้าย ยกเว้น `bool` ที่มีทั้ง `true` และ `false` ครบแล้ว
-- ค่าที่ถูก match คำนวณครั้งเดียว ไม่ว่าจะมีกี่ arm
+- A pattern is a literal (number, string, bool, date, `null`) or `_`, which matches every value.
+- `a | b` means "matches `a` or `b`".
+- Arms are separated by a newline or `,`.
+- **It must cover every value**: there must be a final `_` arm, except for a `bool` that already has
+  both `true` and `false`.
+- The matched value is computed once, no matter how many arms there are.
 
-ค่าที่เป็น null ไม่ตรงกับ literal ใดเลย ตรงเฉพาะ pattern `null` กับ `_`:
+A null value does not match any literal. It matches only the patterns `null` and `_`:
 
 ```biggo
 fn label(score: int?) -> string {
   match score {
-    null => "ยังไม่มีคะแนน"
-    100 => "เต็ม"
-    _ => "มีคะแนน"
+    null => "no score"
+    100 => "perfect"
+    _ => "scored"
   }
 }
 let missing: int? = null
@@ -267,7 +278,7 @@ print(match true { true => "yes", false => "no" })
 ```
 
 ```text output
-ยังไม่มีคะแนน เต็ม มีคะแนน
+no score perfect scored
 yes
 ```
 
@@ -284,12 +295,13 @@ error: this `match` does not cover every value; add a `_ => ...` arm
   |             ^^^
 ```
 
-`match` ใช้ใน expression ของ column ได้ด้วย ดู [การทำงานกับตาราง](04-tables.md#expression-ของ-column)
+You can also use `match` in column expressions. See
+[Working with tables](04-tables.md#column-expressions).
 
 ## block
 
-`{ ... }` คือ block: ลำดับของ statement ที่มีขอบเขตตัวแปรของตัวเอง ค่าของ block คือค่าของ
-expression สุดท้าย
+`{ ... }` is a block: a sequence of statements with its own variable scope. The value of a block is
+the value of its last expression.
 
 ```biggo
 let area = {
@@ -304,44 +316,46 @@ print(area)
 12
 ```
 
-ตัวแปรใน block มองไม่เห็นจากข้างนอก ตัวของฟังก์ชัน และ branch ของ `if` ก็คือ block
-ภาษานี้ไม่มี `return`: ฟังก์ชันให้ค่าของ expression สุดท้ายในตัวมัน
+Variables in a block are not visible from outside. A function body and the branches of an `if` are
+blocks too. The language has no `return`: a function gives the value of the last expression in its
+body.
 
-## ฟังก์ชัน
+## Functions
 
 ```biggo
 fn area(width: float, height: float) -> float {
   width * height
 }
 
-// ไม่เขียน type ของผลลัพธ์ก็ได้ compiler ดูจากตัวฟังก์ชัน
+// the result type is optional: the compiler works it out from the function body
 fn show(name: string, size: float) {
-  print(name, "มีพื้นที่", size)
+  print(name, "has area", size)
 }
 
-show("ห้อง", area(3, 4.5))
-// ส่ง argument ตามชื่อได้ ตามลำดับใดก็ได้ แต่ต้องอยู่หลัง argument ที่ส่งตามตำแหน่ง
+show("room", area(3, 4.5))
+// you can pass arguments by name, in any order, but they must come after the positional arguments
 print(area(height = 2, width = 10), area(10, height = 2))
 ```
 
 ```text output
-ห้อง มีพื้นที่ 13.5
+room has area 13.5
 20.0 20.0
 ```
 
-- parameter ต้องระบุ type เสมอ
-- type ของผลลัพธ์ (`-> T`) ละได้ ยกเว้นฟังก์ชันที่เรียกตัวเอง (recursive) ต้องระบุ
-- ฟังก์ชันที่ไม่มีค่า (ลงท้ายด้วย `print` เป็นต้น) ไม่ต้องมี `->`
-- `area(3, 4.5)`: `3` เป็น `int` แต่ parameter เป็น `float` จึงถูกแปลงให้เอง
+- A parameter must always state its type.
+- The result type (`-> T`) can be omitted, except that a function that calls itself (recursive) must
+  state it.
+- A function that has no value (one that ends with `print`, for example) needs no `->`.
+- `area(3, 4.5)`: `3` is an `int` but the parameter is a `float`, so it is converted automatically.
 
-### การมองเห็นชื่อ
+### Name visibility
 
-ฟังก์ชันระดับบนสุดเรียกได้จากทุกที่ในไฟล์ แม้ประกาศไว้ข้างล่าง แต่ **ฟังก์ชันเห็นเฉพาะตัวแปรที่ประกาศ
-ก่อนหน้ามันในไฟล์**
+A top-level function can be called from anywhere in the file, even if it is declared further down.
+But **a function sees only the variables declared before it in the file**.
 
 ```biggo
 let rate = 0.07
-print(with_tax(100))        // เรียกก่อนประกาศได้
+print(with_tax(100))        // you can call it before it is declared
 
 fn with_tax(amount: float) -> float { amount * (1 + rate) }
 ```
@@ -350,7 +364,7 @@ fn with_tax(amount: float) -> float { amount * (1 + rate) }
 107.0
 ```
 
-ถ้าฟังก์ชันอยู่เหนือตัวแปรที่มันใช้ compiler จะปฏิเสธ:
+If a function is above a variable that it uses, the compiler rejects it:
 
 ```biggo error
 fn with_tax(amount: float) -> float { amount * (1 + rate) }
@@ -365,11 +379,11 @@ error: undefined name `rate`
   |                                                     ^^^^
 ```
 
-กฎนี้กันความผิดพลาดได้เกือบหมด เหลือกรณีเดียวที่ต้องรอถึงตอนรัน คือ *เรียก* ฟังก์ชันก่อนที่ `let`
-ของตัวแปรที่มันใช้จะทำงาน:
+This rule prevents almost every mistake. One case is left that has to wait until run time:
+*calling* a function before the `let` of a variable it uses has run:
 
 ```biggo error
-print(with_tax(100))        // rate ยังไม่มีค่า ณ จุดนี้
+print(with_tax(100))        // rate has no value yet at this point
 let rate = 0.07
 fn with_tax(amount: float) -> float { amount * (1 + rate) }
 ```
@@ -382,7 +396,8 @@ error: `rate` is used before it has a value
   |                                                     ^^^^
 ```
 
-แนวทางที่ปลอดภัย: ประกาศค่าคงที่ไว้บนสุด ตามด้วยฟังก์ชัน แล้วค่อยเป็นโค้ดที่เรียกใช้
+A safe approach: declare constants at the top, then the functions, and then the code that calls
+them.
 
 ### recursion
 
@@ -398,13 +413,14 @@ print(factorial(20), fib(20))
 2432902008176640000 6765
 ```
 
-การเรียกซ้อนกันได้ลึก 100,000 ชั้น เกินนั้นโปรแกรมหยุดด้วย
-`stack overflow: the program recurses too deeply` ภาษานี้ไม่มีลูป `for`/`while`:
-งานที่ทำซ้ำใช้ `map` `filter` `fold` `each` บน list (ดูข้างล่าง) หรือ recursion
+Calls can nest 100,000 levels deep. Beyond that the program stops with
+`stack overflow: the program recurses too deeply`. The language has no `for`/`while` loops:
+repeated work uses `map`, `filter`, `fold`, `each` on a list (see below) or recursion.
 
-### ฟังก์ชันภายในฟังก์ชัน
+### Functions inside functions
 
-ประกาศ `fn` ใน block ได้ ฟังก์ชันข้างในเห็นตัวแปรของฟังก์ชันข้างนอก (closure)
+You can declare a `fn` inside a block. The inner function sees the variables of the outer function
+(a closure).
 
 ```biggo
 fn total_with_fee(amounts: list<float>, fee: float) -> float {
@@ -418,22 +434,22 @@ print(total_with_fee([10, 20.5], 1))
 32.5
 ```
 
-## lambda และฟังก์ชันในฐานะค่า
+## lambda and functions as values
 
-`fn(...) { ... }` ที่ไม่มีชื่อคือ lambda: ฟังก์ชันที่เป็นค่า เก็บในตัวแปร ส่งเป็น argument
-หรือคืนจากฟังก์ชันอื่นได้
+A `fn(...) { ... }` without a name is a lambda: a function that is a value. You can store it in a
+variable, pass it as an argument, or return it from another function.
 
 ```biggo
 let double = fn(x: int) -> int { x * 2 }
 print(double(21))
 
-// type ของฟังก์ชันเขียนว่า fn(type ของ parameter) -> type ของผลลัพธ์
+// a function type is written fn(parameter types) -> result type
 fn twice(f: fn(int) -> int, x: int) -> int { f(f(x)) }
 
-// lambda ที่ส่งเป็น argument ไม่ต้องเขียน type: รู้จาก parameter ที่รับมัน
+// a lambda passed as an argument needs no types: they come from the parameter that receives it
 print(twice(double, 3), twice(fn(n) { n + 1 }, 3))
 
-// ฟังก์ชันที่คืนฟังก์ชัน lambda จำตัวแปรรอบตัวมันไว้
+// a function that returns a function: the lambda remembers the variables around it
 fn adder(amount: int) -> fn(int) -> int {
   fn(n) { n + amount }
 }
@@ -447,13 +463,15 @@ print(add5(1), map([1, 2, 3], add5))
 6 [6, 7, 8]
 ```
 
-type ของ parameter ของ lambda ละได้เมื่อบริบทบอกอยู่แล้ว คือเมื่อ lambda
+You can omit the parameter types of a lambda when the context already determines them, that is,
+when the lambda:
 
-- เป็น argument ของฟังก์ชันที่ parameter มี type เป็นฟังก์ชัน (รวมถึง `map` `filter` `fold` `each`)
-- เป็นค่าของ `let` ที่ระบุ type
-- เป็นค่าสุดท้ายของฟังก์ชันที่ประกาศ type ของผลลัพธ์เป็นฟังก์ชัน
+- is an argument of a function whose parameter has a function type (including `map`, `filter`,
+  `fold`, `each`)
+- is the value of a `let` that states a type
+- is the last value of a function whose declared result type is a function
 
-นอกเหนือจากนั้นต้องเขียนเอง:
+Anywhere else you must write them yourself:
 
 ```biggo error
 let inc = fn(x) { x + 1 }
@@ -467,16 +485,16 @@ error: cannot tell the type of `x` here; write it, as in `x: int`
   |              ^
 ```
 
-ฟังก์ชันที่ประกาศด้วยชื่อก็ใช้เป็นค่าได้ (`map(xs, double)`) แต่ **built-in ใช้เป็นค่าไม่ได้**
-ต้องห่อด้วย lambda: `map(names, fn(s) { upper(s) })`
+A function declared with a name can also be used as a value (`map(xs, double)`), but **a built-in
+function cannot be used as a value**. Wrap it in a lambda: `map(names, fn(s) { upper(s) })`.
 
 ## list
 
-list คือลำดับของค่าชนิดเดียวกัน เขียนใน `[...]` type คือ `list<T>`
+A list is a sequence of values of the same type, written in `[...]`. Its type is `list<T>`.
 
 ```biggo
 let primes = [2, 3, 5, 7, 11]
-print(primes[0], primes[-1], len(primes))      // index ติดลบนับจากท้าย
+print(primes[0], primes[-1], len(primes))      // a negative index counts from the end
 print(primes + [13], range(5), range(2, 6))
 
 print(map(primes, fn(p) { p * p }))
@@ -499,27 +517,27 @@ big prime: 11
 [] 0 [1.0, 2.5] [1, null]
 ```
 
-| ฟังก์ชัน | ผลลัพธ์ |
+| Function | Result |
 | --- | --- |
-| `len(xs)` | จำนวนสมาชิก |
-| `xs[i]` | สมาชิกตัวที่ `i` นับจาก 0; `-1` คือตัวสุดท้าย; เกินขอบเขตเป็น runtime error |
-| `xs + ys` | list ใหม่ที่ต่อกัน |
-| `range(n)`, `range(a, b)` | `[0, ..., n-1]`, `[a, ..., b-1]` (สูงสุด 10 ล้านตัว) |
-| `map(xs, f)` | list ของ `f(x)` |
-| `filter(xs, f)` | เฉพาะตัวที่ `f(x)` เป็น `true` |
-| `fold(xs, start, f)` | เริ่มจาก `start` แล้ว `acc = f(acc, x)` ทีละตัว |
-| `each(xs, f)` | เรียก `f(x)` ทีละตัวเพื่อผลข้างเคียง ไม่มีค่า |
+| `len(xs)` | the number of elements |
+| `xs[i]` | element number `i`, counting from 0; `-1` is the last one; out of range is a runtime error |
+| `xs + ys` | a new list, the two concatenated |
+| `range(n)`, `range(a, b)` | `[0, ..., n-1]`, `[a, ..., b-1]` (at most 10 million elements) |
+| `map(xs, f)` | the list of `f(x)` |
+| `filter(xs, f)` | only the elements for which `f(x)` is `true` |
+| `fold(xs, start, f)` | starts from `start`, then `acc = f(acc, x)` one element at a time |
+| `each(xs, f)` | calls `f(x)` one element at a time for its side effects; has no value |
 
-สมาชิกของ list ต้องเป็นข้อมูล: ตัวเลข string วันที่ record map หรือ list ซ้อนกันได้
-แต่เก็บฟังก์ชันหรือตารางไม่ได้ ค่าทุกชนิดเปลี่ยนแปลงไม่ได้หลังสร้าง ฟังก์ชันอย่าง `+` และ `map`
-จึงสร้าง list ใหม่เสมอ
+The elements of a list must be data: numbers, strings, dates, records, maps or lists, which can be
+nested. A list cannot hold functions or tables. A value of any type cannot be changed after it is
+created, so functions such as `+` and `map` always create a new list.
 
-`fold` ต้องการ `start` ที่มี type ชัดเจน และฟังก์ชันต้องคืน type เดียวกับ `start`:
-ถ้าจะสะสมเป็น `float` ให้เริ่มด้วย `0.0` ไม่ใช่ `0`
+`fold` needs a `start` with a definite type, and the function must return the same type as `start`:
+to accumulate a `float`, start with `0.0`, not `0`.
 
 ## record
 
-record คือค่าที่มี field ตามชื่อ เขียน `{ name: value, ... }` และอ่าน field ด้วย `.`
+A record is a value with named fields. Write it as `{ name: value, ... }` and read a field with `.`.
 
 ```biggo
 let ann = { name: "Ann", age: 31, tags: ["admin", "dev"] }
@@ -539,26 +557,29 @@ print(map(points, fn(p) { p.x + p.y }))
 [3.0, 0.5]
 ```
 
-type ของ record คือรายชื่อ field พร้อม type ตามลำดับ: `{ x: float, y: float }` record สอง type
-เป็นชนิดเดียวกันเมื่อ field ชื่อเดียวกัน เรียงเหมือนกัน และ type ตรงกัน record ที่ *เขียนออกมาตรง ๆ*
-(`{ x: 3, y: 4 }`) จะถูกแปลงทีละ field ให้เข้ากับ type ที่ต้องการ เช่น `3` กลายเป็น `3.0` ข้างบน
+The type of a record is the list of its fields with their types, in order: `{ x: float, y: float }`.
+Two record types are the same type when their fields have the same names, in the same order, with
+matching types. A record that is *written out directly* (`{ x: 3, y: 4 }`) is converted field by
+field to fit the type that is required, for example `3` becomes `3.0` above.
 
-แถวของตารางก็คือ record: `to_rows(table)` ได้ `list` ของ record และ `from_rows(list)` สร้างตารางจาก
-list ของ record ดู [การทำงานกับตาราง](04-tables.md#ตารางกับ-list-ของ-record)
+A table row is also a record: `to_rows(table)` gives a `list` of records, and `from_rows(list)`
+creates a table from a list of records. See
+[Working with tables](04-tables.md#tables-and-lists-of-records).
 
 ## map
 
-map จับคู่ key กับ value เขียน `{ key: value, ... }` โดย key เป็น literal type คือ `map<K, V>`
+A map pairs keys with values. Write it as `{ key: value, ... }`, where each key is a literal. Its
+type is `map<K, V>`.
 
 ```biggo
 let stock = { "tea": 4, "cake": 0 }
-print(stock["tea"], stock["milk"], stock["milk"] ?? 0)   // key ที่ไม่มีได้ null
+print(stock["tea"], stock["milk"], stock["milk"] ?? 0)   // a missing key gives null
 
-let more = put(put(stock, "milk", 9), "tea", 5)          // put คืน map ใหม่
+let more = put(put(stock, "milk", 9), "tea", 5)          // put returns a new map
 print(more, stock)
 print(keys(more), values(more), len(more), has_key(more, "milk"))
 
-// map ว่างต้องบอก type
+// an empty map needs a type
 let none: map<string, int> = {}
 let counts = fold(["a", "b", "a"], none, fn(seen, word) {
   put(seen, word, (seen[word] ?? 0) + 1)
@@ -573,18 +594,22 @@ print(counts)
 {"a": 2, "b": 1}
 ```
 
-- key เป็น `string` `int` `bool` หรือ `date`; value เป็นข้อมูลชนิดใดก็ได้ (เหมือนสมาชิกของ list)
-- `m[key]` ได้ type `V?`: เป็น null เมื่อไม่มี key นั้น ใช้ `??` กำหนดค่าเริ่มต้น
-- map จำลำดับที่ key ถูกใส่ครั้งแรก `keys` `values` และการพิมพ์เรียงตามนั้น
-- `put` ไม่แก้ map เดิม แต่คืน map ใหม่ (ต้องคัดลอกทั้ง map จึงเหมาะกับ map ขนาดเล็กถึงกลาง)
+- A key is a `string`, `int`, `bool` or `date`; a value is data of any type (the same as the
+  elements of a list).
+- `m[key]` has the type `V?`: it is null when the key is not there. Use `??` to set a default value.
+- A map remembers the order in which its keys were first inserted. `keys`, `values` and printing
+  follow that order.
+- `put` does not modify the original map. It returns a new map (it has to copy the whole map, so it
+  suits small to medium maps).
 
-`{ ... }` ที่ขึ้นต้นด้วย `ชื่อ:` เป็น record, ขึ้นต้นด้วย `literal:` เป็น map นอกนั้นเป็น block
-ดังนั้น key ของ map ที่เขียนตรง ๆ ต้องเป็น literal ถ้า key มาจากตัวแปรให้ใช้ `put`
+A `{ ... }` that starts with `name:` is a record, one that starts with `literal:` is a map, and
+anything else is a block. So the keys of a map that is written out directly must be literals. If a
+key comes from a variable, use `put`.
 
 ## pipeline
 
-`a |> f(b, c)` มีความหมายเท่ากับ `f(a, b, c)` ทุกประการ: ค่าทางซ้ายเป็น argument แรก
-ฝั่งขวาของ `|>` ต้องเป็นการเรียกฟังก์ชัน
+`a |> f(b, c)` means exactly the same as `f(a, b, c)`: the value on the left is the first argument.
+The right side of `|>` must be a function call.
 
 ```biggo
 fn clamp(x: int, low: int, high: int) -> int {
@@ -602,14 +627,15 @@ print(15 |> clamp(0, 10))
 [30, 20]
 ```
 
-`|>` ผูกหลวมที่สุด ทั้ง expression ทางซ้ายจึงเป็นค่าที่ถูกส่ง: `1 + 2 |> print()` พิมพ์ `3`
+`|>` binds the loosest, so the whole expression on the left is the value that is passed:
+`1 + 2 |> print()` prints `3`.
 
 ## import
 
-`import "path"` นำ definition ระดับบนสุด (ตัวแปร ฟังก์ชัน type) ของอีกไฟล์มาใช้
-path นับจากตำแหน่งของไฟล์ที่เขียน `import`
+`import "path"` brings in the top-level definitions (variables, functions, types) of another file.
+The path is relative to the location of the file that contains the `import`.
 
-ไฟล์ [`lib/geometry.bgo`](lib/geometry.bgo):
+The file [`lib/geometry.bgo`](lib/geometry.bgo):
 
 ```biggo check
 type Rect = { width: float, height: float }
@@ -619,7 +645,7 @@ fn area(rect: Rect) -> float { rect.width * rect.height }
 let unit_square: Rect = { width: 1, height: 1 }
 ```
 
-โปรแกรมที่ใช้:
+A program that uses it:
 
 ```biggo
 import "lib/geometry.bgo"
@@ -632,26 +658,27 @@ print(area(door), area(unit_square))
 1.8 1.0
 ```
 
-- `import` ต้องอยู่บนสุดของไฟล์ ก่อน statement อื่น
-- ไฟล์ที่ถูก import ถูก *รัน* หนึ่งครั้ง (statement ระดับบนสุดของมันทำงานจริง รวมถึง `print`)
-  ก่อนไฟล์ที่ import มัน ไม่ว่าจะถูก import จากกี่ที่ก็รันครั้งเดียว
-- ชื่อทั้งหมดอยู่ในที่เดียวกัน (ไม่มี namespace): ชื่อจากไฟล์ที่ import เข้ามา รวมถึงจากไฟล์ที่
-  ไฟล์นั้น import ต่ออีกที ใช้ได้โดยตรง ชื่อที่ประกาศซ้ำทีหลังบังชื่อก่อนหน้า
-- path ของไฟล์ข้อมูลในไฟล์ที่ถูก import นับจากตำแหน่งของไฟล์นั้นเอง
-- import เป็นวงกลม (A import B, B import A) เป็น error
-- `biggo build` รวมไฟล์ที่ import ไว้ใน executable ให้ด้วย
+- `import` must be at the top of the file, before any other statement.
+- An imported file is *run* once (its top-level statements really execute, including `print`),
+  before the file that imports it. It runs only once, no matter how many places import it.
+- All names live in one place (there are no namespaces): names from an imported file, including
+  names from the files that it imports in turn, can be used directly. A name that is declared again
+  later shadows the earlier one.
+- The paths of data files in an imported file are relative to the location of that file itself.
+- A circular import (A imports B, B imports A) is an error.
+- `biggo build` also bundles the imported files into the executable.
 
-## ชื่อ
+## Names
 
-ชื่อของตัวแปร ฟังก์ชัน type และ column ขึ้นต้นด้วยตัวอักษรหรือ `_` ตามด้วยตัวอักษร ตัวเลข หรือ `_`
-ตัวอักษรคือตัวอักษร Unicode จึงใช้ภาษาไทยได้
+The names of variables, functions, types and columns start with a letter or `_`, followed by
+letters, digits or `_`. Letters are Unicode letters, so you can use Thai, as the example below does.
 
 ```biggo
 let ยอดขาย = [120, 80]
 let ภาษี = fn(ยอด: int) -> float { ยอด * 0.07 }
 print(map(ยอดขาย, ภาษี))
 
-// ชื่อที่มีช่องว่างหรือชนกับ keyword ครอบด้วย backtick
+// a name that contains spaces or clashes with a keyword goes inside backticks
 let `unit price` = 2.5
 print(`unit price` * 4)
 ```
@@ -661,14 +688,16 @@ print(`unit price` * 4)
 10.0
 ```
 
-คำสงวน: `let` `fn` `type` `import` `if` `else` `match` `and` `or` `not` `true` `false` `null`
+Keywords: `let` `fn` `type` `import` `if` `else` `match` `and` `or` `not` `true` `false` `null`
 
-ชื่อของ built-in (เช่น `print` `sum` `map` `where`) ใช้ตั้งชื่อฟังก์ชันไม่ได้ แต่ใช้เป็นชื่อตัวแปรหรือ
-column ได้ เพราะ built-in ถูกเรียกในรูป `name(...)` เสมอ ซึ่งแยกออกจากตัวแปรได้
+The name of a built-in function (such as `print`, `sum`, `map`, `where`) cannot be used to name a
+function, but it can be used as the name of a variable or a column, because a built-in function is
+always called in the form `name(...)`, which can be told apart from a variable.
 
-## error ตอนรัน
+## Errors at run time
 
-ข้อผิดพลาดส่วนใหญ่ถูกจับตอน compile ที่เหลือซึ่งรู้ได้ตอนรันเท่านั้นจะหยุดโปรแกรมพร้อมบอกตำแหน่ง:
+Most errors are caught at compile time. The rest, which can only be known at run time, stop the
+program and report the location:
 
 ```biggo error
 fn bucket(id: int, buckets: int) -> int {
@@ -687,16 +716,18 @@ error: division by zero
   |   ^^^^^^^^^^^^
 ```
 
-runtime error ของภาษา (ไม่นับที่มาจากข้อมูล เช่น ไฟล์ไม่มี หรือค่าใน CSV ผิดชนิด):
+The runtime errors of the language (not counting those that come from data, such as a missing file
+or a value of the wrong type in a CSV):
 
-| error | เกิดเมื่อ |
+| Error | When it happens |
 | --- | --- |
-| `integer overflow` | ผลของ `+` `-` `*` หรือ `-x` ของ `int` เกิน 64 บิต |
-| `division by zero` | `%` ด้วยศูนย์ หรือ `/` `%` ของ `decimal` ด้วยศูนย์ |
-| `decimal overflow` | ผลของ `decimal` เกิน 38 หลัก |
-| `index ... is out of range` | index ของ list เกินขอบเขต |
-| `stack overflow` | เรียกฟังก์ชันซ้อนกันเกิน 100,000 ชั้น |
-| `assertion failed` | `assert` / `assert_eq` ไม่ผ่าน |
-| `... is used before it has a value` | อ่านตัวแปรระดับบนสุดก่อนที่ `let` ของมันจะรัน |
+| `integer overflow` | the result of `+` `-` `*` or `-x` on an `int` exceeds 64 bits |
+| `division by zero` | `%` by zero, or `/` `%` of a `decimal` by zero |
+| `decimal overflow` | the result of a `decimal` exceeds 38 digits |
+| `index ... is out of range` | a list index is out of range |
+| `stack overflow` | function calls nest more than 100,000 levels deep |
+| `assertion failed` | an `assert` / `assert_eq` fails |
+| `... is used before it has a value` | a top-level variable is read before its `let` has run |
 
-โปรแกรมที่จบด้วย error ออกด้วย exit code 1 สิ่งที่พิมพ์ไปก่อนหน้ายังอยู่ครบ
+A program that ends with an error exits with exit code 1. Everything it printed before that is still
+there in full.

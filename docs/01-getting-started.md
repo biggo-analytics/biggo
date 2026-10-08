@@ -1,18 +1,20 @@
-# เริ่มต้นใช้งาน biggo
+# Getting started with biggo
 
-biggo เป็นภาษาสำหรับงานวิเคราะห์ข้อมูล โปรแกรมหนึ่งไฟล์ (`.bgo`) อ่านข้อมูลเข้ามาเป็นตาราง
-แปลงตารางด้วย pipeline (`|>`) แล้วพิมพ์หรือเขียนผลลัพธ์ออกไป ตัวภาษาตรวจ type ทั้งหมดก่อนรัน
-รวมถึงชื่อและชนิดของ column ทุกตัว ดังนั้นพิมพ์ชื่อ column ผิดจะรู้ตั้งแต่ยังไม่ได้อ่านข้อมูลสักแถว
+biggo is a language for data analysis. A program is a single file (`.bgo`) that reads data in as tables,
+transforms the tables with a pipeline (`|>`), and then prints or writes the result. The language checks
+all types before the program runs, including the name and type of every column, so if you mistype a
+column name, you find out before a single row of data has been read.
 
-หน้านี้พาไปตั้งแต่ build จนรันโปรแกรมแรก
+This page takes you from building biggo to running your first program.
 
-## สิ่งที่ต้องมี
+## What you need
 
-- Rust รุ่นปัจจุบัน ติดตั้งได้จาก <https://rustup.rs> (โปรเจกต์ใช้ edition 2024 และพัฒนา/ทดสอบกับ
-  Rust 1.99)
-- C compiler ของระบบ (ใช้ build SQLite ที่ฝังมากับ biggo) บน macOS คือ Xcode Command Line Tools
+- A current version of Rust, which you can install from <https://rustup.rs> (the project uses edition 2024
+  and is developed and tested with Rust 1.99)
+- The system C compiler (used to build the SQLite that is bundled with biggo). On macOS, this is the
+  Xcode Command Line Tools
 
-ไม่ต้องติดตั้งฐานข้อมูลหรือ library อื่นเพิ่ม ทุกอย่างถูก link เข้าไปใน executable ตัวเดียว
+You do not need to install a database or any other library. Everything is linked into a single executable.
 
 ## Build
 
@@ -21,18 +23,20 @@ git clone https://github.com/biggo-analytics/biggo.git && cd biggo
 cargo build --release
 ```
 
-ได้ไฟล์ `target/release/biggo` ขนาดราว 22 MB คัดลอกไปไว้ใน `PATH` ได้เลย:
+This produces the file `target/release/biggo`, about 22 MB in size. You can copy it straight into your
+`PATH`:
 
 ```sh
 cp target/release/biggo ~/.local/bin/
 biggo version
 ```
 
-ต้องใช้ `--release` เสมอเมื่อจะวัดความเร็วหรือใช้งานจริง build แบบ debug ช้ากว่าหลายสิบเท่า
+Always use `--release` when you measure speed or use biggo for real work. A debug build is tens of
+times slower.
 
-## โปรแกรมแรก
+## Your first program
 
-สร้างไฟล์ `hello.bgo`:
+Create the file `hello.bgo`:
 
 ```biggo
 let name = "biggo"
@@ -40,18 +44,19 @@ print("hello,", name)
 print(1 + 2 * 3, 7 / 2, [1, 2, 3])
 ```
 
-แล้วรัน `biggo run hello.bgo` จะได้
+Then run `biggo run hello.bgo`. You get:
 
 ```text output
 hello, biggo
 7 3.5 [1, 2, 3]
 ```
 
-`print` รับค่ากี่ตัวก็ได้ คั่นด้วยช่องว่างตอนพิมพ์ และ `/` ให้ผลเป็นทศนิยมเสมอ (`7 / 2` คือ `3.5`)
+`print` takes any number of values and separates them with a space when it prints. `/` always produces
+a float (`7 / 2` is `3.5`).
 
-## โปรแกรมวิเคราะห์ข้อมูลแรก
+## Your first data analysis program
 
-ตัวอย่างในเอกสารชุดนี้ใช้ไฟล์ [`data/sales.csv`](data/sales.csv) ซึ่งมี 10 แถว:
+The examples in this documentation use the file [`data/sales.csv`](data/sales.csv), which has 10 rows:
 
 ```text
 date,region,product,qty,price
@@ -62,10 +67,10 @@ date,region,product,qty,price
 ...
 ```
 
-โปรแกรมนี้หายอดขายรวมของแต่ละภูมิภาค:
+This program computes the total sales of each region:
 
 ```biggo
-// บอกว่าแต่ละแถวของไฟล์มี column อะไร ชนิดอะไร
+// Declares which columns each row of the file has, and their types
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
 
 let sales = read_csv<Sale>("data/sales.csv")
@@ -89,21 +94,24 @@ sales
 +--------+-------+--------+
 ```
 
-อ่านจากบนลงล่างได้เลย:
+You can read it from top to bottom:
 
-1. `type Sale = {...}` ประกาศชนิดของแถว `price: float?` แปลว่า column นี้ว่างได้ (ในไฟล์มีแถวที่ไม่มีราคา)
-2. `read_csv<Sale>(...)` ได้ตารางที่มี column ตาม `Sale` path ของไฟล์นับจากตำแหน่งของไฟล์โปรแกรม
-   ไม่ใช่จากที่ที่สั่งรัน
-3. `a |> f(b)` คือ `f(a, b)` ตารางทางซ้ายถูกส่งเป็น argument แรกของฟังก์ชันทางขวา
-4. `where` เลือกแถว, `derive` เพิ่ม column, `group` + `agg` สรุปเป็นกลุ่ม, `sort` เรียง
-5. `price ?? 0.0` คือ "ใช้ `price` ถ้ามีค่า ถ้าเป็น null ใช้ `0.0`"
+1. `type Sale = {...}` declares the row type. `price: float?` means this column can be empty (the file
+   has a row with no price)
+2. `read_csv<Sale>(...)` gives a table whose columns follow `Sale`. The file path is relative to the
+   location of the program file, not to the directory where you run the command
+3. `a |> f(b)` is `f(a, b)`. The table on the left is passed as the first argument of the function on
+   the right
+4. `where` selects rows, `derive` adds columns, `group` + `agg` summarize by group, `sort` sorts
+5. `price ?? 0.0` means "use `price` if it has a value, and use `0.0` if it is null"
 
-ตารางใน biggo เป็น *คำสั่งที่ยังไม่ได้รัน* (lazy) ทั้ง pipeline ถูกรวมเป็นแผนเดียว ปรับให้เหมาะ
-แล้วค่อยรันเมื่อถึง `print` — อ่านเฉพาะ column ที่ใช้ กรองแถวตั้งแต่ตอนอ่านไฟล์ และใช้ทุก core ของเครื่อง
+A table in biggo is *an instruction that has not run yet* (lazy). The whole pipeline is combined into
+a single plan, optimized, and run only when it reaches `print`: it reads only the columns that are used,
+filters rows while reading the file, and uses every core of the machine.
 
-## ผิดแล้วรู้ก่อนรัน
+## Errors are caught before the program runs
 
-ลองพิมพ์ชื่อ column ผิด:
+Try mistyping a column name:
 
 ```biggo error
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -119,12 +127,13 @@ error: undefined name `quantity`; the table has columns date, region, product, q
   |                      ^^^^^^^^
 ```
 
-ข้อผิดพลาดนี้มาจากตัวตรวจ type ยังไม่มีการเปิดไฟล์ข้อมูลเลย ถ้าอยากตรวจอย่างเดียวโดยไม่รัน
-ใช้ `biggo check hello.bgo`
+This error comes from the type checker. The data file has not been opened at all. If you only want to
+check a program without running it, use `biggo check hello.bgo`.
 
-## ลองทีละบรรทัดด้วย REPL
+## Try things line by line with the REPL
 
-`biggo repl` เปิดโหมดโต้ตอบ พิมพ์ expression แล้วเห็นค่าทันที ตัวแปรและฟังก์ชันที่ประกาศไว้อยู่ต่อไปจนปิด:
+`biggo repl` opens an interactive mode. Type an expression and you see its value immediately. Variables
+and functions that you declare stay available until you exit:
 
 ```text
 $ biggo repl
@@ -140,11 +149,13 @@ biggo 0.1.0 (Ctrl-D to exit)
 [2, 3]
 ```
 
-ถ้าบรรทัดยังไม่จบ (เช่นวงเล็บยังไม่ปิด หรือจบด้วย `|>`) REPL จะรอบรรทัดถัดไปเอง
+If a line is not finished (for example, a parenthesis is still open, or the line ends with `|>`), the
+REPL waits for the next line automatically.
 
-## ดูว่า engine จะทำอะไร
+## See what the engine will do
 
-`biggo explain hello.bgo` พิมพ์แผนของทุก query แทนการรัน ทั้งแผนที่เขียนและแผนหลังปรับ:
+`biggo explain hello.bgo` prints the plan of every query instead of running it, both the plan as written
+and the optimized plan:
 
 ```biggo explain
 type Sale = { date: date, region: string, product: string, qty: int, price: float? }
@@ -165,18 +176,19 @@ optimized plan:
     Scan csv "data/sales.csv": region, qty where qty > 0
 ```
 
-แผนหลังปรับอ่านแค่ 2 จาก 5 column และกรอง `qty > 0` ไปในขั้นอ่านไฟล์เลย
+The optimized plan reads only 2 of the 5 columns and applies the `qty > 0` filter in the file-reading
+step itself.
 
-## ไปต่อ
+## Where to go next
 
-| อยากรู้เรื่อง | อ่าน |
+| To learn about | Read |
 | --- | --- |
-| ไวยากรณ์ ตัวแปร ฟังก์ชัน `if` `match` lambda | [ตัวภาษา](02-language.md) |
-| ชนิดข้อมูลทั้งหมดและกฎการแปลงชนิด | [ระบบ type](03-types.md) |
-| `where` `group` `join` `window` `pivot` ฯลฯ | [การทำงานกับตาราง](04-tables.md) |
-| CSV, Parquet, JSON, SQLite | [แหล่งข้อมูล](05-data-sources.md) |
-| ฟังก์ชันสำเร็จรูปทุกตัว | [built-in reference](06-builtins.md) |
-| `run` `check` `fmt` `test` `build` `lsp` และ editor | [เครื่องมือ](07-tools.md) |
-| compiler ทำงานอย่างไร | [สถาปัตยกรรม](08-architecture.md) |
-| ผล benchmark และวิธีวัด | [ประสิทธิภาพ](09-performance.md) |
-| ไวยากรณ์แบบเป็นทางการ | [grammar](10-grammar.md) |
+| Syntax, variables, functions, `if`, `match`, lambdas | [The language](02-language.md) |
+| All data types and the type conversion rules | [The type system](03-types.md) |
+| `where`, `group`, `join`, `window`, `pivot`, and so on | [Working with tables](04-tables.md) |
+| CSV, Parquet, JSON, SQLite | [Data sources](05-data-sources.md) |
+| Every built-in function | [Built-in reference](06-builtins.md) |
+| `run`, `check`, `fmt`, `test`, `build`, `lsp`, and editors | [Tools](07-tools.md) |
+| How the compiler works | [Architecture](08-architecture.md) |
+| Benchmark results and how they are measured | [Performance](09-performance.md) |
+| The formal grammar | [Grammar](10-grammar.md) |

@@ -1,17 +1,18 @@
-# สถาปัตยกรรม
+# Architecture
 
-หน้านี้อธิบายว่า `biggo` ทำงานอย่างไรข้างใน สำหรับคนที่จะอ่านหรือแก้ source code
-ตัว compiler และ engine เขียนด้วย Rust ทั้งหมด แบ่งเป็น 8 crate ใน `crates/`
+This page explains how `biggo` works inside, for people who will read or change the source code.
+The compiler and engine are written entirely in Rust, split into 8 crates in `crates/`.
 
-## ภาพรวม
+## Overview
 
-โปรแกรม biggo มีสองโลกที่ทำงานต่างกันมาก:
+A biggo program has two worlds that work very differently:
 
-- **โค้ดทั่วไป** (ตัวแปร ฟังก์ชัน `if` list) ถูกแปลเป็น bytecode แล้วรันบน virtual machine ทีละคำสั่ง
-- **ตาราง** ถูกแปลเป็น *แผน* (logical plan) ซึ่งถูกปรับแล้วรันโดย engine ที่ทำงานทีละ column
-  บนทุก core
+- **Ordinary code** (variables, functions, `if`, lists) is translated to bytecode and run on a
+  virtual machine one instruction at a time.
+- **Tables** are translated to a *plan* (logical plan), which is optimized and then run by an engine
+  that works one column at a time on every core.
 
-ตัวตรวจ type เป็นตัวแยกสองโลกนี้ออกจากกันตั้งแต่ตอน compile
+The type checker is what separates these two worlds, at compile time.
 
 ```text
 source (.bgo)
@@ -20,12 +21,12 @@ source (.bgo)
   AST ───────────────► formatter              biggo-fmt
    │  type checker                            biggo-types
    ▼
-  HIR  (ชื่อถูกผูกแล้ว, type ครบ, table operation มี plan node แนบมา)
+  HIR  (names bound, types complete, table operations have a plan node attached)
    │  bytecode compiler                       biggo-eval
    ▼
-bytecode ── VM ──► ค่า (int, string, list, record, closure, ...)
+bytecode ── VM ──► values (int, string, list, record, closure, ...)
               │
-              │ table operation สร้าง plan node
+              │ table operations build plan nodes
               ▼
         logical plan                          biggo-plan
               │  optimizer
@@ -36,244 +37,274 @@ bytecode ── VM ──► ค่า (int, string, list, record, closure, ...)
         Arrow record batches ──► print / write / to_rows
 ```
 
-| crate | หน้าที่ | ขนาดโดยประมาณ |
+| Crate | Role | Approximate size |
 | --- | --- | --- |
-| `biggo-syntax` | span, token, lexer, parser, AST, diagnostic, รูปข้อความของ decimal/datetime | 2,800 บรรทัด |
-| `biggo-types` | ผูกชื่อ, ตรวจ type, อนุมาน schema, แปลง AST เป็น HIR | 5,200 |
-| `biggo-plan` | schema, expression ของ column, logical plan, optimizer | 2,100 |
-| `biggo-exec` | engine: อ่าน/เขียนไฟล์, filter, aggregate, join, sort, window | 4,100 |
-| `biggo-eval` | bytecode compiler, VM, `Session` (รวมถึง `import`) | 2,800 |
+| `biggo-syntax` | spans, tokens, lexer, parser, AST, diagnostics, text forms of decimal/datetime | 2,800 lines |
+| `biggo-types` | name binding, type checking, schema inference, converting the AST to HIR | 5,200 |
+| `biggo-plan` | schema, column expressions, logical plan, optimizer | 2,100 |
+| `biggo-exec` | engine: reading/writing files, filter, aggregate, join, sort, window | 4,100 |
+| `biggo-eval` | bytecode compiler, VM, `Session` (including `import`) | 2,800 |
 | `biggo-fmt` | formatter | 800 |
 | `biggo-lsp` | language server | 300 |
-| `biggo-cli` | คำสั่ง `biggo`: run, repl, check, test, build, ... | 600 |
+| `biggo-cli` | the `biggo` command: run, repl, check, test, build, ... | 600 |
 
-การพึ่งพาเป็นทางเดียว: `syntax` ← `plan` ← `types` ← `eval` → `exec`
-`biggo-types` ไม่รู้จัก engine เลย (รู้แค่รูปของแผน) และ `biggo-exec` ไม่รู้จักตัวภาษาเลย
-(รับแผนเข้า คืน Arrow batch ออก) dependency ภายนอกหลักคือ `arrow` / `parquet` (รูปแบบข้อมูลและ
-kernel คำนวณ), `rayon` (thread pool), `rusqlite` (SQLite ฝังในตัว), `memmap2`, `hashbrown`
+Dependencies go one way: `syntax` ← `plan` ← `types` ← `eval` → `exec`.
+`biggo-types` knows nothing about the engine (only the shape of a plan), and `biggo-exec` knows
+nothing about the language (it takes a plan in and returns Arrow batches). The main external
+dependencies are `arrow` / `parquet` (data format and compute kernels), `rayon` (thread pool),
+`rusqlite` (bundled SQLite), `memmap2`, `hashbrown`.
 
-## front end: จากข้อความเป็น AST
+## Front end: from text to AST
 
-**Lexer** (`lexer.rs`) เขียนมือ อ่าน byte ทีละตัว แต่ละ token จำ span (ตำแหน่งเริ่มและจบเป็น `u32`)
-และ flag `newline_before` ซึ่ง parser ใช้ตัดสินว่า statement จบหรือยัง comment ถูกเก็บแยกไว้
-ให้ formatter
+The **lexer** (`lexer.rs`) is hand-written and reads one byte at a time. Each token records a span
+(start and end positions as `u32`) and a `newline_before` flag, which the parser uses to decide
+whether a statement has ended. Comments are stored separately for the formatter.
 
-**Parser** (`parser.rs`) เป็น recursive descent สำหรับ statement และ Pratt parser สำหรับ expression
-(แต่ละตัวดำเนินการมี "binding power") จุดออกแบบสำคัญ:
+The **parser** (`parser.rs`) is recursive descent for statements and a Pratt parser for expressions
+(each operator has a "binding power"). Key design points:
 
-- **AST อยู่ใน arena**: expression ทุกตัวอยู่ใน `Vec` เดียวและอ้างถึงกันด้วย `ExprId` (เลข 32 บิต)
-  pass ถัดไปจึงแนบข้อมูลกับ expression ได้ด้วยตารางที่ index ด้วย id — ตัวตรวจ type ใช้วิธีนี้
-  เก็บ type ของทุก expression ให้ language server ตอบ hover
-- **ชื่อถูก intern**: ชื่อแต่ละชื่อเป็น `Symbol` (เลข) เทียบกันได้ด้วยการเทียบเลข
-- **กู้คืนจาก error**: เมื่อเจอ syntax error parser ข้ามไปถึงต้น statement ถัดไปแล้วทำต่อ
-  จึงรายงานหลาย error ในรอบเดียว
-- **จำกัดความลึก** 256 ชั้น เพื่อไม่ให้ input ประหลาดทำ stack ล้น
+- **The AST lives in an arena**: every expression is in a single `Vec`, and expressions refer to
+  each other by `ExprId` (a 32-bit number). Later passes can therefore attach data to an expression
+  with a table indexed by id. The type checker uses this to store the type of every expression, so
+  that the language server can answer hover requests.
+- **Names are interned**: each name is a `Symbol` (a number), so names are compared by comparing
+  numbers.
+- **Error recovery**: on a syntax error, the parser skips to the start of the next statement and
+  continues, so it reports several errors in one pass.
+- **Depth limit** of 256 levels, so that strange input cannot overflow the stack.
 
-**Diagnostic** มีแค่ span กับข้อความ `SourceFile::render` วาดออกมาพร้อมบรรทัดของ source และ `^^^`
-ทุก pass ตั้งแต่ lexer ถึง VM รายงาน error ด้วยโครงสร้างเดียวกันนี้
+A **diagnostic** has only a span and a message. `SourceFile::render` draws it with the source line
+and `^^^`. Every pass, from the lexer to the VM, reports errors with this same structure.
 
-## ตัวตรวจ type
+## The type checker
 
-`biggo-types` ทำสามอย่างในรอบเดียว: ผูกชื่อกับที่อยู่ของค่า, ตรวจและอนุมาน type, และแปลง AST เป็น
-**HIR** (`hir.rs`) ซึ่งเป็นรูปที่ compile ต่อได้ทันที:
+`biggo-types` does three things in one pass: it binds names to the locations of their values, checks
+and infers types, and converts the AST to **HIR** (`hir.rs`), a form that can be compiled directly:
 
-- ชื่อทุกชื่อกลายเป็น `Local(slot)`, `Capture(index)`, `Global(slot)` หรือ `Function(id)`
-- การแปลงชนิดอัตโนมัติถูกเขียนออกมาเป็น node (`ToFloat`, `Convert`)
-- argument แบบระบุชื่อถูกจับคู่กับ parameter แล้ว
-- table operation แต่ละตัวกลายเป็น `TableExpr`: plan node (`TableOp`) + ตารางที่เป็น input +
-  ค่าจากโปรแกรมที่ expression ของ column อ้างถึง (parameter)
+- Every name becomes `Local(slot)`, `Capture(index)`, `Global(slot)` or `Function(id)`.
+- Automatic conversions are written out as nodes (`ToFloat`, `Convert`).
+- Named arguments are already matched to parameters.
+- Each table operation becomes a `TableExpr`: a plan node (`TableOp`) + the input tables +
+  the values from the program that the column expressions refer to (parameters).
 
-กลไกหลัก (`check.rs`):
+The main mechanisms (`check.rs`):
 
-- `unify(a, b)` หา type ที่ทั้งสองฝั่งแปลงไปหาได้ (ใช้กับ branch ของ `if`, สมาชิกของ list, ...)
-- `coerce(expr, type)` แทรก node แปลงชนิดเมื่อการแปลงนั้นไม่เสียข้อมูล
-- lambda รับ type ของ parameter จากบริบท (`FnHint`) ที่ส่งลงมาจากจุดที่มันถูกเขียน
+- `unify(a, b)` finds a type that both sides can convert to (used for the branches of `if`, the
+  elements of a list, ...).
+- `coerce(expr, type)` inserts a conversion node when the conversion loses no information.
+- A lambda gets the types of its parameters from the context (`FnHint`) passed down from the place
+  where it is written.
 
-### expression ของ column
+### Column expressions
 
-ภายใน `where`, `derive`, `agg` ฯลฯ (`verbs.rs`) ตัวตรวจเปิด *scope ของ column*: ชื่อที่ตรงกับ column
-ของตารางกลายเป็น node `Column` จากนั้น `lower` แปลง expression ที่ตรวจแล้วเป็นหนึ่งในสองอย่าง:
+Inside `where`, `derive`, `agg` and so on (`verbs.rs`), the checker opens a *column scope*: a name
+that matches a column of the table becomes a `Column` node. Then `lower` converts the checked
+expression into one of two things:
 
-- ถ้าไม่มี column อยู่ข้างในเลย → คงเป็นโค้ดธรรมดา ซึ่ง VM จะคำนวณ **ครั้งเดียว** ตอนสร้างแผน
-  แล้วส่งค่าเข้าแผนเป็น parameter
-- ถ้ามี column → กลายเป็น `plan::Expr` ที่ engine คำนวณทั้ง column
+- If it contains no column at all → it stays ordinary code, which the VM evaluates **once** when the
+  plan is built, and the value is passed into the plan as a parameter.
+- If it contains a column → it becomes a `plan::Expr` that the engine evaluates over the whole column.
 
-กฎนี้คือเหตุที่ `where(qty > threshold())` เรียก `threshold()` ครั้งเดียว และเหตุที่ฟังก์ชันที่เขียนเอง
-รับ column ไม่ได้ (ไม่มีรูปของ `plan::Expr` ให้มัน)
+This rule is why `where(qty > threshold())` calls `threshold()` once, and why a function you write
+yourself cannot take a column (there is no `plan::Expr` form for it).
 
-### สิ่งที่หายไปก่อนถึง engine (desugaring)
+### What disappears before the engine (desugaring)
 
-หลายอย่างในภาษาไม่มีตัวตนใน engine เพราะตัวตรวจ type แปลงเป็นของที่มีอยู่แล้ว:
+Several things in the language do not exist in the engine, because the type checker converts them
+into things that already exist:
 
-| ที่เขียน | สิ่งที่ตัวตรวจสร้าง |
+| What you write | What the checker builds |
 | --- | --- |
-| `match x { a => p, _ => q }` | `if x == a { p } else { q }` (ค่าของ `x` เก็บในตัวแปรชั่วคราว) |
-| `distinct()` | `group` ด้วยทุก column แล้ว `agg` ที่ไม่มี aggregate |
+| `match x { a => p, _ => q }` | `if x == a { p } else { q }` (the value of `x` is kept in a temporary variable) |
+| `distinct()` | `group` by every column, then an `agg` with no aggregates |
 | `pivot(c, [v1, v2], sum(x))` | `agg(v1 = sum(if c == v1 { x } else { null }), v2 = ...)` |
-| `linreg(t, y, x)` | `agg(slope(y, x), intercept(y, x), corr(y, x))` + `project` + ดึงแถวเดียว |
-| join แบบ `"right"` | join แบบ `"left"` ที่สลับฝั่ง |
+| `linreg(t, y, x)` | `agg(slope(y, x), intercept(y, x), corr(y, x))` + `project` + taking the single row |
+| a `"right"` join | a `"left"` join with the sides swapped |
 
-ข้อดีคือ optimizer และ engine ไม่ต้องรู้จักของใหม่: `pivot` ได้ filter pushdown และ column pruning
-มาฟรี ๆ เพราะมันคือ aggregate ธรรมดา
+The benefit is that the optimizer and the engine do not need to know about anything new: `pivot`
+gets filter pushdown and column pruning for free, because it is an ordinary aggregate.
 
-## bytecode และ virtual machine
+## Bytecode and the virtual machine
 
-`biggo-eval/compile.rs` แปลง HIR ของแต่ละฟังก์ชันเป็น `Proto`: ลำดับของ `Op` พร้อมตารางค่าคงที่
-VM (`vm.rs`) เป็น **stack machine**: แต่ละคำสั่งหยิบ operand จากยอด stack และวางผลลัพธ์กลับ
-ตัวแปร local อยู่บน stack เดียวกันที่ตำแหน่งตายตัวนับจากฐานของ frame
+`biggo-eval/compile.rs` converts the HIR of each function into a `Proto`: a sequence of `Op` values
+with a table of constants. The VM (`vm.rs`) is a **stack machine**: each instruction takes its
+operands from the top of the stack and puts the result back. Local variables live on the same stack,
+at fixed positions counted from the base of the frame.
 
-- **`Value`** กว้าง 24 byte ค่าที่ใหญ่กว่าตัวเลขอยู่หลัง reference count (`Rc`/`Arc`) การ copy
-  ค่าจึงถูกเสมอ และค่าทุกชนิดเปลี่ยนแปลงไม่ได้
-- **คำสั่งเฉพาะทาง**: เมื่อตัวตรวจ type รู้ว่าทั้งสองฝั่งเป็น `int` compiler ออกคำสั่งอย่าง `AddInt`,
-  `LtInt` ที่ไม่ต้องตรวจชนิดตอนรัน
-- **closure** คือ id ของฟังก์ชันกับค่าที่จับมา (`captures`) ซึ่งถูก copy ตอนสร้าง closure
-- **ลูป** (`map` `filter` `fold` `each`) ถูก compile เป็นคำสั่ง `LoopStart` / `LoopNext` /
-  `LoopStep` / `LoopEnd` ในฟังก์ชันที่เรียกมัน ไม่ใช่การเรียกซ้อนในตัว VM ฟังก์ชันที่ลูปเรียก
-  จึงเป็นการเรียกธรรมดาใน dispatch loop เดียวกัน: recursion ลึกผ่านลูปได้เท่ากับ recursion ปกติ
-- **table operation** เป็นคำสั่ง `Table(site)`: หยิบตาราง input และค่า parameter จาก stack
-  แล้วเรียก `TableOp::build` ได้ `Value::Table(Arc<Plan>)` — ยังไม่มีอะไรรัน
-- **built-in ที่รัน query** (`print`, `write_*`, `count`, `to_rows`, ...) เรียกเข้า `biggo-exec`
-- stack ของการเรียกลึกได้ 100,000 frame
+- **`Value`** is 24 bytes wide. Values larger than a number sit behind a reference count
+  (`Rc`/`Arc`), so copying a value is always cheap, and values of every type are immutable.
+- **Specialized instructions**: when the type checker knows that both sides are `int`, the compiler
+  emits instructions such as `AddInt`, `LtInt` that need no type check at run time.
+- A **closure** is a function id plus the captured values (`captures`), which are copied when the
+  closure is created.
+- **Loops** (`map` `filter` `fold` `each`) are compiled to `LoopStart` / `LoopNext` /
+  `LoopStep` / `LoopEnd` instructions in the function that calls them, not to a nested call inside
+  the VM. A function called by a loop is therefore an ordinary call in the same dispatch loop:
+  recursion through a loop can go as deep as normal recursion.
+- A **table operation** is a `Table(site)` instruction: it takes the input tables and the parameter
+  values from the stack, then calls `TableOp::build`, which gives a `Value::Table(Arc<Plan>)`.
+  Nothing has run yet.
+- **Built-in functions that run a query** (`print`, `write_*`, `count`, `to_rows`, ...) call into
+  `biggo-exec`.
+- The call stack can be 100,000 frames deep.
 
-`Session` (`lib.rs`) ร้อยทุกอย่างเข้าด้วยกันสำหรับ source หนึ่งชิ้น: parse → โหลดไฟล์ที่ `import`
-(แต่ละไฟล์ครั้งเดียว, ตรวจจับ import วงกลม) → ตรวจ type → compile → รัน
-session เดียวรับ source ได้หลายชิ้นต่อกัน โดยแต่ละชิ้นเห็น definition ของชิ้นก่อนหน้า:
-REPL ก็คือ session ที่ป้อนทีละบรรทัด และ `biggo test` คือ session ที่รันไฟล์ test แล้วป้อน
-`test_x()` ตามทีละตัว
+`Session` (`lib.rs`) ties everything together for one piece of source: parse → load the files
+pulled in by `import` (each file once, with circular imports detected) → type check → compile → run.
+One session can take several pieces of source in a row, and each piece sees the definitions of the
+earlier ones: the REPL is a session fed one line at a time, and `biggo test` is a session that runs
+the test file and is then fed each `test_x()` in turn.
 
-## แผนและ optimizer
+## Plans and the optimizer
 
-`Plan` (`plan.rs`) เป็นต้นไม้ของ node: `Scan`, `Memory`, `Filter`, `Project`, `Sort`, `Limit`,
-`Group`, `Aggregate`, `Join`, `Window`, `Union`, `Unpivot`, `Explode` ทุก node รู้ schema
-ของผลลัพธ์ตัวเอง
+A `Plan` (`plan.rs`) is a tree of nodes: `Scan`, `Memory`, `Filter`, `Project`, `Sort`, `Limit`,
+`Group`, `Aggregate`, `Join`, `Window`, `Union`, `Unpivot`, `Explode`. Every node knows the schema
+of its own result.
 
-ก่อนรัน `optimize` (`optimize.rs`) เขียนแผนใหม่ตามลำดับนี้:
+Before a plan runs, `optimize` (`optimize.rs`) rewrites it in this order:
 
-1. **simplify** — คำนวณ expression ที่ไม่มี column ให้เหลือค่าคงที่ (constant folding),
-   ตัด filter ที่เป็น `true` เสมอ
-2. **push filters** — ดัน `Filter` ลงไปให้ใกล้ข้อมูลที่สุด: ผ่าน `Project` (เขียน predicate ใหม่
-   ด้วย expression ต้นทาง), ผ่าน `Aggregate` เมื่อใช้แต่ key ของกลุ่ม, ผ่าน `Window` เมื่อใช้แต่
-   column ของ partition, ลงทั้งสองฝั่งของ `Join` ตามที่ชนิดของ join อนุญาต และสุดท้าย **เข้าไปใน
-   `Scan`** ซึ่งกรองแถวตั้งแต่ตอนถอดรหัสไฟล์ predicate ที่ผิดพลาดได้ตอนรัน (เช่น `%`) ไม่ถูกย้าย
-   ข้ามจุดที่จะทำให้มันเจอแถวที่โปรแกรมเดิมไม่เคยให้มันเห็น
-3. **push limits** — `Sort` ที่ตามด้วย `Limit` กลายเป็น top-n (`fetch`), `Limit` เหนือ `Scan`
-   ทำให้หยุดอ่านไฟล์เมื่อได้แถวครบ
-4. **prune columns** — ไล่จากบนลงล่างว่าแต่ละ node ต้องใช้ column ไหนจริง แล้วตัดที่เหลือ
-   จนถึง `Scan` ซึ่งจะไม่ถอดรหัส column ที่ไม่มีใครใช้
-5. **merge projects** — `Project` ที่ซ้อนกันถูกรวมเป็นชั้นเดียว
+1. **simplify**: evaluates expressions that contain no column down to constants (constant folding),
+   and removes filters that are always `true`.
+2. **push filters**: pushes each `Filter` down as close to the data as possible. It goes through
+   `Project` (rewriting the predicate with the source expressions), through `Aggregate` when it uses
+   only group keys, through `Window` when it uses only partition columns, down both sides of a
+   `Join` as far as the join type allows, and finally **into `Scan`**, which filters rows while the
+   file is being decoded. A predicate that can fail at run time (such as `%`) is not moved past a
+   point where it would meet rows that the original program never let it see.
+3. **push limits**: a `Sort` followed by a `Limit` becomes a top-n (`fetch`), and a `Limit` above a
+   `Scan` stops reading the file once enough rows have been read.
+4. **prune columns**: walks from the top down to find which columns each node really needs, and cuts
+   the rest, all the way to `Scan`, which does not decode columns that nobody uses.
+5. **merge projects**: nested `Project` nodes are merged into a single layer.
 
-ทุกกฎรักษาผลลัพธ์ให้เหมือนเดิมทุก bit รวมถึงลำดับของแถว `biggo explain` แสดงแผนก่อนและหลัง
+Every rule keeps the result identical bit for bit, including the order of rows. `biggo explain`
+shows the plan before and after.
 
-## execution engine
+## Execution engine
 
-`biggo-exec` รันแผนบน **Apache Arrow**: ตารางคือลำดับของ `RecordBatch` ซึ่งเก็บแต่ละ column เป็น
-array ต่อเนื่องในหน่วยความจำ (batch ละ 32,768 แถว) operation ทำงานกับทั้ง array ด้วย kernel
-ของ Arrow ซึ่ง compiler ของ Rust แปลงเป็นคำสั่ง SIMD ได้
+`biggo-exec` runs plans on **Apache Arrow**: a table is a sequence of `RecordBatch` values, each of
+which stores every column as a contiguous array in memory (32,768 rows per batch). Operations work
+on whole arrays with Arrow kernels, which the Rust compiler can turn into SIMD instructions.
 
-**รูปแบบการรัน** — `execute(plan)` คืน iterator ของ batch (pull model) ผู้ใช้ที่หยุดดึงก่อน
-(เช่น `take(5)`) ทำให้งานที่เหลือไม่เกิดขึ้น operation ที่ทำทีละ batch (`Filter`, `Project`,
-`Unpivot`, `Explode`, ฝั่ง probe ของ join) ใช้ `par_map`: ดึง batch มาเท่าจำนวน core ประมวลผลพร้อมกัน
-แล้วส่งออก **ตามลำดับเดิม**
+**Execution model**: `execute(plan)` returns an iterator of batches (a pull model). When a consumer
+stops pulling early (such as `take(5)`), the remaining work never happens. Operations that work one
+batch at a time (`Filter`, `Project`, `Unpivot`, `Explode`, the probe side of a join) use `par_map`:
+it pulls as many batches as there are cores, processes them at the same time, and emits them
+**in the original order**.
 
-**Scan** (`scan.rs`) — ไฟล์ถูกแบ่งเป็น "ชิ้น" ที่ถอดรหัสแยกกันได้: CSV และ JSON ตัดทุก 2 MiB ที่ขอบ
-บรรทัด (CSV นับ `"` เพื่อไม่ตัดกลางค่าที่มีการขึ้นบรรทัดใหม่), Parquet แบ่งตาม row group
-ชิ้นถูกถอดรหัสครั้งละเท่าจำนวน core และตัวกรองของ scan ทำงานในชิ้นเลย ขนาดชิ้นตายตัวไม่ขึ้นกับ
-จำนวน core เพื่อให้ batch ที่ไหลออกมาเหมือนกันทุกเครื่อง
+**Scan** (`scan.rs`): a file is split into "chunks" that can be decoded independently. CSV and JSON
+are cut every 2 MiB at a line boundary (CSV counts `"` so that it does not cut in the middle of a
+value that contains a line break), and Parquet is split by row group. Chunks are decoded as many at
+a time as there are cores, and the scan's filter runs inside the chunk. The chunk size is fixed and
+does not depend on the number of cores, so that the batches that flow out are the same on every
+machine.
 
-**Aggregate** (`aggregate.rs`) — hash aggregation สองขั้น:
+**Aggregate** (`aggregate.rs`) is a two-stage hash aggregation:
 
-1. batch ถูกรวมเป็น "run" ละ 4 batch แต่ละ run ถูกสรุปบน core ของตัวเองเป็นผลบางส่วน:
-   key ของกลุ่มถูกเข้ารหัสเป็น byte (row format ของ Arrow) แล้วใช้ hash table หาเลขกลุ่ม
-   จากนั้น accumulator ของแต่ละ aggregate อัปเดตทั้ง batch ในลูปแน่น ๆ
-2. ผลบางส่วนถูกรวม: ถ้ากลุ่มน้อยก็รวมทีละ run; ถ้ากลุ่มเกิน 50,000 จะแบ่งกลุ่มตาม hash ของ key
-   เป็นส่วน ๆ แล้วรวมแต่ละส่วนบน core ของตัวเอง สุดท้ายเรียงกลุ่มกลับตามลำดับที่พบครั้งแรก
+1. Batches are gathered into "runs" of 4 batches. Each run is aggregated on its own core into a
+   partial result: the group keys are encoded as bytes (Arrow's row format), a hash table then finds
+   the group number, and the accumulator of each aggregate updates over the whole batch in a tight
+   loop.
+2. The partial results are merged: if there are few groups, they are merged one run at a time; if
+   there are more than 50,000 groups, the groups are split into partitions by the hash of the key
+   and each partition is merged on its own core. Finally the groups are sorted back into the order
+   in which they were first seen.
 
-`count_distinct` ของชนิดที่กว้างคงที่เก็บค่าของแต่ละกลุ่มไว้เฉย ๆ แล้วเรียง + นับตอนจบบนทุก core
-ซึ่งเร็วกว่าการดูแล hash set ต่อกลุ่มระหว่างทาง
+For fixed-width types, `count_distinct` simply keeps the values of each group, then sorts and counts
+them at the end on every core, which is faster than maintaining a hash set per group along the way.
 
-**Join** (`join.rs`) — hash join: สร้าง hash table จากตารางขวาทั้งตาราง แล้ว probe ด้วย batch
-ของตารางซ้ายแบบขนาน
+**Join** (`join.rs`) is a hash join: it builds a hash table from the whole right table, then probes
+it with the batches of the left table in parallel.
 
-**Sort** (`ops.rs`) — top-n ใช้การเลือกบางส่วนของ Arrow; การเรียงทั้งตารางเข้ารหัส key ของแต่ละแถว
-เป็น byte ที่เทียบกันได้ตรง ๆ (ขนานกันเป็นช่วง) แล้วเรียงเลขแถวบนทุก core โดยพก 16 byte แรก
-ของ key ไปกับเลขแถวเพื่อให้การเทียบส่วนใหญ่จบโดยไม่ต้องไปอ่าน key เต็ม แถวที่ key เท่ากันตัดสิน
-ด้วยเลขแถว จึงเป็น stable sort ที่ได้ผลเดียวกันไม่ว่าจะแบ่งงานอย่างไร
+**Sort** (`ops.rs`): top-n uses Arrow's partial selection. A full-table sort encodes the key of each
+row as bytes that can be compared directly (in parallel, range by range), then sorts the row numbers
+on every core, carrying the first 16 bytes of the key along with each row number so that most
+comparisons finish without reading the full key. Rows with equal keys are decided by row number, so
+it is a stable sort that gives the same result however the work is divided.
 
-**Window** (`window.rs`) — เรียงตาม partition และ order, หาขอบของ partition ด้วยการเทียบแถวติดกัน
-แบบ vector, คำนวณแต่ละฟังก์ชันตามลำดับนั้น (ฟังก์ชันละ core) แล้ววางผลกลับตามลำดับแถวเดิม
+**Window** (`window.rs`): sorts by partition and order, finds the partition boundaries with a
+vectorized comparison of adjacent rows, computes each function in that order (one core per
+function), then puts the results back in the original row order.
 
-### ผลลัพธ์ที่ทำซ้ำได้
+### Reproducible results
 
-ข้อกำหนดของ engine คือ **ผลลัพธ์ต้องเหมือนกันทุก bit ไม่ว่ามีกี่ thread** ซึ่งกำหนดการออกแบบหลายจุด:
+A requirement of the engine is that **results must be identical bit for bit, however many threads
+there are**. This shapes the design in several places:
 
-- `par_map` คืน batch ตามลำดับ input เสมอ
-- ขนาดของชิ้นไฟล์และของ run ใน aggregate เป็นค่าคงที่ ไม่ขึ้นกับจำนวน core ผลรวมของ `float`
-  (ซึ่งขึ้นกับลำดับการบวก) จึงถูกบวกเป็นกลุ่มเดิมเสมอ
-- กลุ่มของ `group` ออกมาตามลำดับที่พบครั้งแรก แม้จะรวมแบบแบ่งส่วน
-- การเรียงตัดสินค่าที่เท่ากันด้วยเลขแถว
+- `par_map` always returns batches in input order.
+- The size of file chunks and of aggregate runs is a constant that does not depend on the number of
+  cores. A `float` sum (which depends on the order of addition) is therefore always added up in the
+  same groupings.
+- The groups of `group` come out in the order in which they were first seen, even when they are
+  merged by partition.
+- Sorting breaks ties by row number.
 
-`bench/run.py` ตรวจเรื่องนี้ทุกครั้ง: รันแต่ละ query ด้วยทุก core และด้วย core เดียว แล้วเทียบ
-ผลลัพธ์ที่พิมพ์ออกมา
+`bench/run.py` checks this every time: it runs each query with every core and with a single core,
+then compares the printed output.
 
-### expression ที่ผิดพลาดได้
+### Expressions that can fail
 
-`plan::Expr::can_fail` บอกว่า expression หยุดโปรแกรมได้หรือไม่ (เช่น `%` ด้วยศูนย์, `int` ล้น)
-branch ของ `if` และฝั่งขวาของ `and`/`or`/`??` ที่ผิดพลาดได้ถูกคำนวณเฉพาะแถวที่ต้องใช้ (`eval_where`)
-เพื่อให้ `if n != 0 { x % n } else { 0 }` มีความหมายเดียวกับที่เขียน แม้ engine จะคำนวณทั้ง column
-ส่วน expression ที่ผิดพลาดไม่ได้ถูกคำนวณทั้งสอง branch แล้วเลือก ซึ่งเร็วกว่า
+`plan::Expr::can_fail` says whether an expression can stop the program (for example `%` by zero, or
+`int` overflow). A branch of `if`, or the right side of `and`/`or`/`??`, that can fail is evaluated
+only on the rows that need it (`eval_where`), so that `if n != 0 { x % n } else { 0 }` means what
+it says even though the engine evaluates whole columns. For an expression that cannot fail, both
+branches are evaluated and then one is selected, which is faster.
 
-## เครื่องมือ
+## Tools
 
-- **formatter** (`biggo-fmt`) แปลง AST เป็น "เอกสาร" แบบ Wadler (`Doc`: ข้อความ, กลุ่ม, จุดที่ขึ้น
-  บรรทัดได้) แล้วให้ตัวจัดวางเลือกว่ากลุ่มไหนพอดีบรรทัด comment ถูกวางกลับด้วยตำแหน่งใน source
-- **language server** (`biggo-lsp`) เก็บข้อความของไฟล์ที่เปิดอยู่ วิเคราะห์ใหม่ทั้งไฟล์ทุกครั้งที่เปลี่ยน
-  (ตัวตรวจเร็วพอ: หลายแสนบรรทัดต่อวินาที) และตอบ hover จากตาราง type ต่อ expression
-- **`biggo build`** คัดลอก executable ของตัวเอง แล้วเขียน source ของโปรแกรมลงในบล็อก 256 KiB
-  ที่จองไว้ใน binary (หาเจอด้วย marker) executable ที่พบโปรแกรมในบล็อกนี้จะรันมันแทนการอ่าน
-  command line
+- The **formatter** (`biggo-fmt`) converts the AST into a Wadler-style "document" (`Doc`: text,
+  groups, places where a line may break), then lets the layout step choose which groups fit on a
+  line. Comments are put back using their position in the source.
+- The **language server** (`biggo-lsp`) keeps the text of the open files, re-analyzes the whole file
+  on every change (the checker is fast enough: several hundred thousand lines per second), and
+  answers hover requests from the table of types per expression.
+- **`biggo build`** copies its own executable, then writes the program's source into a 256 KiB block
+  reserved in the binary (found by a marker). An executable that finds a program in this block runs
+  it instead of reading the command line.
 
-## การทดสอบ
+## Testing
 
-| ชนิด | อยู่ที่ | ตรวจอะไร |
+| Kind | Where | What it checks |
 | --- | --- | --- |
-| unit test | `src/` ของแต่ละ crate | ส่วนย่อย: lexer, parser, VM, ตัวอ่านไฟล์, การเรียง |
-| golden: syntax | `testdata/**/*.syntax` | syntax tree หรือ syntax error ของทุกไฟล์ตัวอย่าง |
-| golden: run | `testdata/run/*.out` | ผลลัพธ์และ runtime error ของโปรแกรมตัวอย่าง |
-| golden: check | `testdata/check/*.out` | type error ทุกข้อความ |
-| golden: plan | `testdata/sales.plan` | แผนก่อนและหลัง optimize |
-| ความทนทาน | `survives_mangled_programs` | ทุก prefix ของทุกโปรแกรม และทุกโปรแกรมที่ลบหนึ่งอักขระ ต้องไม่ panic |
-| formatter | `biggo-fmt/tests` | จัดรูปแบบแล้วความหมายไม่เปลี่ยน และจัดซ้ำได้ผลเดิม กับทุกไฟล์ตัวอย่าง |
-| เอกสาร | `biggo-cli/tests/docs.rs` | ทุกโปรแกรมในเอกสารรันได้ และผลลัพธ์ที่แสดงตรงกับของจริง |
-| ความสอดคล้อง | `biggo-types/tests/in_sync.rs` | built-in ทุกตัวอยู่ใน grammar ของ editor และใน reference |
-| CLI | `biggo-cli/tests/cli.rs` | คำสั่งจริงผ่าน process จริง: run, repl, fmt, test, build, lsp |
+| unit tests | `src/` of each crate | individual parts: lexer, parser, VM, file readers, sorting |
+| golden: syntax | `testdata/**/*.syntax` | the syntax tree or syntax errors of every example file |
+| golden: run | `testdata/run/*.out` | the output and runtime errors of the example programs |
+| golden: check | `testdata/check/*.out` | every type error message |
+| golden: plan | `testdata/sales.plan` | the plan before and after optimization |
+| robustness | `survives_mangled_programs` | every prefix of every program, and every program with one character deleted, must not panic |
+| formatter | `biggo-fmt/tests` | formatting does not change the meaning, and formatting again gives the same result, for every example file |
+| docs | `biggo-cli/tests/docs.rs` | every program in the docs runs, and the output shown matches the real output |
+| consistency | `biggo-types/tests/in_sync.rs` | every built-in function is in the editor grammar and in the reference |
+| CLI | `biggo-cli/tests/cli.rs` | real commands through real processes: run, repl, fmt, test, build, lsp |
 
 ```sh
-cargo test                      # ทั้งหมด
-BIGGO_BLESS=1 cargo test        # เขียน golden และผลลัพธ์ในเอกสารใหม่ตามพฤติกรรมปัจจุบัน
+cargo test                      # everything
+BIGGO_BLESS=1 cargo test        # rewrite the golden files and the output in the docs to match current behavior
 cargo clippy --all-targets      # lint
-cargo fmt                       # จัดรูปแบบโค้ด Rust
+cargo fmt                       # format the Rust code
 ```
 
-หลัง `BIGGO_BLESS=1` ต้องอ่าน diff ของไฟล์ที่เปลี่ยนเสมอ: bless คือการยืนยันว่าพฤติกรรมใหม่ถูกต้อง
+After `BIGGO_BLESS=1`, always read the diff of the files that changed: blessing is a statement that
+the new behavior is correct.
 
-## เพิ่มความสามารถ
+## Adding a feature
 
-**ฟังก์ชันของค่าเดี่ยว** (เช่น `replace(s, a, b)`):
+**A scalar function** (such as `replace(s, a, b)`):
 
-1. เพิ่ม variant ใน `ScalarFn` พร้อมชื่อ (`biggo-plan/src/expr.rs`)
-2. บอก type ของ argument และผลลัพธ์ใน `scalar_call` (`biggo-types/src/verbs.rs`)
-3. เขียนการคำนวณบน Arrow array ใน `call` (`biggo-exec/src/expr.rs`)
-4. เพิ่มชื่อใน grammar ของ editor และใน `docs/06-builtins.md` (test `in_sync` จะเตือนถ้าลืม)
+1. Add a variant to `ScalarFn`, with its name (`biggo-plan/src/expr.rs`).
+2. Give the types of the arguments and the result in `scalar_call` (`biggo-types/src/verbs.rs`).
+3. Write the computation on Arrow arrays in `call` (`biggo-exec/src/expr.rs`).
+4. Add the name to the editor grammar and to `docs/06-builtins.md` (the `in_sync` test warns you if
+   you forget).
 
-ไม่ต้องแตะ VM: ค่าเดี่ยวถูกคำนวณผ่านเส้นทางเดียวกับ column (`call_scalar`) จึงได้พฤติกรรม
-เดียวกันทั้งสองที่โดยอัตโนมัติ
+You do not need to touch the VM: scalar values are computed through the same path as columns
+(`call_scalar`), so you get the same behavior in both places automatically.
 
-**aggregate**: เพิ่มใน `AggFn`, บอก type ใน `agg_type`, เพิ่ม accumulator ใน `Acc`
-(`new`, `update`, `merge`, `finish`) — `merge` ต้องให้ผลเหมือนการอัปเดตต่อเนื่อง
+**An aggregate**: add it to `AggFn`, give its type in `agg_type`, and add an accumulator to `Acc`
+(`new`, `update`, `merge`, `finish`). `merge` must give the same result as updating continuously.
 
-**table operation**: ถ้าเขียนในรูปของ operation ที่มีอยู่ได้ ให้ desugar ในตัวตรวจ type
-(แบบ `pivot`) ถ้าไม่ได้ ให้เพิ่ม node ใน `Plan` และ `TableOp`, สอน optimizer (`map_plan`,
-`push_filters`, `prune`) ว่า node ใหม่ต้องการ column อะไร, แล้วเขียนตัวรันใน `biggo-exec`
+**A table operation**: if it can be written in terms of existing operations, desugar it in the type
+checker (like `pivot`). If not, add a node to `Plan` and `TableOp`, teach the optimizer (`map_plan`,
+`push_filters`, `prune`) which columns the new node needs, then write its executor in `biggo-exec`.
 
-**built-in ของโค้ดทั่วไป** (แบบ `len`): เพิ่มใน `Builtin` (`hir.rs`), ตรวจ type ใน
-`builtins.rs`, รันใน `Vm::builtin`
+**A built-in function for ordinary code** (like `len`): add it to `Builtin` (`hir.rs`), type check
+it in `builtins.rs`, and run it in `Vm::builtin`.
