@@ -1,7 +1,7 @@
 {
   "name": "biggo",
   "displayName": "biggo",
-  "description": "Syntax highlighting, errors as you type, types on hover, and formatting for the biggo data language.",
+  "description": "Syntax highlighting, errors as you type, completion, types on hover, and formatting for the biggo data language.",
   "version": "0.1.0",
   "publisher": "biggo",
   "license": "MIT",

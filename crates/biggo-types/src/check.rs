@@ -9,7 +9,7 @@ use biggo_syntax::{Diagnostic, Interner, Span, Symbol};
 
 use crate::hir::{Arg, Callee, Conversion, Expr, ExprKind, Function, Program, Stmt};
 use crate::ty::{FnType, Param, Type};
-use crate::verbs::{ColumnScope, is_builtin_name};
+use crate::verbs::{ColumnScope, Mode, is_builtin_name};
 
 /// Type-checks modules one after another. The names a module defines at its top level stay
 /// visible to the modules checked after it, which is how a REPL session accumulates.
@@ -52,9 +52,69 @@ pub struct Checked {
     pub types: Vec<Option<Type>>,
 }
 
+/// The names that can be written at one place of a module, for an editor to offer there.
+#[derive(Debug, PartialEq)]
+pub struct Names {
+    pub place: Place,
+    /// Each name once, as its nearest declaration has it, the nearest names first.
+    pub names: Vec<Named>,
+}
+
+/// What is written at a place of a module.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Place {
+    /// An expression. It can also call a built-in function.
+    Expr,
+    /// The function of a call, which can also be a built-in one.
+    Callee,
+    /// One of the names and nothing else: a column where a table operation takes the name of
+    /// one, or a field after the `.` of a record.
+    Member,
+    /// A type. The built-in types are not among the names.
+    Type,
+}
+
+/// A name that can be written at a place of a module, with its type there.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Named {
+    pub name: Arc<str>,
+    pub kind: NameKind,
+    pub ty: Type,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum NameKind {
+    /// A column of the table that the enclosing table operation works on.
+    Column,
+    /// A field of the record before the `.`.
+    Field,
+    Variable,
+    /// A function, or a variable that holds one.
+    Function,
+    /// A type declared with `type`.
+    Type,
+}
+
 impl Checker {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// How much the session holds, to go back to when a module does not join it.
+    fn mark(&self) -> (usize, usize, usize, u32) {
+        (
+            self.scope.len(),
+            self.functions.len(),
+            self.aliases.len(),
+            self.globals,
+        )
+    }
+
+    fn rewind(&mut self, mark: (usize, usize, usize, u32)) {
+        self.scope.truncate(mark.0);
+        self.functions.truncate(mark.1);
+        self.aliases.truncate(mark.2);
+        self.globals = mark.3;
     }
 
     /// Checks `ast` and lowers it to HIR. On success its top-level definitions join the
@@ -64,25 +124,9 @@ impl Checker {
         ast: &Ast,
         interner: &mut Interner,
     ) -> Result<Checked, Vec<Diagnostic>> {
-        let saved = (
-            self.scope.len(),
-            self.functions.len(),
-            self.aliases.len(),
-            self.globals,
-        );
+        let saved = self.mark();
         let first_function = self.functions.len() as u32;
-        let mut cx = Cx {
-            checker: self,
-            ast,
-            interner,
-            diags: Vec::new(),
-            functions: Vec::new(),
-            first_function,
-            frames: vec![Frame::default()],
-            columns: Vec::new(),
-            types: vec![None; ast.expr_count()],
-            peeked: None,
-        };
+        let mut cx = Cx::new(self, ast, interner);
         let (main, result) = cx.module();
         let Cx {
             mut diags,
@@ -91,10 +135,7 @@ impl Checker {
             ..
         } = cx;
         if !diags.is_empty() {
-            self.scope.truncate(saved.0);
-            self.functions.truncate(saved.1);
-            self.aliases.truncate(saved.2);
-            self.globals = saved.3;
+            self.rewind(saved);
             diags.sort_by_key(|diag| diag.span.start);
             return Err(diags);
         }
@@ -109,6 +150,18 @@ impl Checker {
             result,
         };
         Ok(Checked { program, types })
+    }
+
+    /// The names that can be written at byte `offset` of `ast`, if a name, a field, or a type
+    /// is written there. The module need not pass, and the checker is left exactly as it was.
+    pub fn names_at(&mut self, ast: &Ast, interner: &mut Interner, offset: u32) -> Option<Names> {
+        let saved = self.mark();
+        let mut cx = Cx::new(self, ast, interner);
+        cx.asked = Some(offset);
+        cx.module();
+        let names = cx.names;
+        self.rewind(saved);
+        names
     }
 }
 
@@ -155,6 +208,10 @@ pub(crate) struct Cx<'a> {
     /// An argument that was checked to see which function a call means, kept for the
     /// function that then checks the call, so that it is not checked twice.
     pub(crate) peeked: Option<(ExprId, Expr)>,
+    /// The place whose names an editor asks for, as a byte offset.
+    asked: Option<u32>,
+    /// What can be written at that place, once the checker has come to it.
+    pub(crate) names: Option<Names>,
 }
 
 const MICROS_PER_DAY: i64 = 86_400_000_000;
@@ -412,6 +469,145 @@ fn coerce_parts(expr: Expr, to: &Type) -> Result<Expr, Expr> {
 }
 
 impl<'a> Cx<'a> {
+    fn new(checker: &'a mut Checker, ast: &'a Ast, interner: &'a mut Interner) -> Self {
+        let first_function = checker.functions.len() as u32;
+        Cx {
+            checker,
+            ast,
+            interner,
+            diags: Vec::new(),
+            functions: Vec::new(),
+            first_function,
+            frames: vec![Frame::default()],
+            columns: Vec::new(),
+            types: vec![None; ast.expr_count()],
+            peeked: None,
+            asked: None,
+            names: None,
+        }
+    }
+
+    /// Whether `span` is the place whose names are asked for.
+    pub(crate) fn asked_at(&self, span: Span) -> bool {
+        self.asked
+            .is_some_and(|at| span.start <= at && at <= span.end)
+    }
+
+    /// Notes what the expression at `span` can name, if that is the place asked for: the
+    /// columns of the table operation it is in, the variables and functions in reach from the
+    /// innermost block outward, and the declared types.
+    fn note_reach(&mut self, span: Span, place: Place) {
+        if !self.asked_at(span) || self.names.is_some() {
+            return;
+        }
+        let value = |name: Arc<str>, ty: &Type| Named {
+            name,
+            kind: match ty {
+                Type::Fn(_) => NameKind::Function,
+                _ => NameKind::Variable,
+            },
+            ty: ty.clone(),
+        };
+        // The result of a function is not known before its body has been checked.
+        let function = |name: Arc<str>, signature: &Signature| Named {
+            name,
+            kind: NameKind::Function,
+            ty: Type::Fn(Arc::new(FnType {
+                params: signature.params.clone(),
+                ret: signature.ret.clone().unwrap_or(Type::Error),
+            })),
+        };
+        let mut names = Vec::new();
+        if let Some(scope) = self.columns.last() {
+            names.extend(scope.schema.fields.iter().map(|field| Named {
+                name: field.name.clone(),
+                kind: NameKind::Column,
+                ty: Type::from_col(field.ty),
+            }));
+        }
+        for frame in self.frames.iter().rev() {
+            let locals = frame
+                .scopes
+                .iter()
+                .rev()
+                .flat_map(|scope| scope.iter().rev());
+            names.extend(locals.map(|(name, _, ty)| value(self.text(*name), ty)));
+            if let Some((name, id)) = frame.this {
+                names.push(function(
+                    self.text(name),
+                    &self.checker.functions[id as usize],
+                ));
+            }
+        }
+        for (name, top) in self.checker.scope.iter().rev() {
+            names.push(match top {
+                Top::Global(_, ty) => value(self.text(*name), ty),
+                Top::Function(id) => {
+                    function(self.text(*name), &self.checker.functions[*id as usize])
+                }
+            });
+        }
+        names.extend(self.declared_types());
+        if place == Place::Callee {
+            names.retain(|named| named.kind == NameKind::Function);
+        }
+        self.offer(place, names);
+    }
+
+    /// Looks into the argument of `call` that holds the place asked for, when the check of
+    /// the call did not come to it: a call with too few arguments is given up as a whole. An
+    /// argument of an operation on a table is taken as an expression over its columns.
+    fn look_into(&mut self, call: &Call) {
+        let holds = |arg: &&ArgSrc| self.asked_at(self.ast.span(arg.value));
+        let found = call.args.iter().find(holds);
+        let Some(arg) = found.filter(|_| self.names.is_none()) else {
+            return;
+        };
+        let table = call.args[0].value;
+        let schema = match &self.types[table.index()] {
+            Some(Type::Table(schema)) => Some(schema.clone()),
+            Some(Type::Grouped(grouped)) => Some(grouped.input.clone()),
+            _ => None,
+        };
+        let scope = schema
+            .filter(|_| arg.value != table)
+            .map(|schema| ColumnScope {
+                schema,
+                mode: Mode::Row,
+            });
+        let scoped = scope.is_some();
+        self.columns.extend(scope);
+        self.expr(arg.value);
+        if scoped {
+            self.columns.pop();
+        }
+    }
+
+    /// The types declared with `type`, the latest declaration first.
+    fn declared_types(&self) -> Vec<Named> {
+        let aliases = self.checker.aliases.iter().rev();
+        aliases
+            .map(|(name, ty)| Named {
+                name: self.text(*name),
+                kind: NameKind::Type,
+                ty: ty.clone(),
+            })
+            .collect()
+    }
+
+    /// Keeps `names`, nearest first, as what can be written at the place asked for. A name
+    /// means what its nearest declaration says; a type may share its name with a value.
+    pub(crate) fn offer(&mut self, place: Place, mut names: Vec<Named>) {
+        let mut seen = Vec::new();
+        names.retain(|named| {
+            let key = (named.name.clone(), named.kind == NameKind::Type);
+            let first = !seen.contains(&key);
+            seen.push(key);
+            first
+        });
+        self.names = Some(Names { place, names });
+    }
+
     fn frame(&mut self) -> &mut Frame {
         self.frames
             .last_mut()
@@ -835,6 +1031,11 @@ impl<'a> Cx<'a> {
         match &ty.kind {
             TypeKind::Named { name, args } => {
                 let text = self.text(*name);
+                // The span of the type takes in its arguments; the name comes first.
+                let written = Span::new(ty.span.start, ty.span.start + text.len() as u32);
+                if self.asked_at(written) && self.names.is_none() {
+                    self.offer(Place::Type, self.declared_types());
+                }
                 let expected_args = match &*text {
                     "list" | "table" => 1,
                     "map" => 2,
@@ -1076,6 +1277,19 @@ impl<'a> Cx<'a> {
         let base = self.expr(base);
         let text = self.text(name.name);
         let (inner, nullable) = base.ty.split_null();
+        if self.asked_at(name.span) && self.names.is_none() {
+            // Anything but a record has no fields to name.
+            let fields = match inner {
+                Type::Record(fields) => &fields[..],
+                _ => &[],
+            };
+            let fields = fields.iter().map(|(field, ty)| Named {
+                name: field.clone(),
+                kind: NameKind::Field,
+                ty: ty.clone().with_null(nullable),
+            });
+            self.offer(Place::Member, fields.collect());
+        }
         let fields = match inner {
             Type::Error => return Expr::error(span),
             Type::Record(fields) => fields.clone(),
@@ -1371,6 +1585,7 @@ impl<'a> Cx<'a> {
     }
 
     fn name(&mut self, span: Span, name: Symbol) -> Expr {
+        self.note_reach(span, Place::Expr);
         if let Some(column) = self.column(name) {
             let variable = self.resolve(name, None);
             if variable.is_some_and(|(_, ty)| !matches!(ty, Type::Fn(_))) {
@@ -1796,6 +2011,7 @@ impl<'a> Cx<'a> {
 
         let (callee_kind, callee_ty, name) = match ast.expr(*callee) {
             ast::Expr::Name(name) => {
+                self.note_reach(callee_span, Place::Callee);
                 let text = self.text(*name);
                 // A user function comes first; any other meaning of the name gives way to a
                 // built-in function, so a variable or column may share a built-in's name.
@@ -1812,7 +2028,9 @@ impl<'a> Cx<'a> {
                 match resolved {
                     Some((kind, ty @ (Type::Fn(_) | Type::Error))) => (kind, ty, text),
                     other => {
-                        if let Some(result) = self.builtin_call(&call) {
+                        let builtin = self.builtin_call(&call);
+                        self.look_into(&call);
+                        if let Some(result) = builtin {
                             return result;
                         }
                         let message = match other {

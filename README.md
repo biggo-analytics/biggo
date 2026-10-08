@@ -207,7 +207,7 @@ ok
 | `biggo test [path]` | Runs the tests in `*_test.bgo` files |
 | `biggo fmt [--check] files` | Formats code |
 | `biggo build file.bgo -o app` | Builds a standalone executable |
-| `biggo lsp` | Language server for editors (errors as you type, hover, formatting) |
+| `biggo lsp` | Language server for editors (errors as you type, hover, completion, formatting) |
 
 The VS Code extension is in [`editors/vscode`](editors/vscode).
 
@@ -290,7 +290,7 @@ python3 bench/run.py           # benchmarks (build with --release and generate t
   variable cannot be assigned a new value.
 - A user-defined function cannot take a column: a column expression can use only operators and
   built-in functions.
-- The language server has no autocomplete or go-to-definition yet. The VS Code extension has been
+- The language server has no go-to-definition or rename yet. The VS Code extension has been
   packaged and its grammar tested, but it has not been run inside VS Code.
 - Tested on macOS (Apple Silicon) only.
 

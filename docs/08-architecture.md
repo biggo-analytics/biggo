@@ -45,7 +45,7 @@ bytecode ── VM ──► values (int, string, list, record, closure, ...)
 | `biggo-exec` | engine: reading/writing files, filter, aggregate, join, sort, window | 4,100 |
 | `biggo-eval` | bytecode compiler, VM, `Session` (including `import`) | 2,800 |
 | `biggo-fmt` | formatter | 800 |
-| `biggo-lsp` | language server | 300 |
+| `biggo-lsp` | language server | 550 |
 | `biggo-cli` | the `biggo` command: run, repl, check, test, build, ... | 600 |
 
 Dependencies go one way: `syntax` ← `plan` ← `types` ← `eval` → `exec`.
@@ -256,7 +256,12 @@ branches are evaluated and then one is selected, which is faster.
   line. Comments are put back using their position in the source.
 - The **language server** (`biggo-lsp`) keeps the text of the open files, re-analyzes the whole file
   on every change (the checker is fast enough: several hundred thousand lines per second), and
-  answers hover requests from the table of types per expression.
+  answers hover requests from the table of types per expression. For a completion the text
+  usually does not parse, so the server analyzes a copy of it: a name stands at the cursor, and
+  the brackets and statements that are open there are closed. The checker runs on that copy
+  (`Checker::names_at`) and, when it comes to the name at the cursor, notes what it would resolve
+  a name against there: the columns of the table operation it is checking, the variables of the
+  enclosing blocks and functions, or the fields of the record before a `.`.
 - **`biggo build`** copies its own executable, then writes the program's source into a 256 KiB block
   reserved in the binary (found by a marker). An executable that finds a program in this block runs
   it instead of reading the command line.

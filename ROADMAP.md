@@ -349,7 +349,6 @@ with a grammar.
 | CI on GitHub Actions | `cargo test`, `cargo clippy` and `cargo fmt --check` on Linux, macOS and Windows for every push and pull request, and fixes for what differs between systems | Must |
 | prebuilt binaries | In GitHub Releases for macOS (arm64, x86_64), Linux (x86_64, arm64) and Windows (x86_64), with an install script and a Homebrew formula | Must |
 | the VS Code extension, verified | Tried in VS Code, fixed, and published to the Marketplace and Open VSX | Must |
-| language server: autocomplete | Names of functions and variables, and the column names available at that point in a pipeline, which the type checker already knows | Must |
 | REPL: line editing | Arrow keys and earlier input | Must |
 | `biggo help substring` | The reference entry of a built-in function in the terminal, and `:help` in the REPL | Should |
 | `biggo run -e '...'` | A program given on the command line or on standard input, for one-off questions | Should |
@@ -363,6 +362,10 @@ with a grammar.
 | documentation: a cookbook | "How do I ..." recipes, and tables that put SQL and pandas beside the biggo for the same thing | Should |
 | a changelog, a contributing guide, issue templates | What changed in each release, and how to take part | Should |
 | a web playground | The language compiled to WebAssembly, to try it without installing | Later |
+
+- [x] Language server: autocomplete of the columns available at that point in a pipeline, the
+      fields of a record, the names in scope, the built-in functions and the keywords, also on
+      a line that is still being typed
 
 ### 12. Engine
 

@@ -2,7 +2,7 @@ use crate::diag::Diagnostic;
 use crate::span::Span;
 use crate::token::{Token, TokenKind};
 
-pub(crate) struct Lexed {
+pub struct Lexed {
     pub tokens: Vec<Token>,
     pub diags: Vec<Diagnostic>,
     /// The `//` comments, in source order.
@@ -11,7 +11,7 @@ pub(crate) struct Lexed {
 
 /// Splits `source` into tokens, ending with `Eof`. Malformed input becomes an `Error` token with
 /// a matching diagnostic. `source` must be shorter than 4 GiB so that offsets fit in a `Span`.
-pub(crate) fn lex(source: &str) -> Lexed {
+pub fn lex(source: &str) -> Lexed {
     let mut lexer = Lexer {
         src: source,
         pos: 0,

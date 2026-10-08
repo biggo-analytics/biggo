@@ -9,6 +9,6 @@ mod tables;
 mod ty;
 mod verbs;
 
-pub use check::{Checked, Checker};
+pub use check::{Checked, Checker, NameKind, Named, Names, Place};
 pub use ty::{FnType, Grouped, Param, Type};
 pub use verbs::builtin_names;

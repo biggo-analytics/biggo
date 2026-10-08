@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 biggo-syntax.workspace = true
+biggo-plan.workspace = true
 biggo-types.workspace = true
 biggo-eval.workspace = true
 biggo-fmt.workspace = true

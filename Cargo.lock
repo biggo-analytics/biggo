@@ -339,6 +339,7 @@ version = "0.1.0"
 dependencies = [
  "biggo-eval",
  "biggo-fmt",
+ "biggo-plan",
  "biggo-syntax",
  "biggo-types",
  "serde_json",
