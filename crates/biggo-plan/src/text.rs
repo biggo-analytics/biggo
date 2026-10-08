@@ -96,6 +96,66 @@ pub fn index_of(text: &str, part: &str) -> Option<i64> {
     Some(text[..at].chars().count() as i64)
 }
 
+/// The truth value that `text` spells out, in any letter case and with space around it.
+pub fn to_bool(text: &str) -> Option<bool> {
+    let text = text.trim();
+    let is = |words: &[&str]| words.iter().any(|word| text.eq_ignore_ascii_case(word));
+    if is(&["true", "t", "yes", "y", "1"]) {
+        Some(true)
+    } else if is(&["false", "f", "no", "n", "0"]) {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// A number as people write it: with separators of thousands (`1,234.5`), a percent sign
+/// (`45%` is 0.45), or parentheses for a negative amount (`(120)`). `None` for anything else.
+pub fn parse_number(text: &str) -> Option<f64> {
+    let mut text = text.trim();
+    let mut negative = false;
+    if let Some(inner) = text
+        .strip_prefix('(')
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        negative = true;
+        text = inner.trim();
+    }
+    let percent = match text.strip_suffix('%') {
+        Some(rest) => {
+            text = rest.trim_end();
+            true
+        }
+        None => false,
+    };
+    match text.as_bytes().first() {
+        Some(b'-') => {
+            negative = !negative;
+            text = &text[1..];
+        }
+        Some(b'+') => text = &text[1..],
+        _ => {}
+    }
+    // Only digits, separators between them, one point, and an exponent make a number: this
+    // keeps out the words that the float parser also takes, such as `inf` and `nan`.
+    let starts = text
+        .as_bytes()
+        .first()
+        .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'.');
+    let plain = text
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || b",._eE+-".contains(&byte));
+    if !starts || !plain || text.contains(",,") || text.ends_with(',') {
+        return None;
+    }
+    let digits: String = text.chars().filter(|c| !matches!(c, ',' | '_')).collect();
+    let mut value: f64 = digits.parse().ok()?;
+    if percent {
+        value /= 100.0;
+    }
+    Some(if negative { -value } else { value })
+}
+
 /// Compiles a regular expression. The error says what is wrong with `pattern` on one line.
 pub fn regex(pattern: &str) -> Result<Regex, String> {
     Regex::new(pattern).map_err(|err| {
@@ -183,6 +243,29 @@ mod tests {
         assert_eq!(index_of("größe", "ß"), Some(3));
         assert_eq!(index_of("abc", ""), Some(0));
         assert_eq!(index_of("abc", "x"), None);
+    }
+
+    #[test]
+    fn numbers_are_read_as_people_write_them() {
+        assert_eq!(parse_number("1,234.50"), Some(1234.5));
+        assert_eq!(parse_number(" 45% "), Some(0.45));
+        assert_eq!(parse_number("(120)"), Some(-120.0));
+        assert_eq!(parse_number("-1,000"), Some(-1000.0));
+        assert_eq!(parse_number("(-5)"), Some(5.0));
+        assert_eq!(parse_number("+7"), Some(7.0));
+        assert_eq!(parse_number(".5"), Some(0.5));
+        assert_eq!(parse_number("1e3"), Some(1000.0));
+        assert_eq!(parse_number("1_000"), Some(1000.0));
+        for bad in [
+            "", "abc", "12abc", "nan", "inf", "1,,2", "1,", "%", "--1", "1.2.3", "()",
+        ] {
+            assert_eq!(parse_number(bad), None, "{bad:?}");
+        }
+        assert_eq!(to_bool(" Yes "), Some(true));
+        assert_eq!(to_bool("FALSE"), Some(false));
+        assert_eq!(to_bool("0"), Some(false));
+        assert_eq!(to_bool("2"), None);
+        assert_eq!(to_bool(""), None);
     }
 
     #[test]

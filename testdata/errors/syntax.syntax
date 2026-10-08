@@ -45,3 +45,27 @@ error: unexpected character '$'
   |
 9 | let x = 5 $ 3
   |           ^
+
+error: expected a variable name, found `in`
+  --> errors/syntax.bgo:10:5
+   |
+10 | let in = 5
+   |     ^^
+
+error: expected end of line, found `not`
+  --> errors/syntax.bgo:11:13
+   |
+11 | let odd = 1 not 2
+   |             ^^^
+
+error: comparison operators cannot be chained; use `and` to combine them
+  --> errors/syntax.bgo:12:22
+   |
+12 | let twice = 1 in [1] in [true]
+   |                      ^^
+
+error: unterminated string literal
+  --> errors/syntax.bgo:13:11
+   |
+13 | let raw = r"unterminated
+   |           ^^^^^^^^^^^^^^

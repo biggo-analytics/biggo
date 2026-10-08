@@ -150,146 +150,119 @@ impl Expr {
     }
 }
 
-/// A function of single values that also applies to whole columns.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ScalarFn {
-    IsNull,
-    Abs,
-    Round,
-    Floor,
-    Ceil,
-    Sqrt,
-    Lower,
-    Upper,
-    Trim,
-    Length,
-    Contains,
-    StartsWith,
-    EndsWith,
-    Year,
-    Month,
-    Day,
-    ToInt,
-    ToFloat,
-    ToString,
-    Hour,
-    Minute,
-    Second,
-    ToDate,
-    ToDateTime,
-    ToDecimal,
+/// Declares the scalar functions: each variant with the name a program calls it by.
+macro_rules! scalar_fns {
+    ($($(#[$doc:meta])* $variant:ident => $name:literal,)*) => {
+        /// A function of single values that also applies to whole columns.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum ScalarFn {
+            $($(#[$doc])* $variant,)*
+        }
+
+        impl ScalarFn {
+            pub const ALL: &'static [ScalarFn] = &[$(ScalarFn::$variant,)*];
+
+            pub fn name(self) -> &'static str {
+                match self {
+                    $(ScalarFn::$variant => $name,)*
+                }
+            }
+        }
+    };
+}
+
+scalar_fns! {
+    IsNull => "is_null",
+    Abs => "abs",
+    Round => "round",
+    Floor => "floor",
+    Ceil => "ceil",
+    Sqrt => "sqrt",
+    Lower => "lower",
+    Upper => "upper",
+    Trim => "trim",
+    Length => "length",
+    Contains => "contains",
+    StartsWith => "starts_with",
+    EndsWith => "ends_with",
+    Year => "year",
+    Month => "month",
+    Day => "day",
+    ToInt => "to_int",
+    ToFloat => "to_float",
+    ToString => "to_string",
+    Hour => "hour",
+    Minute => "minute",
+    Second => "second",
+    ToDate => "to_date",
+    ToDateTime => "to_datetime",
+    ToDecimal => "to_decimal",
     /// A duration of the given number of days; `Hours`, `Minutes`, and `Seconds` likewise.
-    Days,
-    Hours,
-    Minutes,
-    Seconds,
+    Days => "days",
+    Hours => "hours",
+    Minutes => "minutes",
+    Seconds => "seconds",
     /// The length of a duration in seconds.
-    TotalSeconds,
+    TotalSeconds => "total_seconds",
     /// Part of a string, by the position of its first character and its length.
-    Substring,
-    Replace,
+    Substring => "substring",
+    Replace => "replace",
     /// One of the pieces between the separators of a string, by position.
-    SplitPart,
-    PadLeft,
-    PadRight,
+    SplitPart => "split_part",
+    PadLeft => "pad_left",
+    PadRight => "pad_right",
     /// Where one string first occurs in another.
-    IndexOf,
+    IndexOf => "index_of",
     /// Whether a regular expression matches anywhere in a string.
-    RegexMatch,
+    RegexMatch => "regex_match",
     /// The first match of a regular expression, or one of its groups.
-    RegexExtract,
-    RegexReplace,
+    RegexExtract => "regex_extract",
+    RegexReplace => "regex_replace",
+    /// The largest of two or more values in one row, and the smallest.
+    Greatest => "greatest",
+    Least => "least",
+    /// Null if the two arguments are equal, otherwise the first.
+    NullIf => "null_if",
+    /// The conversions that give null for a value that does not convert.
+    TryToInt => "try_to_int",
+    TryToFloat => "try_to_float",
+    TryToDecimal => "try_to_decimal",
+    TryToDate => "try_to_date",
+    TryToDateTime => "try_to_datetime",
+    ToBool => "to_bool",
+    TryToBool => "try_to_bool",
+    Pow => "pow",
+    Exp => "exp",
+    Ln => "ln",
+    Log10 => "log10",
+    Log2 => "log2",
+    /// The logarithm of the first argument to the base that the second gives.
+    Log => "log",
+    /// -1, 0 or 1, in the type of the argument.
+    Sign => "sign",
+    /// Division of whole numbers, dropping the remainder.
+    Div => "div",
+    /// A number without the digits past a position, which `round` would round at.
+    Trunc => "trunc",
+    IsNan => "is_nan",
+    IsFinite => "is_finite",
+    Sin => "sin",
+    Cos => "cos",
+    Tan => "tan",
+    Asin => "asin",
+    Acos => "acos",
+    Atan => "atan",
+    /// The angle of the point `(x, y)`, called as `atan2(y, x)`.
+    Atan2 => "atan2",
+    Degrees => "degrees",
+    Radians => "radians",
+    /// A number as people write it, with separators of thousands or a percent sign.
+    ParseNumber => "parse_number",
 }
 
 impl ScalarFn {
-    pub const ALL: [ScalarFn; 39] = [
-        ScalarFn::IsNull,
-        ScalarFn::Abs,
-        ScalarFn::Round,
-        ScalarFn::Floor,
-        ScalarFn::Ceil,
-        ScalarFn::Sqrt,
-        ScalarFn::Lower,
-        ScalarFn::Upper,
-        ScalarFn::Trim,
-        ScalarFn::Length,
-        ScalarFn::Contains,
-        ScalarFn::StartsWith,
-        ScalarFn::EndsWith,
-        ScalarFn::Year,
-        ScalarFn::Month,
-        ScalarFn::Day,
-        ScalarFn::ToInt,
-        ScalarFn::ToFloat,
-        ScalarFn::ToString,
-        ScalarFn::Hour,
-        ScalarFn::Minute,
-        ScalarFn::Second,
-        ScalarFn::ToDate,
-        ScalarFn::ToDateTime,
-        ScalarFn::ToDecimal,
-        ScalarFn::Days,
-        ScalarFn::Hours,
-        ScalarFn::Minutes,
-        ScalarFn::Seconds,
-        ScalarFn::TotalSeconds,
-        ScalarFn::Substring,
-        ScalarFn::Replace,
-        ScalarFn::SplitPart,
-        ScalarFn::PadLeft,
-        ScalarFn::PadRight,
-        ScalarFn::IndexOf,
-        ScalarFn::RegexMatch,
-        ScalarFn::RegexExtract,
-        ScalarFn::RegexReplace,
-    ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            ScalarFn::IsNull => "is_null",
-            ScalarFn::Abs => "abs",
-            ScalarFn::Round => "round",
-            ScalarFn::Floor => "floor",
-            ScalarFn::Ceil => "ceil",
-            ScalarFn::Sqrt => "sqrt",
-            ScalarFn::Lower => "lower",
-            ScalarFn::Upper => "upper",
-            ScalarFn::Trim => "trim",
-            ScalarFn::Length => "length",
-            ScalarFn::Contains => "contains",
-            ScalarFn::StartsWith => "starts_with",
-            ScalarFn::EndsWith => "ends_with",
-            ScalarFn::Year => "year",
-            ScalarFn::Month => "month",
-            ScalarFn::Day => "day",
-            ScalarFn::ToInt => "to_int",
-            ScalarFn::ToFloat => "to_float",
-            ScalarFn::ToString => "to_string",
-            ScalarFn::Hour => "hour",
-            ScalarFn::Minute => "minute",
-            ScalarFn::Second => "second",
-            ScalarFn::ToDate => "to_date",
-            ScalarFn::ToDateTime => "to_datetime",
-            ScalarFn::ToDecimal => "to_decimal",
-            ScalarFn::Days => "days",
-            ScalarFn::Hours => "hours",
-            ScalarFn::Minutes => "minutes",
-            ScalarFn::Seconds => "seconds",
-            ScalarFn::TotalSeconds => "total_seconds",
-            ScalarFn::Substring => "substring",
-            ScalarFn::Replace => "replace",
-            ScalarFn::SplitPart => "split_part",
-            ScalarFn::PadLeft => "pad_left",
-            ScalarFn::PadRight => "pad_right",
-            ScalarFn::IndexOf => "index_of",
-            ScalarFn::RegexMatch => "regex_match",
-            ScalarFn::RegexExtract => "regex_extract",
-            ScalarFn::RegexReplace => "regex_replace",
-        }
-    }
-
     pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|func| func.name() == name)
+        Self::ALL.iter().copied().find(|func| func.name() == name)
     }
 }
 
@@ -446,7 +419,7 @@ fn precedence(op: BinaryOp) -> u8 {
     match op {
         Or => 1,
         And => 2,
-        Eq | Ne | Lt | Le | Gt | Ge => 3,
+        Eq | Ne | Lt | Le | Gt | Ge | In | NotIn => 3,
         Coalesce => 4,
         Add | Sub => 5,
         Mul | Div | Rem => 6,

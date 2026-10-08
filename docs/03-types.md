@@ -353,6 +353,7 @@ print(to_datetime("2026-03-04T05:06:07"), to_datetime("2026-03-04 05:06:07.25"),
 | `to_string(x)` | every type that can be a column | the same text that `print` shows |
 | `to_date(x)` | `string` `datetime` `date` | a string must be `YYYY-MM-DD`; a datetime drops its time |
 | `to_datetime(x)` | `string` `date` `datetime` | a string is `YYYY-MM-DDTHH:MM:SS`, or with a space in place of `T`, and can have fractional seconds |
+| `to_bool(x)` | `string` `int` `bool` | `true` / `false`, `yes` / `no`, `1` / `0`, in any letter case |
 
 If a string cannot be converted, the program stops with an error that names the value (you do not
 silently get null):
@@ -368,6 +369,22 @@ error: cannot convert '12 baht' to an int
 1 | print(to_int("12 baht"))
   |       ^^^^^^^^^^^^^^^^^
 ```
+
+When the data may hold values that do not convert, use the `try_` form of the function. It has a
+nullable result, and gives null where the plain form would stop the program:
+
+```biggo
+print(try_to_int("12 baht"), try_to_int("12"), try_to_date("31/01/2026"), try_to_bool("perhaps"))
+print(try_to_int("12 baht") ?? 0)
+```
+
+```text output
+null 12 null null
+0
+```
+
+There is a `try_` form of every conversion except `to_string`, which cannot fail: `try_to_int`,
+`try_to_float`, `try_to_decimal`, `try_to_date`, `try_to_datetime`, `try_to_bool`.
 
 Every function passes null through: `to_int(x)` gives null when `x` is null. These functions work
 on a whole column in the same way, for example `derive(amount = to_decimal(amount_text))`.

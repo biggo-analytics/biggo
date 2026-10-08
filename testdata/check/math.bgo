@@ -1,0 +1,45 @@
+// Mistakes in membership tests, math functions and conversions.
+type Sale = { region: string, qty: int, price: float? }
+let sales = read_csv<Sale>("sales.csv")
+let names = ["a", "b"]
+
+1 in 2
+1 in ["a"]
+"a" in [1, 2]
+null in [1]
+1.5 in names
+[1] in [[1]]
+sales |> where(region in qty)
+sales |> where(qty in [region])
+sales |> where(region in sales)
+pow(2)
+pow("2", 2)
+exp()
+ln("e")
+log(8)
+sign("x")
+div(7, 2.0)
+div(7)
+trunc(2.5, 1.5)
+trunc(1, 2, 3)
+sales |> derive(t = trunc(price, qty))
+is_nan("x")
+pi(1)
+sin(@2026-01-01)
+greatest(1)
+greatest(1, "a")
+least(true, false)
+greatest(null, 1)
+greatest([1], [2])
+null_if(1)
+null_if(1, "a")
+null_if([1], [1])
+try_to_int(@2026-01-01)
+try_to_date(5)
+to_bool(1.5)
+try_to_bool(@2026-01-01)
+parse_number(5)
+between(1, 2)
+between(1, "a", "b")
+clamp(1, 2)
+clamp(1, "a", 3)

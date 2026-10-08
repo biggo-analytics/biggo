@@ -1,0 +1,5 @@
+error: division by zero
+ --> run/math_errors.bgo:3:1
+  |
+3 | print(rows |> derive(q = div(a, b)))
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

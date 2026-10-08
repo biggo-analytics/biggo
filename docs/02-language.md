@@ -74,7 +74,7 @@ true false null
 | `int` | `42`, `1_000_000` | 64-bit integer. `_` can separate digits |
 | `float` | `3.14`, `2.5e3` | 64-bit floating point (IEEE 754) |
 | `decimal` | `19.99d`, `5d` | Exact decimal with 6 decimal places. Ends with `d` |
-| `string` | `"text"` | UTF-8. Supported escapes: `\n` `\t` `\r` `\0` `\\` `\"` |
+| `string` | `"text"`, `r"\d+"` | UTF-8. Supported escapes: `\n` `\t` `\r` `\0` `\\` `\"`. In a raw string, written with `r` in front, a backslash is only a backslash, and the string ends at the first `"` |
 | `bool` | `true`, `false` | |
 | `date` | `@2026-01-31` | A calendar date. It must be a date that exists |
 | `datetime` | `@2026-01-31T18:30:00` | Seconds are optional. Up to 6 digits of fractional seconds. No time zone |
@@ -117,7 +117,7 @@ Listed from the tightest binding to the loosest:
 | 3 | `*` `/` `%` | multiply, divide, remainder | left to right |
 | 4 | `+` `-` | add, subtract | left to right |
 | 5 | `??` | if the left side is null, use the right side | right to left |
-| 6 | `==` `!=` `<` `<=` `>` `>=` | comparison | cannot be chained |
+| 6 | `==` `!=` `<` `<=` `>` `>=` `in` `not in` | comparison, membership in a list | cannot be chained |
 | 7 | `not` | logical negation | |
 | 8 | `and` | logical and | left to right |
 | 9 | `or` | logical or | left to right |
@@ -128,6 +128,7 @@ print(1 + 2 * 3, (1 + 2) * 3, -2 * 3, 10 - 4 - 3)
 print(7 / 2, 6 / 3, 7 % 3, -7 % 3, 7.5 % 2)
 print(not true or true, 1 < 2 and 2 < 3)
 print("data" + "base", [1, 2] + [3])
+print(3 in [1, 2, 3], "x" not in ["a", "b"])
 ```
 
 ```text output
@@ -135,6 +136,7 @@ print("data" + "base", [1, 2] + [3])
 3.5 2.0 1 -1 1.5
 true true
 database [1, 2, 3]
+true true
 ```
 
 Rules worth knowing:
@@ -150,6 +152,10 @@ Rules worth knowing:
 - You can mix `int` and `float`. The `int` side is converted to `float` automatically. The full
   rules are in [The type system](03-types.md#automatic-conversions).
 - `and` / `or` evaluate the right side only when necessary.
+- **`x in list`** is true when the list has a value equal to `x`, and `x not in list` is the
+  opposite. The list can be written out or be any `list` value of the program. In a table
+  operation `x` can be a column, but the list cannot depend on one:
+  `where(region in ["north", "east"])`. Like `==`, a null `x` gives null.
 
 ## null
 
@@ -612,10 +618,10 @@ key comes from a variable, use `put`.
 The right side of `|>` must be a function call.
 
 ```biggo
-fn clamp(x: int, low: int, high: int) -> int {
+fn bounded(x: int, low: int, high: int) -> int {
   if x < low { low } else if x > high { high } else { x }
 }
-print(15 |> clamp(0, 10))
+print(15 |> bounded(0, 10))
 [3, 1, 2]
   |> map(fn(n) { n * 10 })
   |> filter(fn(n) { n > 10 })

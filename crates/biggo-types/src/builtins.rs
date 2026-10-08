@@ -1,6 +1,7 @@
 //! Built-in functions on lists, maps, and records, and the assertions that tests are made of.
 
-use biggo_syntax::ast::ExprId;
+use biggo_plan::ScalarFn;
+use biggo_syntax::ast::{BinaryOp, ExprId};
 
 use crate::check::{Call, Cx, FnHint, coerce, storable, unify};
 use crate::hir::{Builtin, Expr, ExprKind};
@@ -26,6 +27,9 @@ impl Cx<'_> {
             "assert_eq" => self.builtin_assert_eq(call),
             "args" => self.builtin_args(call),
             "split" => self.builtin_split(call),
+            "between" => self.builtin_between(call),
+            "clamp" => self.builtin_clamp(call),
+            "pi" => self.builtin_pi(call),
             _ => return None,
         };
         Some(checked.unwrap_or_else(|| Expr::error(call.span)))
@@ -164,6 +168,43 @@ impl Cx<'_> {
         let separator = self.scalar_arg(separator, Type::Str, "the separator")?;
         let ty = Type::List(Box::new(Type::Str));
         self.builtin(call, Builtin::Split, vec![text, separator], ty)
+    }
+
+    /// `between(x, low, high)` is `x >= low and x <= high`.
+    fn builtin_between(&mut self, call: &Call) -> Option<Expr> {
+        let [value, low, high] = self.exactly(call, "a value and the two ends of a range")?;
+        let value = self.expr(value);
+        let (low, high) = (self.expr(low), self.expr(high));
+        if value.ty.is_error() || low.ty.is_error() || high.ty.is_error() {
+            return None;
+        }
+        let from = self.binary(call.span, BinaryOp::Ge, value.clone(), low);
+        if from.ty.is_error() {
+            return None;
+        }
+        let to = self.binary(call.span, BinaryOp::Le, value, high);
+        Some(self.binary(call.span, BinaryOp::And, from, to))
+    }
+
+    /// `clamp(x, low, high)` is `least(greatest(x, low), high)`.
+    fn builtin_clamp(&mut self, call: &Call) -> Option<Expr> {
+        let [value, low, high] = self.exactly(call, "a value and the two ends of a range")?;
+        let value = self.expr(value);
+        let (low, high) = (self.expr(low), self.expr(high));
+        if value.ty.is_error() || low.ty.is_error() || high.ty.is_error() {
+            return None;
+        }
+        let raised = self.extreme(ScalarFn::Greatest, "clamp", call.span, vec![value, low]);
+        if raised.ty.is_error() {
+            return None;
+        }
+        Some(self.extreme(ScalarFn::Least, "clamp", call.span, vec![raised, high]))
+    }
+
+    fn builtin_pi(&mut self, call: &Call) -> Option<Expr> {
+        let [] = self.exactly(call, "no arguments")?;
+        let kind = ExprKind::Float(std::f64::consts::PI);
+        Some(Expr::new(kind, Type::Float, call.span))
     }
 
     fn builtin_len(&mut self, call: &Call) -> Option<Expr> {

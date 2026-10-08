@@ -1467,6 +1467,9 @@ impl<'a> Cx<'a> {
         if op == Coalesce {
             return self.coalesce(span, left, right);
         }
+        if matches!(op, In | NotIn) {
+            return self.membership(span, op, left, right);
+        }
         let mismatch = |cx: &mut Self| {
             let message = format!(
                 "cannot apply `{}` to {} and {}",
@@ -1566,7 +1569,7 @@ impl<'a> Cx<'a> {
                 }
                 (Base::Bool, Base::Bool, Base::Bool)
             }
-            Coalesce => unreachable!("handled above"),
+            Coalesce | In | NotIn => unreachable!("handled above"),
         };
         let convert = |expr: Expr, to: Base, nullable: bool| {
             let ty = base_type(to).with_null(nullable);
@@ -1580,6 +1583,72 @@ impl<'a> Cx<'a> {
             ty,
             span,
         )
+    }
+
+    /// `value in list` and `value not in list`: whether the list has an item equal to the
+    /// value. The value and the items are compared as `==` compares them.
+    fn membership(&mut self, span: Span, op: BinaryOp, left: Expr, right: Expr) -> Expr {
+        let Type::List(item) = &right.ty else {
+            let message = format!(
+                "`{0}` needs a list on its right, as in `x {0} [1, 2]`, found {1}",
+                op.symbol(),
+                right.ty
+            );
+            return self.error(right.span, message);
+        };
+        let mismatch = |cx: &mut Self, left: &Expr, right: &Expr| {
+            let message = format!("cannot look for {} in {}", left.ty, right.ty);
+            cx.error(span, message)
+        };
+        let (Some((value_base, value_null)), Some((item_base, item_null))) =
+            (base(&left.ty), base(item))
+        else {
+            return mismatch(self, &left, &right);
+        };
+        let number = |base| matches!(base, Base::Int | Base::Decimal | Base::Float);
+        let moment = |base| matches!(base, Base::Date | Base::DateTime);
+        // The type the value and the items are compared as.
+        let operand = match (value_base, item_base) {
+            (Base::Null, _) => {
+                let message = "looking for `null` always gives null; \
+                               use `is_null(...)` to test for null";
+                return self.error(left.span, message);
+            }
+            // A list with no items, or with nothing but nulls.
+            (value, Base::Null) => value,
+            (value, item) if value == item => value,
+            (value, item) if number(value) && number(item) => {
+                let rank = |base| match base {
+                    Base::Int => 0,
+                    Base::Decimal => 1,
+                    _ => 2,
+                };
+                if rank(value) >= rank(item) {
+                    value
+                } else {
+                    item
+                }
+            }
+            (value, item) if moment(value) && moment(item) => Base::DateTime,
+            _ => return mismatch(self, &left, &right),
+        };
+        let value_ty = base_type(operand).with_null(value_null);
+        let list_ty = Type::List(Box::new(base_type(operand).with_null(item_null)));
+        // A list that is written out converts item by item; a list in a variable has to
+        // have the right type already.
+        let (left, right) = match (coerce(left, &value_ty), coerce(right, &list_ty)) {
+            (Ok(left), Ok(right)) => (left, right),
+            (Ok(left) | Err(left), Ok(right) | Err(right)) => {
+                return mismatch(self, &left, &right);
+            }
+        };
+        let ty = Type::Bool.with_null(value_null || item_null);
+        let kind = ExprKind::Binary(BinaryOp::In, Box::new(left), Box::new(right));
+        let found = Expr::new(kind, ty.clone(), span);
+        match op {
+            BinaryOp::NotIn => Expr::new(ExprKind::Not(Box::new(found)), ty, span),
+            _ => found,
+        }
     }
 
     fn coalesce(&mut self, span: Span, left: Expr, right: Expr) -> Expr {

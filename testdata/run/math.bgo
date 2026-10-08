@@ -1,0 +1,68 @@
+// Membership, math, choosing between values, and the conversions that do not fail.
+
+print(3 in [1, 2, 3], 4 in [1, 2, 3], 4 not in [1, 2, 3], "b" in ["a", "b"], 1.5 in [1, 2])
+print(@2026-01-02 in [@2026-01-01, @2026-01-02], 2 in [1.0, 2.0], 1 in [], true in [false])
+let nothing: int? = null
+let holes: list<int?> = [1, null]
+print(nothing in [1, 2], 1 in holes, 2 in holes, 2 not in holes)
+print(r"\d+\n", length(r"a\nb"), r"C:\data\new" + r"\file.csv")
+
+print(pow(2, 10), pow(2.5, 2), exp(0), ln(1), log10(1000), log2(8), log(81, 3))
+print(sign(-5), sign(0), sign(2.5), sign(-1.5d), div(7, 2), div(-7, 2), 7 % 2, -7 % 2)
+print(trunc(2.789), trunc(-2.789, 1), trunc(1234.5, -2), trunc(2.789d, 2), round(2.789, 2))
+print(is_nan(0.0 / 0.0), is_nan(1), is_finite(1.0 / 0.0), is_finite(2.5))
+print(round(pi(), 5), round(sin(pi() / 2), 3), round(cos(0), 3), round(degrees(pi()), 1))
+print(round(radians(180), 5), round(atan2(1, 1), 4), round(tan(0), 1), round(asin(1) + acos(1) + atan(0), 4))
+
+print(greatest(1, 5, 3), least(1, 5, 3), greatest(1, 2.5), least("b", "a"), greatest(1.5d, 2))
+print(greatest(@2026-01-01, @2026-03-01), least(hours(1), minutes(30)), greatest(1, nothing))
+print(between(5, 1, 10), between(11, 1, 10), between(@2026-02-01, @2026-01-01, @2026-12-31))
+print(clamp(15, 0, 10), clamp(-3.5, 0, 10), clamp("m", "a", "f"), clamp(nothing, 0, 1))
+print(null_if(5, 5), null_if(5, 6), null_if("N/A", "N/A"), null_if(5, nothing), null_if(-999.0, -999))
+
+print(try_to_int("42"), try_to_int("4x"), try_to_int(1e30), try_to_int(3.9), try_to_int(true))
+print(try_to_float("1e3"), try_to_float("abc"), try_to_decimal("1.25"), try_to_decimal("x"))
+print(try_to_date("2026-01-05"), try_to_date("05/01/2026"), try_to_date("2026-02-30"))
+print(try_to_datetime("2026-01-05 10:00:00"), try_to_datetime("nope"))
+print(to_bool("Yes"), to_bool("no"), to_bool(0), to_bool(true), try_to_bool("maybe"), try_to_bool(2))
+print(parse_number("1,234.50"), parse_number("45%"), parse_number("(120)"), parse_number("abc"))
+
+// The same on columns.
+let rows = from_rows([
+  { code: "TH", text: "12", x: 3, y: 2.5, mark: "N/A" },
+  { code: "US", text: "1,200", x: -4, y: null, mark: "yes" },
+  { code: "JP", text: "abc", x: 0, y: -1.0, mark: "N/A" },
+])
+let asia = ["TH", "JP", "VN"]
+print(rows |> where(code in asia) |> select(code))
+print(rows |> where(code not in asia and x in [-4, 4]) |> count())
+rows
+  |> select(
+    text,
+    whole = try_to_int(text),
+    number = parse_number(text),
+    square = pow(x, 2),
+    top = greatest(x, 1),
+    low = least(x, y),
+    kept = clamp(x, -1, 1),
+    inside = between(x, 0, 5),
+  )
+  |> print()
+rows
+  |> select(
+    x,
+    sign = sign(x),
+    half = div(x, 2),
+    mark = null_if(mark, "N/A"),
+    agreed = try_to_bool(mark),
+    size = round(ln(abs(x) + 1), 3),
+    listed = x in holes,
+  )
+  |> print()
+// Many items are looked up in a set; the answers are the same.
+let many = map(range(0, 100), fn(i) { to_string(i * 12) })
+print(rows |> derive(found = text in many, wide = x in range(-10, 10)) |> select(text, found, wide))
+explain(rows |> where(code in asia and x not in [0]) |> select(code))
+
+// The value that does not convert stops the program only when asked to.
+print(to_bool("maybe"))

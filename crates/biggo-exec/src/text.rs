@@ -4,56 +4,14 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use arrow::array::{
-    Array, ArrayRef, AsArray, BooleanArray, Int64Array, StringArray, StringBuilder, new_null_array,
-};
-use arrow::datatypes::Int64Type;
+use arrow::array::{ArrayRef, BooleanArray, Int64Array, StringBuilder, new_null_array};
 use biggo_plan::{DataType, ScalarFn, text};
 use regex::Regex;
 
 use crate::convert::arrow_type;
 use crate::expr::Col;
+use crate::rows::{Ints, Strs, result, shape};
 use crate::{Error, Result};
-
-/// A string argument, read a row at a time. A single value holds for every row.
-struct Strs<'a> {
-    array: &'a StringArray,
-    single: bool,
-}
-
-impl<'a> Strs<'a> {
-    fn new(col: &'a Col) -> Self {
-        Strs {
-            array: col.values().as_string::<i32>(),
-            single: col.is_scalar(),
-        }
-    }
-
-    fn get(&self, row: usize) -> Option<&'a str> {
-        let row = if self.single { 0 } else { row };
-        self.array.is_valid(row).then(|| self.array.value(row))
-    }
-}
-
-/// An int argument, read a row at a time.
-struct Ints<'a> {
-    array: &'a Int64Array,
-    single: bool,
-}
-
-impl<'a> Ints<'a> {
-    fn new(col: &'a Col) -> Self {
-        Ints {
-            array: col.values().as_primitive::<Int64Type>(),
-            single: col.is_scalar(),
-        }
-    }
-
-    fn get(&self, row: usize) -> Option<i64> {
-        let row = if self.single { 0 } else { row };
-        self.array.is_valid(row).then(|| self.array.value(row))
-    }
-}
 
 thread_local! {
     /// The pattern compiled last on this thread. A query uses one pattern for batch after
@@ -92,8 +50,7 @@ fn strings<S: AsRef<str>>(
 /// Applies one of the string functions of this module. `rows` is the number of rows of the
 /// batch, which is what the result has unless every argument is a single value.
 pub fn call(func: ScalarFn, args: &[Col], dtype: DataType, rows: usize) -> Result<Col> {
-    let single = args.iter().all(Col::is_scalar);
-    let rows = if single { 1 } else { rows };
+    let (rows, single) = shape(args, rows);
     let text = Strs::new(&args[0]);
     let array: ArrayRef = match func {
         ScalarFn::Substring => {
@@ -164,12 +121,7 @@ pub fn call(func: ScalarFn, args: &[Col], dtype: DataType, rows: usize) -> Resul
         ScalarFn::RegexMatch | ScalarFn::RegexExtract | ScalarFn::RegexReplace => {
             // The checker lets neither the pattern nor the group depend on a column.
             let Some(pattern) = Strs::new(&args[1]).get(0) else {
-                let nulls = new_null_array(&arrow_type(dtype), rows);
-                return Ok(if single {
-                    Col::Scalar(nulls)
-                } else {
-                    Col::Array(nulls)
-                });
+                return Ok(result(single, new_null_array(&arrow_type(dtype), rows)));
             };
             let regex = compiled(pattern)?;
             match func {
@@ -208,9 +160,5 @@ pub fn call(func: ScalarFn, args: &[Col], dtype: DataType, rows: usize) -> Resul
             )));
         }
     };
-    Ok(if single {
-        Col::Scalar(array)
-    } else {
-        Col::Array(array)
-    })
+    Ok(result(single, array))
 }

@@ -6,6 +6,7 @@ use arrow::array::{
     Array, ArrayRef, AsArray, BooleanArray, Datum, Decimal128Array, DurationMicrosecondArray,
     Float64Array, Int64Array, RecordBatch, StringArray, UInt32Array,
 };
+use arrow::buffer::BooleanBuffer;
 use arrow::compute::kernels::concat_elements::concat_elements_utf8;
 use arrow::compute::kernels::{boolean, cmp, comparison, numeric, temporal, zip};
 use arrow::compute::{CastOptions, cast_with_options, filter_record_batch, take};
@@ -60,7 +61,7 @@ impl Col {
     }
 
     /// Applies an array kernel, keeping a single value single.
-    fn map(self, f: impl FnOnce(&ArrayRef) -> Result<ArrayRef>) -> Result<Col> {
+    pub(crate) fn map(self, f: impl FnOnce(&ArrayRef) -> Result<ArrayRef>) -> Result<Col> {
         Ok(match &self {
             Col::Array(array) => Col::Array(f(array)?),
             Col::Scalar(array) => Col::Scalar(f(array)?),
@@ -90,6 +91,12 @@ pub fn eval(expr: &Expr, batch: &RecordBatch) -> Result<Col> {
         ExprKind::Binary(BinaryOp::And, left, right) => logical(batch, left, right, false),
         ExprKind::Binary(BinaryOp::Or, left, right) => logical(batch, left, right, true),
         ExprKind::Binary(BinaryOp::Coalesce, left, right) => coalesce(batch, left, right),
+        ExprKind::Binary(BinaryOp::In, value, list) => match &list.kind {
+            ExprKind::Literal(biggo_plan::Scalar::List(items)) => {
+                membership(eval(value, batch)?, items, list.ty.dtype)
+            }
+            _ => Err(Error("internal error: `in` without its list".into())),
+        },
         ExprKind::Binary(op, left, right) => {
             let left = eval(left, batch)?;
             let right = eval(right, batch)?;
@@ -172,7 +179,7 @@ fn binary(op: BinaryOp, left: Col, right: Col, rows: usize) -> Result<Col> {
         Le => Arc::new(cmp::lt_eq(&left, &right)?),
         Gt => Arc::new(cmp::gt(&left, &right)?),
         Ge => Arc::new(cmp::gt_eq(&left, &right)?),
-        And | Or | Coalesce => unreachable!("evaluated lazily by the caller"),
+        And | Or | Coalesce | In | NotIn => unreachable!("evaluated by the caller"),
     };
     // Arrow widens the type of a decimal sum; ours has one fixed type.
     let array = match decimal && matches!(op, Add | Sub) {
@@ -180,6 +187,73 @@ fn binary(op: BinaryOp, left: Col, right: Col, rows: usize) -> Result<Col> {
         false => array,
     };
     Ok(result_of(&left, &right, array))
+}
+
+/// Whether each value equals one of `items`, which have the type `dtype`. A value that
+/// equals none of them gives null if a null is among them, as a chain of `==` joined by
+/// `or` would.
+fn membership(value: Col, items: &[biggo_plan::Scalar], dtype: DataType) -> Result<Col> {
+    use biggo_plan::Scalar;
+    /// Up to this many items are compared one after the other, a column at a time.
+    const COMPARED: usize = 8;
+    let unknown = items.iter().any(|item| matches!(item, Scalar::Null));
+    // What a value that equals no item gives.
+    let missed = if unknown { None } else { Some(false) };
+    value.map(|array| {
+        let hashed = matches!(array.data_type(), ArrowType::Int64 | ArrowType::Utf8);
+        if items.len() > COMPARED && hashed {
+            let found: BooleanArray = match array.data_type() {
+                ArrowType::Int64 => {
+                    let wanted: hashbrown::HashSet<i64> = items
+                        .iter()
+                        .filter_map(|item| match item {
+                            Scalar::Int(item) => Some(*item),
+                            _ => None,
+                        })
+                        .collect();
+                    let values = array.as_primitive::<Int64Type>().iter();
+                    values
+                        .map(|value| {
+                            if wanted.contains(&value?) {
+                                Some(true)
+                            } else {
+                                missed
+                            }
+                        })
+                        .collect()
+                }
+                _ => {
+                    let wanted: hashbrown::HashSet<&str> = items
+                        .iter()
+                        .filter_map(|item| match item {
+                            Scalar::Str(item) => Some(&**item),
+                            _ => None,
+                        })
+                        .collect();
+                    let values = array.as_string::<i32>().iter();
+                    values
+                        .map(|value| {
+                            if wanted.contains(value?) {
+                                Some(true)
+                            } else {
+                                missed
+                            }
+                        })
+                        .collect()
+                }
+            };
+            return Ok(Arc::new(found) as ArrayRef);
+        }
+        // Null for a null value, and otherwise false until an item is found equal.
+        let nothing = BooleanBuffer::new_unset(array.len());
+        let mut found = BooleanArray::new(nothing, array.logical_nulls());
+        for item in items {
+            let item = Col::Scalar(scalar_array(item, dtype)?);
+            let equal = cmp::eq(&Col::Array(array.clone()), &item)?;
+            found = boolean::or_kleene(&found, &equal)?;
+        }
+        Ok(Arc::new(found) as ArrayRef)
+    })
 }
 
 fn decimal_overflow() -> ArrowError {
@@ -502,6 +576,10 @@ fn call(func: ScalarFn, mut args: Vec<Col>, dtype: DataType, rows: usize) -> Res
         | ScalarFn::RegexReplace => {
             args.insert(0, first);
             crate::text::call(func, &args, dtype, rows)
+        }
+        _ => {
+            args.insert(0, first);
+            crate::math::call(func, &args, dtype, rows)
         }
     }
 }

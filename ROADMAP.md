@@ -136,31 +136,23 @@ unless its row says otherwise.
 
 ### 1. Expressions, math and safe conversion
 
-Exists: `+ - * / %`, comparisons, `and` `or` `not`, `??`, `if`, `match`, `is_null`, `abs` `round`
-`floor` `ceil` `sqrt`, `to_int` `to_float` `to_decimal` `to_string` `to_date` `to_datetime`.
+Exists: `+ - * / %`, comparisons, `in` and `not in`, `and` `or` `not`, `??`, `if`, `match`,
+`is_null`, `abs` `round` `trunc` `floor` `ceil` `sqrt` `sign` `div` `pow` `exp` `ln` `log10` `log2`
+`log`, `greatest` `least` `clamp` `between`, `is_nan` `is_finite`, `pi` and the trigonometric
+functions, `to_int` `to_float` `to_decimal` `to_string` `to_date` `to_datetime` `to_bool` and the
+`try_` form of each, `parse_number`, `null_if`, raw strings.
 
 | Feature | Result | What it does | Priority |
 | --- | --- | --- | --- |
-| `x in [a, b, c]`, `x not in [a, b, c]` | `bool` | Whether `x` equals one of the values of a list. The list can be any value of the program that is not a column | Must |
-| `greatest(a, b, ...)`, `least(a, b, ...)` | type of the arguments | The largest or smallest of several values in one row (`max` and `min` work down a column) | Must |
-| `null_if(x, value)` | `T?` | Null when `x` equals `value`, otherwise `x`. Turns markers such as `-999`, `"N/A"` or `""` into null | Must |
-| `try_to_int(x)`, `try_to_float(x)`, `try_to_decimal(x)`, `try_to_date(x)`, `try_to_datetime(x)` | `T?` | Like `to_int` and the others, but a value that cannot be converted gives null instead of stopping the program | Must |
-| `to_bool(x)`, `try_to_bool(x)` | `bool`, `bool?` | From `"true"` / `"false"`, `"yes"` / `"no"`, `1` / `0` | Must |
-| `pow(x, y)` | `float` | `x` to the power `y` | Must |
-| `exp(x)`, `ln(x)`, `log10(x)`, `log2(x)`, `log(x, base)` | `float` | The exponential and logarithms | Must |
-| `sign(x)` | `int` | -1, 0 or 1 | Must |
-| `div(a, b)` | `int` | Whole-number division, since `/` always gives a float | Must |
-| raw strings: `r"\d+"` | `string` | A string in which a backslash is only a backslash, for regular expressions and Windows paths | Must |
-| `between(x, low, high)` | `bool` | `low <= x and x <= high` | Should |
-| `clamp(x, low, high)` | type of `x` | `x` brought into the range | Should |
-| `trunc(x)`, `trunc(x, digits)` | like `round` | Cuts digits off without rounding | Should |
-| `is_nan(x)`, `is_finite(x)` | `bool` | For floats that came out of `0 / 0` or overflowed | Should |
-| `pi()`, `sin` `cos` `tan` `asin` `acos` `atan` `atan2`, `degrees(x)`, `radians(x)` | `float` | Trigonometry, which distances between coordinates need | Should |
-| `parse_number(s)` | `float?` | Reads numbers as people write them: `"1,234.50"`, `"45%"`, `"(120)"` | Should |
 | `recode(x, mapping)`, `recode(x, mapping, default)` | value type of the map | Replaces codes by labels with a map: `recode(sex, { "M": "male", "F": "female" })` | Should |
 | `cut(x, edges)`, `cut(x, edges, labels)` | `string?` | The range a number falls in, for age groups, price bands and the like: `cut(age, [0, 18, 65])` | Should |
 | interpolated strings: `f"total: {x}"` | `string` | Values written into text without `+` and `to_string` | Should |
 | `hash(x)` | `int` | A stable number for a value, for sampling and for splitting data | Later |
+
+- [x] `in` and `not in`, `greatest` and `least`, `null_if`, the `try_` conversions and `to_bool`
+- [x] `pow`, `exp`, `ln`, `log10`, `log2`, `log`, `sign` (which keeps the type of its argument),
+      `div`, `trunc`, `clamp`, `between`, `is_nan`, `is_finite`, `pi` and trigonometry
+- [x] `parse_number`, and raw strings such as `r"\d+"`
 
 ### 2. Dates and times
 

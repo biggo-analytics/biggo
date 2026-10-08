@@ -14,6 +14,7 @@ FLOAT     = INT "." INT [ exponent ] | INT exponent
 exponent  = ("e" | "E") [ "+" | "-" ] digit { digit }
 DECIMAL   = INT [ "." INT ] "d"
 STRING    = '"' { char | escape } '"'                    on a single line
+          | 'r"' { any char other than '"' or a newline } '"'
 escape    = "\n" | "\t" | "\r" | "\0" | "\\" | '\"'
 DATE      = "@" YYYY "-" MM "-" DD
 DATETIME  = DATE "T" HH ":" MM [ ":" SS [ "." digit{1,6} ] ]
@@ -23,7 +24,7 @@ comment   = "//" to end of line
 - `letter` is a Unicode character that can start a name (XID_Start). In `NAME`, the `letter | digit`
   that follows stands for any character that can continue one (XID_Continue), so names can be
   written in any script, such as Thai. Everywhere else, `digit` is one of `0` to `9`
-- Keywords: `let` `fn` `type` `import` `if` `else` `match` `and` `or` `not` `true` `false` `null`
+- Keywords: `let` `fn` `type` `import` `if` `else` `match` `and` `or` `not` `in` `true` `false` `null`
 - A single `_` is an ordinary name, except in a `match` pattern, where it means "any value"
 - A number followed immediately by a letter (`5days`) is an error
 - `DATE` and `DATETIME` must be a date and time that really exist (`@2026-02-30` is an error)
@@ -54,7 +55,7 @@ A newline ends a statement, except when
 1. it is inside a `( )` or `[ ]` that is not closed yet (including the arguments of a function call)
 2. the last token of the line is a binary operator, or `=` `:` `->` `=>` `,`
 3. the first token of the next line is a binary operator that cannot start an expression:
-   `|>` `+` `*` `/` `%` `==` `!=` `<` `<=` `>` `>=` `??` `and` `or` `.`
+   `|>` `+` `*` `/` `%` `==` `!=` `<` `<=` `>` `>=` `??` `and` `or` `in` `.`
 
 `-` `(` `[` at the start of a line always begin a new statement. Inside the `{ }` of a block and of a
 `match`, newlines separate statements/arms again, even when that block is inside parentheses.
@@ -84,7 +85,7 @@ pipe       = or { "|>" call }
 or         = and { "or" and }
 and        = not { "and" not }
 not        = "not" not | comparison
-comparison = coalesce [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) coalesce ]
+comparison = coalesce [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" | "in" | "not" "in" ) coalesce ]
 coalesce   = additive [ "??" coalesce ]
 additive   = term { ( "+" | "-" ) term }
 term       = unary { ( "*" | "/" | "%" ) unary }
@@ -97,7 +98,10 @@ arg        = [ NAME "=" ] expr
 ```
 
 - The right-hand side of `|>` must be a function call: `a |> f(b)` is `f(a, b)`
-- Comparisons cannot be chained (`a < b < c` is an error)
+- Comparisons cannot be chained (`a < b < c` is an error), and `in` and `not in` count as
+  comparisons
+- `not in` is one operator when `not` is on the same line as the expression before it. A `not`
+  that starts a line starts a statement
 - `??` groups from the right: `a ?? b ?? c` is `a ?? (b ?? c)`
 - The `(` and `[` of a `postfix` must be on the same line as the thing they follow
 - In `arg`, a name followed by `=` (not `==`) is a named argument. An ordinary function call must put

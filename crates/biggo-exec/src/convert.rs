@@ -72,6 +72,7 @@ pub fn scalar_array(value: &Scalar, dtype: DataType) -> Result<ArrayRef> {
         Scalar::DateTime(value) => Arc::new(TimestampMicrosecondArray::from(vec![*value])),
         Scalar::Duration(value) => Arc::new(DurationMicrosecondArray::from(vec![*value])),
         Scalar::Decimal(value) => decimals(Decimal128Array::from(vec![*value]))?,
+        Scalar::List(_) => return Err(Error("a list is not a value of a column".into())),
     })
 }
 

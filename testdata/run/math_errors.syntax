@@ -1,0 +1,2 @@
+(let rows (call from_rows (list (record (a: 1) (b: 2)) (record (a: 5) (b: 0)))))
+(call print (|> rows (call derive (q: (call div a b)))))

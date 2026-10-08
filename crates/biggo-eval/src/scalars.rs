@@ -22,6 +22,10 @@ pub fn call(func: ScalarFn, args: &[Value]) -> Option<Result<Value, String>> {
     if func == IsNull {
         return Some(Ok(Value::Bool(matches!(args[0], Value::Null))));
     }
+    // `null_if` keeps its value when what it looks for is null; the engine works that out.
+    if func == NullIf {
+        return None;
+    }
     // Every other function gives null for a null argument.
     if args.iter().any(|arg| matches!(arg, Value::Null)) {
         return Some(Ok(Value::Null));
@@ -118,6 +122,51 @@ pub fn call(func: ScalarFn, args: &[Value]) -> Option<Result<Value, String>> {
         (IndexOf, [Value::Str(value), Value::Str(part)]) => match strings::index_of(value, part) {
             Some(position) => Value::Int(position),
             None => Value::Null,
+        },
+
+        (Pow, [Value::Float(a), Value::Float(b)]) => Value::Float(a.powf(*b)),
+        (Log, [Value::Float(a), Value::Float(b)]) => Value::Float(a.log(*b)),
+        (Atan2, [Value::Float(a), Value::Float(b)]) => Value::Float(a.atan2(*b)),
+        (Exp, [Value::Float(value)]) => Value::Float(value.exp()),
+        (Ln, [Value::Float(value)]) => Value::Float(value.ln()),
+        (Log10, [Value::Float(value)]) => Value::Float(value.log10()),
+        (Log2, [Value::Float(value)]) => Value::Float(value.log2()),
+        (Sin, [Value::Float(value)]) => Value::Float(value.sin()),
+        (Cos, [Value::Float(value)]) => Value::Float(value.cos()),
+        (Tan, [Value::Float(value)]) => Value::Float(value.tan()),
+        (Asin, [Value::Float(value)]) => Value::Float(value.asin()),
+        (Acos, [Value::Float(value)]) => Value::Float(value.acos()),
+        (Atan, [Value::Float(value)]) => Value::Float(value.atan()),
+        (Degrees, [Value::Float(value)]) => Value::Float(value.to_degrees()),
+        (Radians, [Value::Float(value)]) => Value::Float(value.to_radians()),
+        (IsNan, [Value::Float(value)]) => Value::Bool(value.is_nan()),
+        (IsFinite, [Value::Float(value)]) => Value::Bool(value.is_finite()),
+        (Sign, [Value::Int(value)]) => Value::Int(value.signum()),
+        (Sign, [Value::Float(value)]) => Value::Float(scalar::float_sign(*value)),
+        (Div, [Value::Int(_), Value::Int(0)]) => return Some(Err("division by zero".into())),
+        (Div, [Value::Int(a), Value::Int(b)]) => match a.checked_div(*b) {
+            Some(whole) => Value::Int(whole),
+            None => return Some(Err("integer overflow".into())),
+        },
+        (Trunc, [Value::Float(value)]) => Value::Float(scalar::float_trunc(*value, 0)),
+        (Trunc, [Value::Float(value), Value::Int(digits)]) => {
+            Value::Float(scalar::float_trunc(*value, *digits))
+        }
+        (ParseNumber, [Value::Str(value)]) => match strings::parse_number(value) {
+            Some(number) => Value::Float(number),
+            None => Value::Null,
+        },
+        (ToBool | TryToBool, [Value::Bool(value)]) => Value::Bool(*value),
+        (ToBool | TryToBool, [Value::Str(value)]) => match strings::to_bool(value) {
+            Some(truth) => Value::Bool(truth),
+            None if func == TryToBool => Value::Null,
+            None => return Some(Err(format!("cannot convert '{value}' to a bool"))),
+        },
+        (ToBool | TryToBool, [Value::Int(value)]) => match value {
+            0 => Value::Bool(false),
+            1 => Value::Bool(true),
+            _ if func == TryToBool => Value::Null,
+            other => return Some(Err(format!("cannot convert {other} to a bool"))),
         },
 
         (Year, [Value::Date(days)]) => Value::Int(i64::from(Date::from_days(*days)?.year)),

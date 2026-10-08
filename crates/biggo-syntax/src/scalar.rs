@@ -164,6 +164,33 @@ pub fn decimal_from_int(value: i64) -> i128 {
     i128::from(value) * DECIMAL_ONE
 }
 
+/// `value` without its digits past `places` after the point, which `decimal_round` rounds at.
+pub fn decimal_trunc(value: i128, places: i64) -> i128 {
+    let drop = DECIMAL_SCALE as i64 - places;
+    if drop <= 0 {
+        return value;
+    }
+    match u32::try_from(drop)
+        .ok()
+        .and_then(|drop| 10i128.checked_pow(drop))
+    {
+        Some(unit) => value / unit * unit,
+        // Nothing of the value is left when more digits go than it can hold.
+        None => 0,
+    }
+}
+
+/// -1, 0 or 1 for a float, where the library gives 1 for zero. Not a number stays so.
+pub fn float_sign(value: f64) -> f64 {
+    if value == 0.0 { 0.0 } else { value.signum() }
+}
+
+/// A float without its digits past `digits` after the point.
+pub fn float_trunc(value: f64, digits: i64) -> f64 {
+    let scale = 10f64.powi(digits.clamp(-300, 300) as i32);
+    (value * scale).trunc() / scale
+}
+
 pub fn decimal_to_float(value: i128) -> f64 {
     value as f64 / DECIMAL_ONE as f64
 }

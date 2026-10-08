@@ -1,0 +1,239 @@
+error: `in` needs a list on its right, as in `x in [1, 2]`, found int
+ --> check/math.bgo:6:6
+  |
+6 | 1 in 2
+  |      ^
+
+error: cannot look for int in list<string>
+ --> check/math.bgo:7:1
+  |
+7 | 1 in ["a"]
+  | ^^^^^^^^^^
+
+error: cannot look for string in list<int>
+ --> check/math.bgo:8:1
+  |
+8 | "a" in [1, 2]
+  | ^^^^^^^^^^^^^
+
+error: looking for `null` always gives null; use `is_null(...)` to test for null
+ --> check/math.bgo:9:1
+  |
+9 | null in [1]
+  | ^^^^
+
+error: cannot look for float in list<string>
+  --> check/math.bgo:10:1
+   |
+10 | 1.5 in names
+   | ^^^^^^^^^^^^
+
+error: cannot look for list<int> in list<list<int>>
+  --> check/math.bgo:11:1
+   |
+11 | [1] in [[1]]
+   | ^^^^^^^^^^^^
+
+error: `in` needs a list on its right, as in `x in [1, 2]`, found int
+  --> check/math.bgo:12:26
+   |
+12 | sales |> where(region in qty)
+   |                          ^^^
+
+error: cannot look for int in list<string>
+  --> check/math.bgo:13:16
+   |
+13 | sales |> where(qty in [region])
+   |                ^^^^^^^^^^^^^^^
+
+error: `in` needs a list on its right, as in `x in [1, 2]`, found table<{region: string, qty: int, price: float?}>
+  --> check/math.bgo:14:26
+   |
+14 | sales |> where(region in sales)
+   |                          ^^^^^
+
+error: `pow` takes 2 arguments
+  --> check/math.bgo:15:1
+   |
+15 | pow(2)
+   | ^^^^^^
+
+error: `pow` expects a number, found string
+  --> check/math.bgo:16:5
+   |
+16 | pow("2", 2)
+   |     ^^^
+
+error: `exp` takes 1 argument
+  --> check/math.bgo:17:1
+   |
+17 | exp()
+   | ^^^^^
+
+error: `ln` expects a number, found string
+  --> check/math.bgo:18:4
+   |
+18 | ln("e")
+   |    ^^^
+
+error: `log` takes 2 arguments
+  --> check/math.bgo:19:1
+   |
+19 | log(8)
+   | ^^^^^^
+
+error: `sign` expects a number, found string
+  --> check/math.bgo:20:6
+   |
+20 | sign("x")
+   |      ^^^
+
+error: `div` expects an int, found float
+  --> check/math.bgo:21:8
+   |
+21 | div(7, 2.0)
+   |        ^^^
+
+error: `div` takes 2 arguments
+  --> check/math.bgo:22:1
+   |
+22 | div(7)
+   | ^^^^^^
+
+error: `trunc` expects an int, found float
+  --> check/math.bgo:23:12
+   |
+23 | trunc(2.5, 1.5)
+   |            ^^^
+
+error: `trunc` takes 1 or 2 arguments
+  --> check/math.bgo:24:1
+   |
+24 | trunc(1, 2, 3)
+   | ^^^^^^^^^^^^^^
+
+error: the number of digits of `trunc` cannot depend on a column
+  --> check/math.bgo:25:21
+   |
+25 | sales |> derive(t = trunc(price, qty))
+   |                     ^^^^^^^^^^^^^^^^^
+
+error: `is_nan` expects a number, found string
+  --> check/math.bgo:26:8
+   |
+26 | is_nan("x")
+   |        ^^^
+
+error: `pi` takes no arguments
+  --> check/math.bgo:27:1
+   |
+27 | pi(1)
+   | ^^^^^
+
+error: `sin` expects a number, found date
+  --> check/math.bgo:28:5
+   |
+28 | sin(@2026-01-01)
+   |     ^^^^^^^^^^^
+
+error: `greatest` takes two or more values
+  --> check/math.bgo:29:1
+   |
+29 | greatest(1)
+   | ^^^^^^^^^^^
+
+error: `greatest` needs values of one type, found int and string
+  --> check/math.bgo:30:13
+   |
+30 | greatest(1, "a")
+   |             ^^^
+
+error: `least` does not work on bool
+  --> check/math.bgo:31:1
+   |
+31 | least(true, false)
+   | ^^^^^^^^^^^^^^^^^^
+
+error: cannot tell which type this `null` has for `greatest`
+  --> check/math.bgo:32:10
+   |
+32 | greatest(null, 1)
+   |          ^^^^
+
+error: `greatest` cannot work on list<int>
+  --> check/math.bgo:33:10
+   |
+33 | greatest([1], [2])
+   |          ^^^
+
+error: `null_if` takes 2 arguments
+  --> check/math.bgo:34:1
+   |
+34 | null_if(1)
+   | ^^^^^^^^^^
+
+error: `null_if` looks for a value of type int, found string
+  --> check/math.bgo:35:12
+   |
+35 | null_if(1, "a")
+   |            ^^^
+
+error: `null_if` cannot work on list<int>
+  --> check/math.bgo:36:9
+   |
+36 | null_if([1], [1])
+   |         ^^^
+
+error: `try_to_int` cannot convert a value of type date
+  --> check/math.bgo:37:12
+   |
+37 | try_to_int(@2026-01-01)
+   |            ^^^^^^^^^^^
+
+error: `try_to_date` cannot convert a value of type int
+  --> check/math.bgo:38:13
+   |
+38 | try_to_date(5)
+   |             ^
+
+error: `to_bool` cannot convert a value of type float
+  --> check/math.bgo:39:9
+   |
+39 | to_bool(1.5)
+   |         ^^^
+
+error: `try_to_bool` cannot convert a value of type date
+  --> check/math.bgo:40:13
+   |
+40 | try_to_bool(@2026-01-01)
+   |             ^^^^^^^^^^^
+
+error: `parse_number` expects a string, found int
+  --> check/math.bgo:41:14
+   |
+41 | parse_number(5)
+   |              ^
+
+error: `between` takes a value and the two ends of a range
+  --> check/math.bgo:42:1
+   |
+42 | between(1, 2)
+   | ^^^^^^^^^^^^^
+
+error: cannot apply `>=` to int and string
+  --> check/math.bgo:43:1
+   |
+43 | between(1, "a", "b")
+   | ^^^^^^^^^^^^^^^^^^^^
+
+error: `clamp` takes a value and the two ends of a range
+  --> check/math.bgo:44:1
+   |
+44 | clamp(1, 2)
+   | ^^^^^^^^^^^
+
+error: `clamp` needs values of one type, found int and string
+  --> check/math.bgo:45:10
+   |
+45 | clamp(1, "a", 3)
+   |          ^^^

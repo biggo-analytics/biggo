@@ -1,0 +1,150 @@
+(call print
+  (in 3 (list 1 2 3))
+  (in 4 (list 1 2 3))
+  (not in 4 (list 1 2 3))
+  (in "b" (list "a" "b"))
+  (in 1.5 (list 1 2)))
+(call print
+  (in @2026-01-02 (list @2026-01-01 @2026-01-02))
+  (in 2 (list 1.0 2.0))
+  (in 1 (list))
+  (in true (list false)))
+(let nothing: int? null)
+(let holes: list<int?> (list 1 null))
+(call print (in nothing (list 1 2)) (in 1 holes) (in 2 holes) (not in 2 holes))
+(call print "\\d+\\n" (call length "a\\nb") (+ "C:\\data\\new" "\\file.csv"))
+(call print
+  (call pow 2 10)
+  (call pow 2.5 2)
+  (call exp 0)
+  (call ln 1)
+  (call log10 1000)
+  (call log2 8)
+  (call log 81 3))
+(call print
+  (call sign (- 5))
+  (call sign 0)
+  (call sign 2.5)
+  (call sign (- 1.5d))
+  (call div 7 2)
+  (call div (- 7) 2)
+  (% 7 2)
+  (% (- 7) 2))
+(call print
+  (call trunc 2.789)
+  (call trunc (- 2.789) 1)
+  (call trunc 1234.5 (- 2))
+  (call trunc 2.789d 2)
+  (call round 2.789 2))
+(call print
+  (call is_nan (/ 0.0 0.0))
+  (call is_nan 1)
+  (call is_finite (/ 1.0 0.0))
+  (call is_finite 2.5))
+(call print
+  (call round (call pi) 5)
+  (call round (call sin (/ (call pi) 2)) 3)
+  (call round (call cos 0) 3)
+  (call round (call degrees (call pi)) 1))
+(call print
+  (call round (call radians 180) 5)
+  (call round (call atan2 1 1) 4)
+  (call round (call tan 0) 1)
+  (call round (+ (+ (call asin 1) (call acos 1)) (call atan 0)) 4))
+(call print
+  (call greatest 1 5 3)
+  (call least 1 5 3)
+  (call greatest 1 2.5)
+  (call least "b" "a")
+  (call greatest 1.5d 2))
+(call print
+  (call greatest @2026-01-01 @2026-03-01)
+  (call least (call hours 1) (call minutes 30))
+  (call greatest 1 nothing))
+(call print
+  (call between 5 1 10)
+  (call between 11 1 10)
+  (call between @2026-02-01 @2026-01-01 @2026-12-31))
+(call print
+  (call clamp 15 0 10)
+  (call clamp (- 3.5) 0 10)
+  (call clamp "m" "a" "f")
+  (call clamp nothing 0 1))
+(call print
+  (call null_if 5 5)
+  (call null_if 5 6)
+  (call null_if "N/A" "N/A")
+  (call null_if 5 nothing)
+  (call null_if (- 999.0) (- 999)))
+(call print
+  (call try_to_int "42")
+  (call try_to_int "4x")
+  (call try_to_int 1e30)
+  (call try_to_int 3.9)
+  (call try_to_int true))
+(call print
+  (call try_to_float "1e3")
+  (call try_to_float "abc")
+  (call try_to_decimal "1.25")
+  (call try_to_decimal "x"))
+(call print
+  (call try_to_date "2026-01-05")
+  (call try_to_date "05/01/2026")
+  (call try_to_date "2026-02-30"))
+(call print
+  (call try_to_datetime "2026-01-05 10:00:00")
+  (call try_to_datetime "nope"))
+(call print
+  (call to_bool "Yes")
+  (call to_bool "no")
+  (call to_bool 0)
+  (call to_bool true)
+  (call try_to_bool "maybe")
+  (call try_to_bool 2))
+(call print
+  (call parse_number "1,234.50")
+  (call parse_number "45%")
+  (call parse_number "(120)")
+  (call parse_number "abc"))
+(let rows
+  (call from_rows
+    (list
+      (record (code: "TH") (text: "12") (x: 3) (y: 2.5) (mark: "N/A"))
+      (record (code: "US") (text: "1,200") (x: (- 4)) (y: null) (mark: "yes"))
+      (record (code: "JP") (text: "abc") (x: 0) (y: (- 1.0)) (mark: "N/A")))))
+(let asia (list "TH" "JP" "VN"))
+(call print (|> rows (call where (in code asia)) (call select code)))
+(call print
+  (|> rows
+    (call where (and (not in code asia) (in x (list (- 4) 4))))
+    (call count)))
+(|> rows
+  (call select text
+    (whole: (call try_to_int text))
+    (number: (call parse_number text))
+    (square: (call pow x 2))
+    (top: (call greatest x 1))
+    (low: (call least x y))
+    (kept: (call clamp x (- 1) 1))
+    (inside: (call between x 0 5)))
+  (call print))
+(|> rows
+  (call select x
+    (sign: (call sign x))
+    (half: (call div x 2))
+    (mark: (call null_if mark "N/A"))
+    (agreed: (call try_to_bool mark))
+    (size: (call round (call ln (+ (call abs x) 1)) 3))
+    (listed: (in x holes)))
+  (call print))
+(let many
+  (call map (call range 0 100) (lambda (i) (block (call to_string (* i 12))))))
+(call print
+  (|> rows
+    (call derive (found: (in text many)) (wide: (in x (call range (- 10) 10))))
+    (call select text found wide)))
+(call explain
+  (|> rows
+    (call where (and (in code asia) (not in x (list 0))))
+    (call select code)))
+(call print (call to_bool "maybe"))

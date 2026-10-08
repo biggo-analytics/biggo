@@ -32,6 +32,22 @@ These work both on ordinary values and in column expressions (which compute a wh
 | `floor(x)` | number | `float` | Rounds down |
 | `ceil(x)` | number | `float` | Rounds up |
 | `sqrt(x)` | number | `float` | Square root (`NaN` if `x` is negative) |
+| `trunc(x)`, `trunc(x, digits)` | number, `int` | like `round` | Cuts the digits off without rounding |
+| `sign(x)` | number | same type | -1, 0 or 1 |
+| `div(a, b)` | `int`, `int` | `int` | Whole-number division, dropping the remainder. `div(a, 0)` is an error |
+| `pow(x, y)` | numbers | `float` | `x` to the power `y` |
+| `exp(x)` | number | `float` | `e` to the power `x` |
+| `ln(x)`, `log10(x)`, `log2(x)` | number | `float` | Logarithm to the base `e`, 10 and 2 |
+| `log(x, base)` | numbers | `float` | Logarithm to any base |
+| `greatest(a, b, ...)`, `least(a, b, ...)` | two or more values of one type | that type | The largest and the smallest of the values in one row. They also take strings, dates and durations |
+| `clamp(x, low, high)` | values of one type | that type | `x` brought into the range: `least(greatest(x, low), high)` |
+| `between(x, low, high)` | values of one type | `bool` | `x >= low and x <= high` |
+| `is_nan(x)`, `is_finite(x)` | number | `bool` | Whether a float is "not a number", and whether it is neither that nor infinite |
+| `pi()` | | `float` | 3.141592653589793 |
+| `sin(x)` `cos(x)` `tan(x)` | number | `float` | Trigonometric functions of an angle in radians |
+| `asin(x)` `acos(x)` `atan(x)` | number | `float` | Their inverses, which give radians |
+| `atan2(y, x)` | numbers | `float` | The angle of the point (`x`, `y`), in radians |
+| `degrees(x)`, `radians(x)` | number | `float` | Radians as degrees, and degrees as radians |
 
 ```biggo
 print(abs(-3), abs(-2.5), abs(-1.5d))
@@ -45,7 +61,30 @@ print(floor(2.7), ceil(2.1), floor(-2.7), sqrt(2), sqrt(-1))
 2.0 3.0 -3.0 1.4142135623730951 NaN
 ```
 
-The `digits` argument of `round` must be a program value, not a column.
+The `digits` argument of `round` and of `trunc` must be a program value, not a column.
+
+```biggo
+print(pow(2, 10), exp(0), ln(1), log10(1000), log(81, 3), sign(-5), sign(2.5))
+print(div(7, 2), 7 % 2, div(-7, 2), -7 % 2, trunc(2.789), trunc(-2.789, 1), round(-2.789, 1))
+print(greatest(1, 5, 3), least(1, 2.5), least("b", "a"), clamp(15, 0, 10), between(5, 1, 10))
+print(is_nan(0.0 / 0.0), is_finite(1.0 / 0.0), round(pi(), 5), round(sin(pi() / 2), 3), round(degrees(pi()), 1))
+```
+
+```text output
+1024.0 1.0 0.0 3.0 4.0 -1 1.0
+3 1 -3 -1 2.0 -2.7 -2.8
+5 1.0 a 10 true
+true false 3.14159 1.0 180.0
+```
+
+- `div` and `%` belong together: `div(a, b) * b + a % b` is `a`. Both round toward zero, so
+  `div(-7, 2)` is `-3` and `-7 % 2` is `-1`.
+- The logarithm of zero is `-inf`, and of a negative number `NaN`, as `sqrt(-1)` is. No math
+  function stops the program for a value outside its domain.
+- `greatest` and `least` give null as soon as one value is null. Use `??` on a value that may be
+  null: `greatest(a ?? 0, b ?? 0)`.
+- `max` and `min` work down a column, in `agg`; `greatest` and `least` work across the values of
+  one row.
 
 ### string
 
@@ -180,8 +219,44 @@ print(t + days(7), t - @2026-01-01, total_seconds(t - @2026-12-25) / 3600)
 | `to_date(x)` | `string` `date` `datetime` | `date` |
 | `to_datetime(x)` | `string` `date` `datetime` | `datetime` |
 
-A string that cannot be converted stops the program with an error. Details and examples are in
-[The type system](03-types.md#conversion-functions).
+| `to_bool(x)` | `string` `int` `bool` | `bool` |
+| `try_to_int(x)`, `try_to_float(x)`, `try_to_decimal(x)`, `try_to_date(x)`, `try_to_datetime(x)`, `try_to_bool(x)` | as the function without `try_` | the same type, nullable |
+| `parse_number(s)` | `string` | `float?` |
+| `null_if(x, value)` | two values of one type | that type, nullable |
+
+A value that cannot be converted stops the program with an error. The `try_` form of each
+conversion gives null for such a value instead, which is what data that people typed needs:
+
+```biggo
+let answers = from_rows([{ age: "42", joined: "yes" }, { age: "n/a", joined: "-" }, { age: "17 ", joined: "N" }])
+answers
+  |> derive(years = try_to_int(age), member = try_to_bool(joined), known = null_if(joined, "-"))
+  |> print()
+print(parse_number("1,234.50"), parse_number("45%"), parse_number("(120)"), parse_number("twelve"))
+```
+
+```text output
++-----+--------+-------+--------+-------+
+| age | joined | years | member | known |
++-----+--------+-------+--------+-------+
+| 42  | yes    | 42    | true   | yes   |
+| n/a | -      | null  | null   | null  |
+| 17  | N      | 17    | false  | N     |
++-----+--------+-------+--------+-------+
+1234.5 0.45 -120.0 null
+```
+
+- `to_bool` reads `true` / `false`, `t` / `f`, `yes` / `no`, `y` / `n` and `1` / `0`, in any letter
+  case and with spaces around them, and the ints 1 and 0.
+- `parse_number` reads numbers as people write them: with `,` between thousands, with `%` (the
+  result is divided by 100), and in parentheses for a negative amount. Anything else gives null.
+- `null_if(x, value)` gives null when `x` equals `value` and `x` otherwise. It turns the markers
+  that files use for "no value" into null: `null_if(amount, -999)`, `null_if(name, "")`.
+- `to_int` and `try_to_int` take digits with an optional sign, and allow spaces around them:
+  `"17 "` is 17, but `"1,200"` and `"12 kg"` are not ints. Use `parse_number` when the data has
+  separators between thousands.
+
+Details and more examples are in [The type system](03-types.md#conversion-functions).
 
 ## Aggregate
 

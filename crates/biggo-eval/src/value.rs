@@ -147,6 +147,9 @@ impl Value {
             Scalar::DateTime(value) => Value::DateTime(value),
             Scalar::Duration(value) => Value::Duration(value),
             Scalar::Decimal(value) => Value::Decimal(Decimal::new(value)),
+            Scalar::List(items) => {
+                Value::List(items.iter().cloned().map(Value::from_scalar).collect())
+            }
         }
     }
 
@@ -161,6 +164,10 @@ impl Value {
             Value::DateTime(value) => Scalar::DateTime(*value),
             Value::Duration(value) => Scalar::Duration(*value),
             Value::Decimal(value) => Scalar::Decimal(value.scaled()),
+            Value::List(items) => {
+                let items: Option<Vec<Scalar>> = items.iter().map(Value::to_scalar).collect();
+                Scalar::List(items?.into())
+            }
             _ => return None,
         })
     }

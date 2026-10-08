@@ -298,6 +298,10 @@ pub enum BinaryOp {
     Or,
     /// `a ?? b`: `a` unless it is null, then `b`.
     Coalesce,
+    /// `a in list`: whether a list has a value equal to `a`.
+    In,
+    /// `a not in list`
+    NotIn,
 }
 
 impl BinaryOp {
@@ -317,13 +321,22 @@ impl BinaryOp {
             Self::And => "and",
             Self::Or => "or",
             Self::Coalesce => "??",
+            Self::In => "in",
+            Self::NotIn => "not in",
         }
     }
 
     pub fn is_comparison(self) -> bool {
         matches!(
             self,
-            Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge
+            Self::Eq
+                | Self::Ne
+                | Self::Lt
+                | Self::Le
+                | Self::Gt
+                | Self::Ge
+                | Self::In
+                | Self::NotIn
         )
     }
 }

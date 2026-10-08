@@ -7,3 +7,7 @@ print(total) print(name)
 let ok = 42
 fn broken(a: int, b) -> int { a }
 let x = 5 $ 3
+let in = 5
+let odd = 1 not 2
+let twice = 1 in [1] in [true]
+let raw = r"unterminated

@@ -114,6 +114,8 @@ impl Lexer<'_> {
             '|' => self.either(b'>', Pipe, Bar),
             '!' if self.byte(1) == Some(b'=') => self.take(2, NotEq),
             '"' => self.string(),
+            // A raw string: `r"\d+"` is a backslash, a `d`, and a plus.
+            'r' if self.byte(1) == Some(b'"') => self.raw_string(),
             '`' => self.quoted_name(),
             '@' => self.date(),
             '0'..='9' => self.number(),
@@ -153,6 +155,7 @@ impl Lexer<'_> {
             "and" => And,
             "or" => Or,
             "not" => Not,
+            "in" => In,
             "true" => True,
             "false" => False,
             "null" => Null,
@@ -221,6 +224,25 @@ impl Lexer<'_> {
                     return TokenKind::Str;
                 }
                 Some(b'\\') if !matches!(self.byte(1), None | Some(b'\n')) => self.pos += 2,
+                None | Some(b'\n') => {
+                    self.error(start, "unterminated string literal");
+                    return TokenKind::Error;
+                }
+                Some(_) => self.pos += 1,
+            }
+        }
+    }
+
+    /// A string in which a backslash stands for itself, so it ends at the first quote.
+    fn raw_string(&mut self) -> TokenKind {
+        let start = self.pos;
+        self.pos += 2;
+        loop {
+            match self.byte(0) {
+                Some(b'"') => {
+                    self.pos += 1;
+                    return TokenKind::Str;
+                }
                 None | Some(b'\n') => {
                     self.error(start, "unterminated string literal");
                     return TokenKind::Error;

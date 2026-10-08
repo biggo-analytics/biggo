@@ -52,7 +52,7 @@ fn run_reports_syntax_errors_without_running() {
     let (stdout, stderr, code) = biggo(&["run", "testdata/errors/syntax.bgo"], "");
     assert_eq!(stdout, "");
     assert!(
-        stderr.ends_with("8 errors in testdata/errors/syntax.bgo\n"),
+        stderr.ends_with("12 errors in testdata/errors/syntax.bgo\n"),
         "{stderr}"
     );
     assert_eq!(code, Some(1));

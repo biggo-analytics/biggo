@@ -21,6 +21,7 @@ pub enum TokenKind {
     And,
     Or,
     Not,
+    In,
     True,
     False,
     Null,

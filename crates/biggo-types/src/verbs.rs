@@ -32,7 +32,7 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 50] = [
+const VERBS: [&str; 53] = [
     "print",
     "read_csv",
     "read_parquet",
@@ -66,6 +66,9 @@ const VERBS: [&str; 50] = [
     "assert_eq",
     "args",
     "split",
+    "between",
+    "clamp",
+    "pi",
     "where",
     "select",
     "drop",
@@ -88,7 +91,7 @@ const VERBS: [&str; 50] = [
 /// The name of every built-in function, in alphabetical order, for the tools that list or
 /// highlight them.
 pub fn builtin_names() -> Vec<&'static str> {
-    let scalars = ScalarFn::ALL.into_iter().map(ScalarFn::name);
+    let scalars = ScalarFn::ALL.iter().copied().map(ScalarFn::name);
     let aggregates = AggFn::ALL.into_iter().map(AggFn::name);
     let windows = [
         WindowFn::RowNumber,
@@ -551,6 +554,30 @@ impl Cx<'_> {
                 Box::new(move |next| ExprKind::Convert(conversion, next())),
                 Box::new(|next| plan::ExprKind::Cast(next())),
             ),
+            // The list of `in` is a value of the program, which the query takes whole.
+            ExprKind::Binary(BinaryOp::In, value, list) => {
+                let value = match self.lower(*value, params)? {
+                    Lowered::Col(value) => value,
+                    Lowered::Free(value) => {
+                        let kind = ExprKind::Binary(BinaryOp::In, Box::new(value), list);
+                        return Some(Lowered::Free(Expr::new(kind, ty, span)));
+                    }
+                };
+                if let Some(column) = list.find_column_use() {
+                    let message = "the list of `in` cannot depend on a column";
+                    self.error(column.span, message);
+                    return None;
+                }
+                let item = match &list.ty {
+                    Type::List(item) => self.col_type(item, list.span)?,
+                    other => unreachable!("the checker gives `in` a list, not {other}"),
+                };
+                params.push(*list);
+                let list = plan::Expr::new(plan::ExprKind::Param(params.len() - 1), item);
+                let kind = plan::ExprKind::Binary(BinaryOp::In, Box::new(value), Box::new(list));
+                let col_ty = self.col_type(&ty, span)?;
+                return Some(Lowered::Col(plan::Expr::new(kind, col_ty)));
+            }
             ExprKind::Binary(op, left, right) => (
                 vec![*left, *right],
                 Box::new(move |next| ExprKind::Binary(op, next(), next())),
@@ -570,7 +597,7 @@ impl Cx<'_> {
                     Err(args) => {
                         // These are worked out once for the whole column.
                         let fixed: &[(usize, &str)] = match func {
-                            ScalarFn::Round => &[(1, "the number of digits")],
+                            ScalarFn::Round | ScalarFn::Trunc => &[(1, "the number of digits")],
                             ScalarFn::RegexMatch | ScalarFn::RegexReplace => &[(1, "the pattern")],
                             ScalarFn::RegexExtract => &[(1, "the pattern"), (2, "the group")],
                             _ => &[],
@@ -2290,6 +2317,13 @@ impl Cx<'_> {
         if args.iter().any(|arg| arg.ty.is_error()) {
             return Expr::error(call.span);
         }
+        match func {
+            ScalarFn::Greatest | ScalarFn::Least => {
+                return self.extreme(func, func.name(), call.span, args);
+            }
+            ScalarFn::NullIf => return self.null_if(call, args),
+            _ => {}
+        }
         let wants: &[Want] = match func {
             ScalarFn::IsNull
             | ScalarFn::ToString
@@ -2297,7 +2331,37 @@ impl Cx<'_> {
             | ScalarFn::ToFloat
             | ScalarFn::ToDecimal
             | ScalarFn::ToDate
-            | ScalarFn::ToDateTime => &[Want::Any],
+            | ScalarFn::ToDateTime
+            | ScalarFn::TryToInt
+            | ScalarFn::TryToFloat
+            | ScalarFn::TryToDecimal
+            | ScalarFn::TryToDate
+            | ScalarFn::TryToDateTime
+            | ScalarFn::ToBool
+            | ScalarFn::TryToBool => &[Want::Any],
+            ScalarFn::Pow | ScalarFn::Log | ScalarFn::Atan2 => &[Want::Float, Want::Float],
+            ScalarFn::Exp
+            | ScalarFn::Ln
+            | ScalarFn::Log10
+            | ScalarFn::Log2
+            | ScalarFn::Sin
+            | ScalarFn::Cos
+            | ScalarFn::Tan
+            | ScalarFn::Asin
+            | ScalarFn::Acos
+            | ScalarFn::Atan
+            | ScalarFn::Degrees
+            | ScalarFn::Radians
+            | ScalarFn::IsNan
+            | ScalarFn::IsFinite => &[Want::Float],
+            ScalarFn::Sign => &[Want::Number],
+            ScalarFn::Div => &[Want::Int, Want::Int],
+            ScalarFn::Trunc if args.len() == 2 => &[Want::Fraction, Want::Count],
+            ScalarFn::Trunc => &[Want::Fraction],
+            ScalarFn::ParseNumber => &[Want::Str],
+            ScalarFn::Greatest | ScalarFn::Least | ScalarFn::NullIf => {
+                unreachable!("checked above")
+            }
             ScalarFn::Abs => &[Want::Number],
             ScalarFn::Round if args.len() == 2 => &[Want::Fraction, Want::Count],
             ScalarFn::Round => &[Want::Fraction],
@@ -2331,6 +2395,7 @@ impl Cx<'_> {
                 | ScalarFn::PadLeft
                 | ScalarFn::PadRight
                 | ScalarFn::RegexExtract => "2 or 3 arguments".to_string(),
+                ScalarFn::Round | ScalarFn::Trunc => "1 or 2 arguments".to_string(),
                 _ => format!("{} argument{plural}", wants.len()),
             };
             return self.error(call.span, format!("`{name}` takes {count}"));
@@ -2348,10 +2413,19 @@ impl Cx<'_> {
             let number = matches!(ty.dtype, Int | Float | Decimal);
             let accepted = match want {
                 Want::Any => match func {
-                    ScalarFn::ToInt => !matches!(ty.dtype, Date | DateTime | Duration),
-                    ScalarFn::ToFloat | ScalarFn::ToDecimal => number || ty.dtype == Str,
-                    ScalarFn::ToDate | ScalarFn::ToDateTime => {
-                        matches!(ty.dtype, Str | Date | DateTime)
+                    ScalarFn::ToInt | ScalarFn::TryToInt => {
+                        !matches!(ty.dtype, Date | DateTime | Duration)
+                    }
+                    ScalarFn::ToFloat
+                    | ScalarFn::ToDecimal
+                    | ScalarFn::TryToFloat
+                    | ScalarFn::TryToDecimal => number || ty.dtype == Str,
+                    ScalarFn::ToDate
+                    | ScalarFn::ToDateTime
+                    | ScalarFn::TryToDate
+                    | ScalarFn::TryToDateTime => matches!(ty.dtype, Str | Date | DateTime),
+                    ScalarFn::ToBool | ScalarFn::TryToBool => {
+                        matches!(ty.dtype, Str | Int | Bool)
                     }
                     _ => true,
                 },
@@ -2425,14 +2499,35 @@ impl Cx<'_> {
             | ScalarFn::Contains
             | ScalarFn::StartsWith
             | ScalarFn::EndsWith
-            | ScalarFn::RegexMatch => Bool,
+            | ScalarFn::RegexMatch
+            | ScalarFn::ToBool
+            | ScalarFn::TryToBool
+            | ScalarFn::IsNan
+            | ScalarFn::IsFinite => Bool,
             // A decimal stays exact when rounded.
-            ScalarFn::Abs | ScalarFn::Round => first,
+            ScalarFn::Abs | ScalarFn::Round | ScalarFn::Trunc | ScalarFn::Sign => first,
             ScalarFn::Floor
             | ScalarFn::Ceil
             | ScalarFn::Sqrt
             | ScalarFn::ToFloat
-            | ScalarFn::TotalSeconds => Float,
+            | ScalarFn::TryToFloat
+            | ScalarFn::TotalSeconds
+            | ScalarFn::Pow
+            | ScalarFn::Log
+            | ScalarFn::Atan2
+            | ScalarFn::Exp
+            | ScalarFn::Ln
+            | ScalarFn::Log10
+            | ScalarFn::Log2
+            | ScalarFn::Sin
+            | ScalarFn::Cos
+            | ScalarFn::Tan
+            | ScalarFn::Asin
+            | ScalarFn::Acos
+            | ScalarFn::Atan
+            | ScalarFn::Degrees
+            | ScalarFn::Radians
+            | ScalarFn::ParseNumber => Float,
             ScalarFn::Lower
             | ScalarFn::Upper
             | ScalarFn::Trim
@@ -2452,21 +2547,127 @@ impl Cx<'_> {
             | ScalarFn::Hour
             | ScalarFn::Minute
             | ScalarFn::Second
-            | ScalarFn::ToInt => Int,
-            ScalarFn::ToDate => Date,
-            ScalarFn::ToDateTime => DateTime,
-            ScalarFn::ToDecimal => Decimal,
+            | ScalarFn::ToInt
+            | ScalarFn::TryToInt
+            | ScalarFn::Div => Int,
+            ScalarFn::ToDate | ScalarFn::TryToDate => Date,
+            ScalarFn::ToDateTime | ScalarFn::TryToDateTime => DateTime,
+            ScalarFn::ToDecimal | ScalarFn::TryToDecimal => Decimal,
+            ScalarFn::Greatest | ScalarFn::Least | ScalarFn::NullIf => {
+                unreachable!("checked above")
+            }
             ScalarFn::Days | ScalarFn::Hours | ScalarFn::Minutes | ScalarFn::Seconds => Duration,
         };
         // Some functions have no answer for some values: a piece that is not there, a
         // pattern that does not match.
         let partial = matches!(
             func,
-            ScalarFn::SplitPart | ScalarFn::IndexOf | ScalarFn::RegexExtract
+            ScalarFn::SplitPart
+                | ScalarFn::IndexOf
+                | ScalarFn::RegexExtract
+                | ScalarFn::TryToInt
+                | ScalarFn::TryToFloat
+                | ScalarFn::TryToDecimal
+                | ScalarFn::TryToDate
+                | ScalarFn::TryToDateTime
+                | ScalarFn::TryToBool
+                | ScalarFn::ParseNumber
         );
         let nullable = (nullable || partial) && func != ScalarFn::IsNull;
         let ty = Type::from_col(ColType::new(dtype, nullable));
         Expr::new(ExprKind::Scalar(func, args), ty, call.span)
+    }
+
+    /// `greatest` and `least` of values that are already checked. The values are brought to
+    /// one type, as the two sides of a comparison are. `name` is the function the program
+    /// called, for messages.
+    pub(crate) fn extreme(
+        &mut self,
+        func: ScalarFn,
+        name: &str,
+        span: Span,
+        mut args: Vec<Expr>,
+    ) -> Expr {
+        use DataType::*;
+        if args.len() < 2 {
+            return self.error(span, format!("`{name}` takes two or more values"));
+        }
+        let number = |dtype| matches!(dtype, Int | Decimal | Float);
+        let moment = |dtype| matches!(dtype, Date | DateTime);
+        let mut common: Option<DataType> = None;
+        let mut nullable = false;
+        for arg in &args {
+            let Some(ty) = arg.ty.to_col() else {
+                let message = match arg.ty {
+                    Type::Null => format!("cannot tell which type this `null` has for `{name}`"),
+                    _ => format!("`{name}` cannot work on {}", arg.ty),
+                };
+                return self.error(arg.span, message);
+            };
+            nullable |= ty.nullable;
+            common = Some(match (common, ty.dtype) {
+                (None, dtype) => dtype,
+                (Some(seen), dtype) if seen == dtype => seen,
+                // Numbers from the narrowest type to the widest.
+                (Some(seen), dtype) if number(seen) && number(dtype) => match (seen, dtype) {
+                    (Float, _) | (_, Float) => Float,
+                    (Decimal, _) | (_, Decimal) => Decimal,
+                    _ => Int,
+                },
+                (Some(seen), dtype) if moment(seen) && moment(dtype) => DateTime,
+                (Some(seen), dtype) => {
+                    let message = format!(
+                        "`{name}` needs values of one type, found {} and {}",
+                        seen.name(),
+                        dtype.name()
+                    );
+                    return self.error(arg.span, message);
+                }
+            });
+        }
+        let dtype = common.expect("there are two or more values");
+        if dtype == Bool {
+            return self.error(span, format!("`{name}` does not work on bool"));
+        }
+        for arg in &mut args {
+            let nullable = arg.ty.to_col().is_some_and(|ty| ty.nullable);
+            let to = Type::from_col(ColType::new(dtype, nullable));
+            let old = std::mem::replace(arg, Expr::error(span));
+            *arg = coerce(old, &to).unwrap_or_else(|old| old);
+        }
+        let ty = Type::from_col(ColType::new(dtype, nullable));
+        Expr::new(ExprKind::Scalar(func, args), ty, span)
+    }
+
+    /// `null_if(value, marker)`: null where the value is the marker.
+    fn null_if(&mut self, call: &Call, args: Vec<Expr>) -> Expr {
+        let Ok([value, marker]) = <[Expr; 2]>::try_from(args) else {
+            return self.error(call.span, "`null_if` takes 2 arguments");
+        };
+        let Some(ty) = value.ty.to_col() else {
+            let message = match value.ty {
+                Type::Null => "cannot tell which type this `null` has for `null_if`".to_string(),
+                _ => format!("`null_if` cannot work on {}", value.ty),
+            };
+            return self.error(value.span, message);
+        };
+        let wanted = Type::from_col(ColType::required(ty.dtype));
+        let marker = match coerce(marker, &wanted.clone().or_null()) {
+            Ok(marker) => marker,
+            Err(marker) => {
+                let message = format!(
+                    "`null_if` looks for a value of type {wanted}, found {}",
+                    marker.ty
+                );
+                return self.error(marker.span, message);
+            }
+        };
+        let ty = Type::from_col(ColType::nullable(ty.dtype));
+        Expr::new(
+            ExprKind::Scalar(ScalarFn::NullIf, vec![value, marker]),
+            ty,
+            call.span,
+        )
     }
 }
 

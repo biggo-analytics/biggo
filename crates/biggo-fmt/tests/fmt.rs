@@ -234,3 +234,14 @@ fn a_comment_after_a_call_stays_outside_it() {
         "f(a, b)  // after\ng(\n  a,  // first\n  b,\n)\n",
     );
 }
+
+#[test]
+fn membership_and_raw_strings_keep_their_form() {
+    let source = "let a=1   in  [1,2]\nlet b = 3 not   in [ 1 , 2 ] and \"x\"  in [\"x\"]\nlet c = r\"\\d+\"\n";
+    let formatted = biggo_fmt::format(source).unwrap();
+    assert_eq!(
+        formatted,
+        "let a = 1 in [1, 2]\nlet b = 3 not in [1, 2] and \"x\" in [\"x\"]\nlet c = r\"\\d+\"\n"
+    );
+    assert_eq!(biggo_fmt::format(&formatted).unwrap(), formatted);
+}

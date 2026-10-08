@@ -55,7 +55,7 @@ fn binary_strength(op: BinaryOp) -> u8 {
     match op {
         Or => strength::OR,
         And => strength::AND,
-        Eq | Ne | Lt | Le | Gt | Ge => strength::COMPARE,
+        Eq | Ne | Lt | Le | Gt | Ge | In | NotIn => strength::COMPARE,
         Coalesce => strength::COALESCE,
         Add | Sub => strength::ADD,
         Mul | Div | Rem => strength::MULTIPLY,

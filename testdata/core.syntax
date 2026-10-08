@@ -1,5 +1,5 @@
 (type Point {x: float, y: float, label: string?})
-(fn clamp(value: int, low: int, high: int) -> int
+(fn bounded(value: int, low: int, high: int) -> int
   (block
     (if
       (< value low)
@@ -16,5 +16,5 @@
 (let primes: list<int> (list 2 3 5 7))
 (let nested: table<{id: int, tags: list<string>?}> (call load "nested.parquet"))
 (let label (?? (. origin label) "none"))
-(let n (call clamp total (low: 0) (high: 100)))
+(let n (call bounded total (low: 0) (high: 100)))
 (let ยอดรวม (* ราคา จำนวน))

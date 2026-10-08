@@ -180,6 +180,8 @@ pub enum Scalar {
     Duration(i64),
     /// The value times 10 to the power `scalar::DECIMAL_SCALE`.
     Decimal(i128),
+    /// The values that `in` looks through. No column holds one.
+    List(Arc<[Scalar]>),
 }
 
 impl fmt::Display for Scalar {
@@ -197,6 +199,16 @@ impl fmt::Display for Scalar {
             Scalar::DateTime(micros) => f.write_str(&scalar::format_datetime(*micros)),
             Scalar::Duration(micros) => f.write_str(&scalar::format_duration(*micros)),
             Scalar::Decimal(value) => f.write_str(&scalar::format_decimal(*value)),
+            Scalar::List(items) => {
+                f.write_str("[")?;
+                for (index, item) in items.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                f.write_str("]")
+            }
         }
     }
 }

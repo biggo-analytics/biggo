@@ -90,6 +90,7 @@ fn infix(kind: TokenKind) -> Option<(Infix, u8, u8)> {
         TokenKind::LtEq => (BinaryOp::Le, 9, 10),
         TokenKind::Gt => (BinaryOp::Gt, 9, 10),
         TokenKind::GtEq => (BinaryOp::Ge, 9, 10),
+        TokenKind::In => (BinaryOp::In, 9, 10),
         // Right-associative: `a ?? b ?? c` is `a ?? (b ?? c)`.
         TokenKind::Coalesce => (BinaryOp::Coalesce, 12, 11),
         TokenKind::Plus => (BinaryOp::Add, 13, 14),
@@ -515,13 +516,23 @@ impl<'a> Parser<'a> {
                 _ => {}
             }
 
-            let Some((op, left, right)) = infix(tok.kind) else {
+            // `not in` is one operator. A `not` on a new line begins a statement instead.
+            let not_in =
+                tok.kind == TokenKind::Not && same_line && self.peek_second().kind == TokenKind::In;
+            let operator = match not_in {
+                true => Some((Infix::Binary(BinaryOp::NotIn), 9, 10)),
+                false => infix(tok.kind),
+            };
+            let Some((op, left, right)) = operator else {
                 break;
             };
             if left < min_power || (tok.kind == TokenKind::Minus && !same_line) {
                 break;
             }
             self.bump();
+            if not_in {
+                self.bump();
+            }
             let rhs = self.expr_bp(right)?;
             let span = Span::new(start, self.prev_end());
             let expr = match op {
@@ -816,9 +827,10 @@ impl<'a> Parser<'a> {
     }
 
     fn str_value(&mut self, span: Span) -> PResult<Arc<str>> {
-        let body_start = span.start as usize + 1;
+        let raw = self.src.as_bytes()[span.start as usize] == b'r';
+        let body_start = span.start as usize + 1 + usize::from(raw);
         let body = &self.src[body_start..span.end as usize - 1];
-        if !body.contains('\\') {
+        if raw || !body.contains('\\') {
             return Ok(body.into());
         }
         let mut value = String::with_capacity(body.len());

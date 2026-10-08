@@ -990,6 +990,19 @@ fn apply(op: BinaryOp, left: &Value, right: &Value) -> std::result::Result<Value
             Duration(a.checked_sub(*b).ok_or_else(|| overflow("duration"))?)
         }
         (Add, List(a), List(b)) => List(a.iter().chain(b.iter()).cloned().collect()),
+        // True if an item equals the value. Failing that, a null among the items leaves the
+        // answer unknown, as it does for a chain of `==` joined by `or`.
+        (In, value, List(items)) => {
+            let mut unknown = false;
+            for item in items.iter() {
+                match apply(Eq, value, item)? {
+                    Bool(true) => return Ok(Bool(true)),
+                    Null => unknown = true,
+                    _ => {}
+                }
+            }
+            if unknown { Null } else { Bool(false) }
+        }
         (_, Float(a), Float(b)) => float_op(op, *a, *b)?,
         // The checker converts ints that meet floats, except under `/`, which it leaves
         // to do the conversion itself.
@@ -1021,7 +1034,9 @@ fn decimal_op(op: BinaryOp, a: i128, b: i128) -> std::result::Result<Value, Stri
         Div => exact(scalar::decimal_div(a, b))?,
         Rem => exact(Some(a % b))?,
         Eq | Ne | Lt | Le | Gt | Ge => Value::Bool(compare(op, a.cmp(&b))),
-        And | Or | Coalesce => return Err("internal error: logic on numbers".into()),
+        And | Or | Coalesce | In | NotIn => {
+            return Err("internal error: logic on numbers".into());
+        }
     })
 }
 
@@ -1039,7 +1054,9 @@ fn float_op(op: BinaryOp, a: f64, b: f64) -> std::result::Result<Value, String> 
         Le => Value::Bool(a <= b),
         Gt => Value::Bool(a > b),
         Ge => Value::Bool(a >= b),
-        And | Or | Coalesce => return Err("internal error: logic on numbers".into()),
+        And | Or | Coalesce | In | NotIn => {
+            return Err("internal error: logic on numbers".into());
+        }
     })
 }
 
