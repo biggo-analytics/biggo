@@ -475,12 +475,65 @@ Used only inside `window(...)`. They give one value per row.
 | Function | Returns | Meaning |
 | --- | --- | --- |
 | `row_number()` | `int` | Position of the row in its partition, starting at 1 |
-| `rank()` | `int` | Rank by `order`; equal values get the same rank |
+| `rank()` | `int` | Rank by `order`; equal values get the same rank, and the rank after them skips ahead |
+| `dense_rank()` | `int` | The same, with no rank skipped after equal values |
+| `percent_rank()` | `float` | The rank as a share from 0 for the first row to 1 for the last |
+| `ntile(n)` | `int` | Which of `n` groups of nearly equal size the row is in, from 1: `ntile(4)` gives quartiles |
 | `lag(x)`, `lag(x, n)` | type of `x` (nullable) | The value `n` rows earlier |
 | `lead(x)`, `lead(x, n)` | type of `x` (nullable) | The value `n` rows later |
+| `diff(x)`, `diff(x, n)` | type of `x` (nullable) | `x` less its value `n` rows earlier |
+| `pct_change(x)`, `pct_change(x, n)` | `float?` | That change as a share of the earlier value: 0.25 is 25% up |
+| `fill_forward(x)`, `fill_backward(x)` | type of `x` | `x`, or where it is null the last value before it, or the next one after it |
 | `cumsum(x)` | type of `x` | Cumulative sum (`int` or `float`) |
+| `cum_count()`, `cum_count(x)` | `int` | The number of rows so far, or of non-null values of `x` |
+| `cum_min(x)`, `cum_max(x)` | type of `x` | The smallest and the largest value so far |
+| `cum_mean(x)` | `float` | The mean of the values so far |
 | `moving_avg(x, n)` | `float` | Average of the latest `n` rows |
+| `moving_sum(x, n)` | type of `x` | Their sum |
+| `moving_min(x, n)`, `moving_max(x, n)` | type of `x` | The smallest and the largest of them |
 | any aggregate | same as the aggregate | Its value over the whole partition |
+
+```biggo
+type Visit = { day: date, site: string, visits: int? }
+read_csv<Visit>("data/visits.csv")
+  |> window(
+    by = site,
+    order = day,
+    filled = fill_forward(visits),
+    change = diff(visits),
+    growth = round(pct_change(visits), 2),
+    best = cum_max(visits),
+    last2 = moving_sum(visits, 2),
+    half = ntile(2),
+  )
+  |> print()
+```
+
+```text output
++------------+------+--------+--------+--------+--------+------+-------+------+
+| day        | site | visits | filled | change | growth | best | last2 | half |
++------------+------+--------+--------+--------+--------+------+-------+------+
+| 2026-01-01 | a    | 10     | 10     | null   | null   | 10   | 10    | 1    |
+| 2026-01-02 | a    | 15     | 15     | 5      | 0.5    | 15   | 25    | 1    |
+| 2026-01-03 | a    | null   | 15     | null   | null   | 15   | 15    | 2    |
+| 2026-01-04 | a    | 20     | 20     | null   | null   | 20   | 20    | 2    |
+| 2026-01-01 | b    | 7      | 7      | null   | null   | 7    | 7     | 1    |
+| 2026-01-02 | b    | 7      | 7      | 0      | 0.0    | 7    | 14    | 1    |
+| 2026-01-03 | b    | 3      | 3      | -4     | -0.57  | 7    | 10    | 2    |
++------------+------+--------+--------+--------+--------+------+-------+------+
+```
+
+- "So far" and "the latest `n` rows" follow the `order` of the window, and stop at the edges of
+  the partition. Without an `order`, rows are taken in the order of the table.
+- Nulls are passed over: `cum_mean`, `moving_sum` and the others work on the values that are
+  there, and give null only where there is none yet. `diff` and `pct_change` are null when either
+  of the two values is null, and in the first rows of a partition.
+- `pct_change` from zero is infinite, or "not a number" from zero to zero.
+- The `n` of a function is written as a whole number, not computed.
+- `fill_forward` leaves the first rows of a partition null when they have no value before them,
+  and `fill_backward` the last rows. To fill both ends, use one on the result of the other.
+- `ntile` puts the extra rows in the first groups: 5 rows in 2 groups are 3 and 2. Rows with
+  equal values can land in different groups.
 
 Details: [window](04-tables.md#window)
 

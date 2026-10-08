@@ -1,0 +1,137 @@
+error: `dense_rank` takes no arguments
+ --> check/windows.bgo:5:19
+  |
+5 | log |> window(a = dense_rank(visits))
+  |                   ^^^^^^^^^^^^^^^^^^
+
+error: `percent_rank` takes no arguments
+ --> check/windows.bgo:6:19
+  |
+6 | log |> window(a = percent_rank(1))
+  |                   ^^^^^^^^^^^^^^^
+
+error: `ntile` takes the number of groups, as in `ntile(4)`
+ --> check/windows.bgo:7:19
+  |
+7 | log |> window(a = ntile())
+  |                   ^^^^^^^
+
+error: the number of groups must be written as a whole number of at least 1
+ --> check/windows.bgo:8:25
+  |
+8 | log |> window(a = ntile(0))
+  |                         ^
+
+error: the number of groups must be written as a whole number of at least 1
+ --> check/windows.bgo:9:25
+  |
+9 | log |> window(a = ntile(visits))
+  |                         ^^^^^^
+
+error: `ntile` takes the number of groups, as in `ntile(4)`
+  --> check/windows.bgo:10:19
+   |
+10 | log |> window(a = ntile(2, 3))
+   |                   ^^^^^^^^^^^
+
+error: `cum_count` takes one column
+  --> check/windows.bgo:11:19
+   |
+11 | log |> window(a = cum_count(visits, 2))
+   |                   ^^^^^^^^^^^^^^^^^^^^
+
+error: `cum_min` takes one column
+  --> check/windows.bgo:12:19
+   |
+12 | log |> window(a = cum_min())
+   |                   ^^^^^^^^^
+
+error: `cum_max` does not work on bool
+  --> check/windows.bgo:13:19
+   |
+13 | log |> window(a = cum_max(open))
+   |                   ^^^^^^^^^^^^^
+
+error: `cum_mean` needs numbers, found string
+  --> check/windows.bgo:14:19
+   |
+14 | log |> window(a = cum_mean(site))
+   |                   ^^^^^^^^^^^^^^
+
+error: `moving_sum` takes a column and a number of rows
+  --> check/windows.bgo:15:19
+   |
+15 | log |> window(a = moving_sum(visits))
+   |                   ^^^^^^^^^^^^^^^^^^
+
+error: `moving_sum` needs numbers, found string
+  --> check/windows.bgo:16:19
+   |
+16 | log |> window(a = moving_sum(site, 2))
+   |                   ^^^^^^^^^^^^^^^^^^^
+
+error: the number of rows must be written as a whole number of at least 1
+  --> check/windows.bgo:17:38
+   |
+17 | log |> window(a = moving_min(visits, 0))
+   |                                      ^
+
+error: the number of rows must be written as a whole number of at least 1
+  --> check/windows.bgo:18:38
+   |
+18 | log |> window(a = moving_max(visits, visits))
+   |                                      ^^^^^^
+
+error: `diff` needs numbers, found string
+  --> check/windows.bgo:19:19
+   |
+19 | log |> window(a = diff(site))
+   |                   ^^^^^^^^^^
+
+error: the number of rows must be written as a whole number of at least 1
+  --> check/windows.bgo:20:32
+   |
+20 | log |> window(a = diff(visits, 1.5))
+   |                                ^^^
+
+error: `pct_change` needs numbers, found date
+  --> check/windows.bgo:21:19
+   |
+21 | log |> window(a = pct_change(day))
+   |                   ^^^^^^^^^^^^^^^
+
+error: `pct_change` takes one column
+  --> check/windows.bgo:22:19
+   |
+22 | log |> window(a = pct_change())
+   |                   ^^^^^^^^^^^^
+
+error: `fill_forward` takes one column
+  --> check/windows.bgo:23:19
+   |
+23 | log |> window(a = fill_forward())
+   |                   ^^^^^^^^^^^^^^
+
+error: `fill_backward` takes one column
+  --> check/windows.bgo:24:19
+   |
+24 | log |> window(a = fill_backward(visits, 1))
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `diff` can only be used inside `agg` or `window`
+  --> check/windows.bgo:25:19
+   |
+25 | log |> derive(a = diff(visits))
+   |                   ^^^^^^^^^^^^
+
+error: `cum_max` can only be used inside `agg` or `window`
+  --> check/windows.bgo:26:16
+   |
+26 | log |> agg(a = cum_max(visits))
+   |                ^^^^^^^^^^^^^^^
+
+error: `diff` can only be used inside `agg` or `window`
+  --> check/windows.bgo:27:1
+   |
+27 | diff(1)
+   | ^^^^^^^

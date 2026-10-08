@@ -219,23 +219,20 @@ Exists: `sum` `mean` `min` `max` `count` `count_distinct` `first` `last` `median
 
 ### 5. Window functions
 
-Exists: `row_number` `rank` `lag` `lead` `cumsum` `moving_avg`, and every aggregate over a whole
-partition.
+Exists: `row_number` `rank` `dense_rank` `percent_rank` `ntile`, `lag` `lead` `diff` `pct_change`,
+`fill_forward` `fill_backward`, `cumsum` `cum_count` `cum_min` `cum_max` `cum_mean`, `moving_avg`
+`moving_sum` `moving_min` `moving_max`, and every aggregate of one column over a whole partition.
 
 | Feature | Result | What it does | Priority |
 | --- | --- | --- | --- |
-| `diff(x)`, `diff(x, n)` | type of `x` | `x` minus its value `n` rows earlier | Must |
-| `pct_change(x)`, `pct_change(x, n)` | `float?` | Growth from the earlier row: month over month, year over year | Must |
-| `fill_forward(x)`, `fill_backward(x)` | type of `x` | A null replaced by the last value before it, or the next one after | Must |
-| `cum_count()`, `cum_min(x)`, `cum_max(x)`, `cum_mean(x)` | | Running count, minimum, maximum and mean, beside `cumsum` | Must |
-| `moving_sum(x, n)`, `moving_min(x, n)`, `moving_max(x, n)` | | Over the last `n` rows, beside `moving_avg` | Must |
-| `dense_rank()` | `int` | A rank with no gaps after ties | Must |
-| `ntile(n)` | `int` | The partition cut into `n` groups of nearly equal size: quartiles, deciles | Must |
-| `percent_rank()` | `float` | The rank as a share from 0 to 1 | Should |
 | `moving_stddev(x, n)` | `float?` | Volatility over the last `n` rows | Should |
 | windows by time: `moving_avg(x, over = days(7))` | | The last 7 days, however many rows that is | Should |
 | `cume_dist()` | `float` | The share of rows at or below this one | Later |
 | `ewm_mean(x, alpha)` | `float?` | An exponentially weighted mean | Later |
+
+- [x] `diff`, `pct_change`, `fill_forward`, `fill_backward`
+- [x] `cum_count`, `cum_min`, `cum_max`, `cum_mean`, `moving_sum`, `moving_min`, `moving_max`
+- [x] `dense_rank`, `percent_rank`, `ntile`
 
 ### 6. Table operations
 

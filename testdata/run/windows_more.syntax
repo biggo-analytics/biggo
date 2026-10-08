@@ -1,0 +1,115 @@
+(let readings
+  (call from_rows
+    (list
+      (record (site: "a") (day: 1) (x: 10) (y: 1.5))
+      (record (site: "a") (day: 2) (x: null) (y: null))
+      (record (site: "a") (day: 3) (x: 30) (y: 4.5))
+      (record (site: "a") (day: 4) (x: 20) (y: 4.5))
+      (record (site: "a") (day: 5) (x: 20) (y: null))
+      (record (site: "b") (day: 1) (x: 5) (y: 2.0))
+      (record (site: "b") (day: 2) (x: null) (y: 3.0))
+      (record (site: "b") (day: 3) (x: 7) (y: 1.0)))))
+(|> readings
+  (call window
+    (by: site)
+    (order: day)
+    (change: (call diff x))
+    (change2: (call diff x 2))
+    (growth: (call pct_change x))
+    (filled: (call fill_forward x))
+    (back: (call fill_backward x))
+    (rows: (call cum_count))
+    (values: (call cum_count x)))
+  (call drop y)
+  (call print))
+(|> readings
+  (call window
+    (by: site)
+    (order: day)
+    (low: (call cum_min x))
+    (high: (call cum_max x))
+    (mean: (call cum_mean x))
+    (sum2: (call moving_sum x 2))
+    (min2: (call moving_min y 2))
+    (max3: (call moving_max x 3))
+    (avg2: (call moving_avg x 2))
+    (fsum: (call moving_sum y 2)))
+  (call drop site y)
+  (call print))
+(|> readings
+  (call window
+    (by: site)
+    (order: (call desc y))
+    (rank: (call rank))
+    (dense: (call dense_rank))
+    (share: (call percent_rank))
+    (half: (call ntile 2))
+    (third: (call ntile 3))
+    (ninth: (call ntile 9)))
+  (call select site y rank dense share half third ninth)
+  (call sort site (call desc y))
+  (call print))
+(|> readings
+  (call window
+    (order: day)
+    (dense: (call dense_rank))
+    (quarter: (call ntile 4))
+    (last_site: (call cum_max site))
+    (first_site: (call cum_min site))
+    (level: (call fill_forward y)))
+  (call select day site dense quarter last_site first_site level)
+  (call sort day site)
+  (call print))
+(call print
+  (|> readings
+    (call window
+      (by: site)
+      (n: (call cum_count))
+      (total: (call cumsum x))
+      (step: (call diff x)))
+    (call select site x n total step)))
+(let odd
+  (call from_rows
+    (list
+      (record (g: 1) (i: 1) (v: 1.0))
+      (record (g: 1) (i: 2) (v: (/ 0.0 0.0)))
+      (record (g: 1) (i: 3) (v: 2.0))
+      (record (g: 1) (i: 4) (v: 3.0))
+      (record (g: 2) (i: 1) (v: (/ 1.0 0.0)))
+      (record (g: 2) (i: 2) (v: 5.0))
+      (record (g: 2) (i: 3) (v: (/ (- 1.0) 0.0)))
+      (record (g: 2) (i: 4) (v: 7.0))
+      (record (g: 3) (i: 1) (v: 4.0))
+      (record (g: 3) (i: 2) (v: 6.0)))))
+(|> odd
+  (call window
+    (by: g)
+    (order: i)
+    (sum2: (call moving_sum v 2))
+    (avg2: (call moving_avg v 2))
+    (max2: (call moving_max v 2))
+    (min2: (call moving_min v 2))
+    (top: (call cum_max v)))
+  (call print))
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(|>
+  (call read_csv <Sale> "data/sales.csv")
+  (call group (month: (call start_of_month date)) region)
+  (call agg (units: (call sum qty)))
+  (call window
+    (by: region)
+    (order: month)
+    (before: (call lag units))
+    (growth: (call round (call pct_change units) 3))
+    (running: (call cumsum units)))
+  (call window
+    (by: month)
+    (order: (call desc units))
+    (place: (call dense_rank)))
+  (call sort region month)
+  (call print))
+(call print
+  (|>
+    (call from_rows
+      (list (record (n: 9223372036854775807)) (record (n: (- 5)))))
+    (call window (step: (call diff n)))))

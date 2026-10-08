@@ -399,40 +399,89 @@ pub enum WindowFn {
     Lead,
     /// Running total up to and including the row.
     CumSum,
-    /// Mean of the row and the `offset - 1` rows before it.
+    /// Mean of the row and the `offset - 1` rows before it, and likewise their sum, their
+    /// smallest and their largest.
     MovingAvg,
+    MovingSum,
+    MovingMin,
+    MovingMax,
+    /// A rank that goes up by one from each set of equal rows to the next.
+    DenseRank,
+    /// The rank as a share of the way from the first row to the last.
+    PercentRank,
+    /// Which of `offset` groups of nearly equal size the row falls in.
+    Ntile,
+    /// The number of rows up to and including the row, or of values among them.
+    CumCount,
+    CumMin,
+    CumMax,
+    CumMean,
+    /// The value less the value `offset` rows earlier, and that as a share of the earlier.
+    Diff,
+    PctChange,
+    /// The value, or where it is null the last value before it, or the next after it.
+    FillForward,
+    FillBackward,
     /// An aggregate of the whole partition.
     Agg(AggFn),
 }
 
 impl WindowFn {
+    /// The window functions that are not aggregates, each with its name.
+    pub const OWN: &'static [(WindowFn, &'static str)] = &[
+        (WindowFn::RowNumber, "row_number"),
+        (WindowFn::Rank, "rank"),
+        (WindowFn::Lag, "lag"),
+        (WindowFn::Lead, "lead"),
+        (WindowFn::CumSum, "cumsum"),
+        (WindowFn::MovingAvg, "moving_avg"),
+        (WindowFn::MovingSum, "moving_sum"),
+        (WindowFn::MovingMin, "moving_min"),
+        (WindowFn::MovingMax, "moving_max"),
+        (WindowFn::DenseRank, "dense_rank"),
+        (WindowFn::PercentRank, "percent_rank"),
+        (WindowFn::Ntile, "ntile"),
+        (WindowFn::CumCount, "cum_count"),
+        (WindowFn::CumMin, "cum_min"),
+        (WindowFn::CumMax, "cum_max"),
+        (WindowFn::CumMean, "cum_mean"),
+        (WindowFn::Diff, "diff"),
+        (WindowFn::PctChange, "pct_change"),
+        (WindowFn::FillForward, "fill_forward"),
+        (WindowFn::FillBackward, "fill_backward"),
+    ];
+
     pub fn name(self) -> &'static str {
         match self {
-            WindowFn::RowNumber => "row_number",
-            WindowFn::Rank => "rank",
-            WindowFn::Lag => "lag",
-            WindowFn::Lead => "lead",
-            WindowFn::CumSum => "cumsum",
-            WindowFn::MovingAvg => "moving_avg",
             WindowFn::Agg(func) => func.name(),
+            own => {
+                let listed = Self::OWN.iter().find(|(func, _)| *func == own);
+                listed.map_or("window function", |(_, name)| name)
+            }
         }
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
-        Some(match name {
-            "row_number" => WindowFn::RowNumber,
-            "rank" => WindowFn::Rank,
-            "lag" => WindowFn::Lag,
-            "lead" => WindowFn::Lead,
-            "cumsum" => WindowFn::CumSum,
-            "moving_avg" => WindowFn::MovingAvg,
-            _ => WindowFn::Agg(AggFn::from_name(name)?),
-        })
+        let own = Self::OWN.iter().find(|(_, own)| *own == name);
+        match own {
+            Some((func, _)) => Some(*func),
+            None => AggFn::from_name(name).map(WindowFn::Agg),
+        }
     }
 
     /// Whether the function takes a second argument: a row distance or a window size.
     pub fn has_offset(self) -> bool {
-        matches!(self, WindowFn::Lag | WindowFn::Lead | WindowFn::MovingAvg)
+        matches!(
+            self,
+            WindowFn::Lag
+                | WindowFn::Lead
+                | WindowFn::MovingAvg
+                | WindowFn::MovingSum
+                | WindowFn::MovingMin
+                | WindowFn::MovingMax
+                | WindowFn::Diff
+                | WindowFn::PctChange
+        )
     }
 }
 
@@ -538,6 +587,9 @@ impl fmt::Display for WindowCall {
             if self.func.has_offset() {
                 write!(f, ", {}", self.offset)?;
             }
+        }
+        if self.func == WindowFn::Ntile {
+            write!(f, "{}", self.offset)?;
         }
         f.write_str(")")
     }

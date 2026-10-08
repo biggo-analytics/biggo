@@ -1,0 +1,90 @@
+// Changes from row to row, running values, moving windows, ranks, and filling of gaps.
+
+let readings = from_rows([
+  { site: "a", day: 1, x: 10, y: 1.5 },
+  { site: "a", day: 2, x: null, y: null },
+  { site: "a", day: 3, x: 30, y: 4.5 },
+  { site: "a", day: 4, x: 20, y: 4.5 },
+  { site: "a", day: 5, x: 20, y: null },
+  { site: "b", day: 1, x: 5, y: 2.0 },
+  { site: "b", day: 2, x: null, y: 3.0 },
+  { site: "b", day: 3, x: 7, y: 1.0 },
+])
+
+readings
+  |> window(
+    by = site,
+    order = day,
+    change = diff(x),
+    change2 = diff(x, 2),
+    growth = pct_change(x),
+    filled = fill_forward(x),
+    back = fill_backward(x),
+    rows = cum_count(),
+    values = cum_count(x),
+  )
+  |> drop(y)
+  |> print()
+
+readings
+  |> window(
+    by = site,
+    order = day,
+    low = cum_min(x),
+    high = cum_max(x),
+    mean = cum_mean(x),
+    sum2 = moving_sum(x, 2),
+    min2 = moving_min(y, 2),
+    max3 = moving_max(x, 3),
+    avg2 = moving_avg(x, 2),
+    fsum = moving_sum(y, 2),
+  )
+  |> drop(site, y)
+  |> print()
+
+// Ranks, with ties and with nulls, which sort last.
+readings
+  |> window(by = site, order = desc(y), rank = rank(), dense = dense_rank(), share = percent_rank(), half = ntile(2), third = ntile(3), ninth = ntile(9))
+  |> select(site, y, rank, dense, share, half, third, ninth)
+  |> sort(site, desc(y))
+  |> print()
+
+// The whole table as one partition, and other types than numbers.
+readings
+  |> window(order = day, dense = dense_rank(), quarter = ntile(4), last_site = cum_max(site), first_site = cum_min(site), level = fill_forward(y))
+  |> select(day, site, dense, quarter, last_site, first_site, level)
+  |> sort(day, site)
+  |> print()
+
+// Without an order the rows are taken as they come.
+print(readings |> window(by = site, n = cum_count(), total = cumsum(x), step = diff(x)) |> select(site, x, n, total, step))
+
+// A value that is not a number, or that is infinite, marks only the windows it is in.
+let odd = from_rows([
+  { g: 1, i: 1, v: 1.0 },
+  { g: 1, i: 2, v: 0.0 / 0.0 },
+  { g: 1, i: 3, v: 2.0 },
+  { g: 1, i: 4, v: 3.0 },
+  { g: 2, i: 1, v: 1.0 / 0.0 },
+  { g: 2, i: 2, v: 5.0 },
+  { g: 2, i: 3, v: -1.0 / 0.0 },
+  { g: 2, i: 4, v: 7.0 },
+  { g: 3, i: 1, v: 4.0 },
+  { g: 3, i: 2, v: 6.0 },
+])
+odd
+  |> window(by = g, order = i, sum2 = moving_sum(v, 2), avg2 = moving_avg(v, 2), max2 = moving_max(v, 2), min2 = moving_min(v, 2), top = cum_max(v))
+  |> print()
+
+// Month-over-month growth of sales, and a rank of regions within each month.
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+read_csv<Sale>("data/sales.csv")
+  |> group(month = start_of_month(date), region)
+  |> agg(units = sum(qty))
+  |> window(by = region, order = month, before = lag(units), growth = round(pct_change(units), 3), running = cumsum(units))
+  |> window(by = month, order = desc(units), place = dense_rank())
+  |> sort(region, month)
+  |> print()
+
+// Whole numbers that do not fit stop the program.
+print(from_rows([{ n: 9223372036854775807 }, { n: -5 }]) |> window(step = diff(n)))

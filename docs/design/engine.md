@@ -4,8 +4,10 @@ This document proposes the next generation of the execution engine (`crates/bigg
 areas: in-memory and parallel execution, data larger than memory, memory management, and data
 sources. Nothing in it is built yet.
 
-- **Today** describes the code at commit `561a4e3` (9 October 2026), from reading it. "Observed"
-  means that an existing binary was run to confirm the statement.
+- **Today** describes the code at commit `561a4e3` (9 October 2026), from reading it. The two
+  commits after it, up to `cfd3ef0`, add functions and aggregates and leave the structure
+  described here unchanged. "Observed" means that an existing binary was run to confirm a
+  statement.
 - Timings are quoted from [docs/09-performance.md](../09-performance.md) (5 million rows, Apple M1
   Pro, 8 October 2026). Every other figure about speed or size is an estimate, and says so.
 - Each area has five parts: today, proposed, why this and not the alternatives, keeping results
@@ -153,8 +155,6 @@ mechanisms, and each operator uses one:
 - A batch is compacted when its mask keeps less than half of the rows, and always before a sink
   stores it: one prepared `FilterPredicate` for all columns that the rest of the pipeline reads.
   Sinks read through the mask without compacting.
-- Index vectors (as in DuckDB) are not used: Arrow kernels take whole arrays, masks combine with
-  one `and`, and the filter kernels take masks.
 
 #### 1.4 Expression evaluation
 
@@ -181,8 +181,6 @@ enum Step {
   `mean`, is computed once without a projection of its own.
 - **Guards replace `eval_where`:** a guarded step compacts only the columns it reads. Registers
   are freed after their last use.
-- **No JIT.** Kernels over thousands of rows amortize the interpretation; a compiler backend would
-  cost start-up time (5 ms today) and a large dependency.
 
 #### 1.5 Strings: views and dictionaries
 
@@ -246,18 +244,19 @@ finish: each partition gives its groups with `first`, the RowOrd of the group's 
 - When a `Sort` follows directly (as in every benchmark query), the final reordering is skipped:
   the aggregate exposes `first` as a hidden last sort key.
 
-**Accumulators.** Only the last two rows are order-sensitive:
+**Accumulators.** Only the last three rows are order-sensitive:
 
 | Aggregate | State per group | Combine |
 | --- | --- | --- |
 | `count` | `i64` | Add |
 | `sum` of `int`, `duration` | `i128` | Add; the range is checked once, at the end |
 | `sum` of `decimal` | `i128` and an `i64` carry | Add; checked at the end |
-| `min`, `max` | The value | Total order (for `float`: `f64::total_cmp`, as in `sort`) |
+| `min`, `max`, `arg_min`, `arg_max` | The value (for the last two also the key and its `RowOrd`) | Total order (for `float`: `f64::total_cmp`, as in `sort`); ties go to the smallest `RowOrd` |
 | `first`, `last` | The value and its `RowOrd` | Smallest or largest `RowOrd` |
-| `median` | The values | Append; sorted at the end |
-| `sum` of `float`, `mean` | `f64` (and a count) | Add partial sums in seq order |
-| `stddev`, `corr`, `cov`, `slope`, `intercept` | Count, means, sums of products | Today's pairwise `merge`, in seq order |
+| `median`, `quantile` | The values | Append; sorted at the end |
+| `sum` of `float`, `mean`, `product` | `f64` (and a count) | Combine the per-morsel results in seq order |
+| `stddev`, `variance` and their `_pop` forms, `corr`, `cov`, `slope`, `intercept` | Count, means, sums of products | Today's pairwise `merge`, in seq order |
+| `string_agg` | The joined text | Append in seq order |
 
 #### 1.7 Hash join
 
@@ -306,9 +305,9 @@ per morsel: a heap of at most n entries (key, RowOrd), and the rows they refer t
 finish: the global heap, sorted
 ```
 
-  A stale `bound` only keeps extra candidates, so the result is exactly the first n rows of the
-  stable sort. Memory is `threads * n` rows, not the table. Above the threshold the full sort
-  runs, and each run keeps its first n rows.
+A stale `bound` only keeps extra candidates, so the result is exactly the first n rows of the
+stable sort. Memory is `threads * n` rows, not the table. Above the threshold the full sort runs,
+and each run keeps its first n rows.
 
 #### 1.9 Window functions
 
@@ -345,7 +344,8 @@ finish: the global heap, sorted
 | Keep pull with `par_map` | A barrier per operator, batches migrate between cores, breakers run inside `execute`, errors depend on the group size |
 | Exchange operators, one partition per thread | The thread count shapes the data: batches, partial sums and row order change with it, against principle 2 |
 | Async streams on tokio | A second scheduler and a large dependency for CPU-bound work; partitions again follow threads |
-| Compiling queries to machine code | Start-up cost and a compiler backend to ship; Arrow kernels already use SIMD |
+| Compiling queries to machine code | Start-up cost (5 ms today) and a compiler backend to ship; kernels over thousands of rows already amortize the interpretation and use SIMD |
+| Index vectors for selections (as in DuckDB) | Arrow kernels take whole arrays, masks combine with one `and`, and the filter kernels take masks |
 | Thread-local hash tables that outlive a morsel | A group's partial sum would depend on which morsels a thread happened to take |
 | Order-independent float sums (exact or binned reproducible summation) | 48 bytes or more per sum and several times the work per value; `stddev` and `corr` would need another, less stable formula. An open question for 1.0 |
 | One global join table built with atomic inserts | Chain order depends on timing; partitions give the same cache behavior with a fixed order |
@@ -1105,35 +1105,19 @@ to 21 serve those packages and can move ahead of the others.
 
 Decisions that need the owner:
 
-1. **Float sums across versions.** R3 ties the last bits of a float sum to the morsel table of
-   1.1, and step 5 changes them once (the unit becomes the morsel, not 4 batches). Is it
-   acceptable to freeze that table at 1.0 (ROADMAP section 13 promises the same results in every
-   1.x), or should 1.0 pay for order-independent summation?
-2. **Three changes of behavior.** (a) `sum` of `int` fails only when the final sum overflows, not
-   when a prefix does. (b) `min` and `max` of `float` use the total order: `NaN` is the largest
-   value, as in `sort`. (c) `count_distinct` treats `0.0` and `-0.0` as `group` and `==` do (two
-   values). Agree to all three?
-3. **Strict CSV quoting.** A quote inside an unquoted field becomes an error, with `quote = ""` as
-   the way out. The alternative keeps such files readable and makes exact parallel splitting
-   cost a second pass.
-4. **Row order of joins.** The build side is swapped only where order cannot be observed, so
-   `small |> join(big)` followed by a float sum still builds on `big`. Keep the documented order
-   (docs/04), or allow a swap that reorders the output?
-5. **The memory limit.** Is 50% of RAM the right default? Are `--memory-limit`,
-   `BIGGO_MEMORY_LIMIT` and `BIGGO_TEMP_DIR` the right names?
-6. **Language surface this design assumes** but does not define: a table form of `read_sql`
-   (`table = "..."`) and a split key; the name of the file-name column for many files; columns
-   from `key=value` directories; `quote = ""`.
-7. **Dependencies and binary size.** `postgres` (brings tokio), `mysql`, `ureq`, `rustls`,
-   `calamine`, `flate2`, possibly `mimalloc`. Is there a size budget for the executable? If tokio
-   is unwelcome, PostgreSQL needs a protocol client written here.
-8. **String views.** Step 7 changes the physical type of every string column. Agree to that wide
-   change, or stay on `Utf8` and give up zero-copy strings and cheap gathers?
-9. **Databases and reproducibility.** The table form adds `ORDER BY` on the key (a cost on the
-   server), and MySQL reads on one connection unless the program asks for more. Acceptable?
-10. **The scan cache.** On by default? What share of the limit may it use?
-11. **Mapped files.** Mapping stays for local text files, with the known risk: if another process
-    truncates the file during a query, biggo dies with a signal. Keep that trade, or always read?
+| # | Question | What depends on it |
+| --- | --- | --- |
+| 1 | **Float sums across versions.** R3 ties the last bits of a float sum to the morsel table of 1.1, and step 5 changes them once (the unit becomes the morsel, not 4 batches). Freeze that table at 1.0, or pay for order-independent summation? | ROADMAP section 13 promises the same results in every 1.x |
+| 2 | **Three changes of behavior.** (a) `sum` of `int` fails only when the final sum overflows, not when a prefix does. (b) `min` and `max` of `float` use the total order: `NaN` is the largest value, as in `sort`. (c) `count_distinct` treats `0.0` and `-0.0` as `group` and `==` do (two values). Agree to all three? | Step 5; findings 1, 7, 8 |
+| 3 | **Strict CSV quoting.** A quote inside an unquoted field becomes an error, with `quote = ""` as the way out. Acceptable? | Otherwise exact parallel splitting costs a second pass (2.8) |
+| 4 | **Row order of joins.** The build side is swapped only where order cannot be observed, so `small` joined to `big`, followed by a float sum, still builds on `big`. Keep the documented order (docs/04), or allow a swap that reorders the output? | 1.7 |
+| 5 | **The memory limit.** Is 50% of RAM the right default? Are `--memory-limit`, `BIGGO_MEMORY_LIMIT` and `BIGGO_TEMP_DIR` the right names? | 3.2, 3.8 |
+| 6 | **Language surface this design assumes** but does not define: a table form of `read_sql` (`table = "..."`) and a split key; the name of the file-name column for many files; columns from `key=value` directories; `quote = ""` | 2.8, 2.10, 4.2 |
+| 7 | **Dependencies and binary size.** `postgres` (brings tokio), `mysql`, `ureq`, `rustls`, `calamine`, `flate2`, possibly `mimalloc`. Is there a size budget for the executable? | If tokio is unwelcome, PostgreSQL needs a protocol client written here |
+| 8 | **String views.** Step 7 changes the physical type of every string column. Agree to that wide change? | Staying on `Utf8` gives up zero-copy strings and cheap gathers |
+| 9 | **Databases and reproducibility.** The table form adds `ORDER BY` on the key (a cost on the server), and MySQL reads on one connection unless the program asks for more. Acceptable? | 4.2 |
+| 10 | **The scan cache.** On by default? What share of the limit may it use? | 2.11 |
+| 11 | **Mapped files.** Mapping stays for local text files, with the known risk: if another process truncates the file during a query, biggo dies with a signal. Keep that trade, or always read? | 3.6 |
 
 ## Findings in today's code
 
@@ -1145,8 +1129,8 @@ existing binary (the release build of 8 October; the debug build of 9 October fo
 | --- | --- | --- | --- |
 | 1 | Float `min` and `max` lose values when a group contains `NaN`. A `NaN` that is the first value of a run becomes that run's result, and then loses every comparison in the merge | `aggregate.rs`: `Acc::ExtremeFloat` in `update` and `merge` | Observed: a column of `1.0`, 250,000 `NaN`, one `3.0`, then more `NaN` gives `max = 1.0`. `[NaN, 3.0]` gives `NaN`; `[3.0, NaN]` gives `3.0` |
 | 2 | `moving_avg` leaks across partitions: the running sums are never reset, so an average is a difference of sums over all earlier partitions | `window.rs`: `compute`, `WindowFn::MovingAvg` | Observed: a `NaN` in partition `a` makes every `moving_avg` of partition `b` `NaN`. Large values in one partition also cost precision in the next (read) |
-| 3 | Whether a query fails can depend on the thread count. A group of pieces or batches is processed together, and an error in any of them discards the good batches before it. Which of two errors is reported is not fixed either (`collect::<Result<_>>` on a parallel iterator may return any) | `scan.rs`: `ScanIter::next`; `ops.rs`: `ParMap::next` | Observed: a CSV with a bad value at line 600,002, read by `derive |> where |> take(5)`, prints 5 rows with 1 thread and fails with 8 |
-| 4 | File writers truncate the target in place, before the query has run | `lib.rs`: `write_csv`, `write_json`, `write_parquet` (`write_sqlite` is safe) | Observed: `read_csv("x.csv") |> where(...) |> write_csv("x.csv")` ends with a bus error (exit code 138) and leaves `x.csv` empty, because the scan maps the file that `File::create` truncates. Observed: a query that fails leaves the target empty |
+| 3 | Whether a query fails can depend on the thread count. A group of pieces or batches is processed together, and an error in any of them discards the good batches before it. Which of two errors is reported is not fixed either (`collect::<Result<_>>` on a parallel iterator may return any) | `scan.rs`: `ScanIter::next`; `ops.rs`: `ParMap::next` | Observed: a CSV with a bad value at line 600,002, read by `derive`, `where` and `take(5)` in a row, prints 5 rows with 1 thread and fails with 8 |
+| 4 | File writers truncate the target in place, before the query has run | `lib.rs`: `write_csv`, `write_json`, `write_parquet` (`write_sqlite` is safe) | Observed: reading `x.csv`, filtering it, and writing the result to `x.csv` in one pipeline ends with a bus error (exit code 138) and leaves `x.csv` empty, because the scan maps the file that `File::create` truncates. Observed: a query that fails leaves the target empty |
 | 5 | Guarded expressions can still fail: `div`, `abs` and `to_bool` can raise an error but are not in the list, so both branches of an `if` are evaluated | `biggo-plan/src/expr.rs`: `Expr::can_fail` | Observed: `if n != 0 { div(x, n) } else { 0 }` fails with "division by zero"; `if x > 0 { abs(x) } else { 0 }` with "integer overflow" for the smallest `int`; a guarded `to_bool` with "cannot convert". The same guard around `%`, which is in the list, works |
 | 6 | A stray quote makes the CSV splitter quadratic: after a quote in an unquoted field, every later cut starts "inside quotes" and scans to the next quote or the end of the file, and the file is decoded as one piece on one thread | `scan.rs`: `split_rows` | Observed in one informal run (not a benchmark): a 128 MB file took about 16 times longer with one such quote |
 | 7 | `sum` of `int` overflows depending on run boundaries: `update` fails when a prefix inside a run overflows, `merge` checks only the run totals | `aggregate.rs`: `Acc::SumInt` | Read: `[MAX, 1, -1]` fails inside one run and succeeds across two |

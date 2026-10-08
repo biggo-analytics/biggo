@@ -1,12 +1,17 @@
 //! Window functions. The input is sorted by partition and order, each function is computed
 //! along that order, and the results are put back in the input's row order.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
-use arrow::array::{Array, ArrayRef, AsArray, Float64Array, Int64Array, RecordBatch, UInt32Array};
+use arrow::array::{
+    Array, ArrayRef, ArrowPrimitiveType, AsArray, Float64Array, Int64Array, PrimitiveArray,
+    RecordBatch, UInt32Array,
+};
 use arrow::compute::kernels::cmp::distinct;
 use arrow::compute::{cast, take};
 use arrow::datatypes::{DataType as ArrowType, Float64Type, Int64Type};
+use arrow::row::{RowConverter, SortField};
 use biggo_plan::{AggCall, DataType, Expr, Schema, SortKey, WindowCall, WindowFn};
 use rayon::prelude::*;
 
@@ -85,6 +90,91 @@ fn layout(new_partition: &[bool], order_changes: &[bool]) -> Layout {
             .map(|(partition, order)| *partition || *order)
             .collect(),
     }
+}
+
+/// The best of the values at each position and the `size - 1` positions before it in its
+/// partition, where `better` says that its first argument beats its second. Nulls are passed
+/// over, and a window with nothing but nulls gives null.
+fn moving_extreme<T: ArrowPrimitiveType>(
+    values: &PrimitiveArray<T>,
+    layout: &Layout,
+    size: usize,
+    better: impl Fn(T::Native, T::Native) -> bool,
+) -> PrimitiveArray<T> {
+    // The positions that can still be the best of a window to come, best first: a value
+    // outlasts every earlier one that does not beat it.
+    let mut candidates: VecDeque<usize> = VecDeque::new();
+    let best = (0..values.len()).map(|position| {
+        if layout.start[position] == position {
+            candidates.clear();
+        }
+        let first = (position + 1)
+            .saturating_sub(size)
+            .max(layout.start[position]);
+        while candidates.front().is_some_and(|&front| front < first) {
+            candidates.pop_front();
+        }
+        if values.is_valid(position) {
+            let value = values.value(position);
+            while candidates
+                .back()
+                .is_some_and(|&back| !better(values.value(back), value))
+            {
+                candidates.pop_back();
+            }
+            candidates.push_back(position);
+        }
+        candidates.front().map(|&front| values.value(front))
+    });
+    best.collect()
+}
+
+/// The sum and the number of the values at each position and the `size - 1` positions before
+/// it in its partition, nulls left out.
+///
+/// Running totals make each window a difference of two of them. They start afresh in every
+/// partition, and take in only the finite values: a value that is infinite or not a number
+/// would otherwise spoil every window after it, where it should only mark its own.
+fn moving_totals(floats: &Float64Array, layout: &Layout, size: usize) -> Vec<(f64, u64)> {
+    let rows = floats.len();
+    // What is counted along the way: values, and those that are not a number, positive
+    // infinity, and negative infinity.
+    let mut counts = vec![[0u64; 4]; rows + 1];
+    let mut totals = vec![0.0; rows + 1];
+    for position in 0..rows {
+        let before = match layout.start[position] == position {
+            true => 0.0,
+            false => totals[position],
+        };
+        let mut count = counts[position];
+        let mut finite = 0.0;
+        if floats.is_valid(position) {
+            let value = floats.value(position);
+            count[0] += 1;
+            match value {
+                value if value.is_nan() => count[1] += 1,
+                f64::INFINITY => count[2] += 1,
+                f64::NEG_INFINITY => count[3] += 1,
+                value => finite = value,
+            }
+        }
+        counts[position + 1] = count;
+        totals[position + 1] = before + finite;
+    }
+    let window = |position: usize| {
+        let start = layout.start[position];
+        let first = (position + 1).saturating_sub(size).max(start);
+        let before = if first == start { 0.0 } else { totals[first] };
+        let count = |kind: usize| counts[position + 1][kind] - counts[first][kind];
+        let sum = match (count(1), count(2), count(3)) {
+            (0, 0, 0) => totals[position + 1] - before,
+            (0, _, 0) => f64::INFINITY,
+            (0, 0, _) => f64::NEG_INFINITY,
+            _ => f64::NAN,
+        };
+        (sum, count(0))
+    };
+    (0..rows).map(window).collect()
 }
 
 /// Computes one window function. `sorted` maps positions to input rows; the result has one
@@ -183,31 +273,269 @@ fn compute(
         }
         WindowFn::MovingAvg => {
             let floats = cast(&argument()?, &ArrowType::Float64)?;
-            let floats = floats.as_primitive::<Float64Type>();
-            // Running totals let each window be a difference of two of them.
-            let mut sums = Vec::with_capacity(rows + 1);
-            let mut counts = Vec::with_capacity(rows + 1);
-            let (mut sum, mut count) = (0.0, 0u64);
-            sums.push(sum);
-            counts.push(count);
-            for position in 0..rows {
-                if floats.is_valid(position) {
-                    sum += floats.value(position);
-                    count += 1;
-                }
-                sums.push(sum);
-                counts.push(count);
-            }
-            let averages: Float64Array = (0..rows)
-                .map(|position| {
-                    let first = (position + 1)
-                        .saturating_sub(call.offset)
-                        .max(layout.start[position]);
-                    let count = counts[position + 1] - counts[first];
-                    (count > 0).then(|| (sums[position + 1] - sums[first]) / count as f64)
-                })
+            let totals = moving_totals(floats.as_primitive::<Float64Type>(), layout, call.offset);
+            let averages: Float64Array = totals
+                .into_iter()
+                .map(|(sum, count)| (count > 0).then(|| sum / count as f64))
                 .collect();
             Arc::new(averages)
+        }
+        WindowFn::DenseRank => {
+            let mut rank = 0;
+            let ranks = (0..rows).map(|position| {
+                if layout.start[position] == position {
+                    rank = 0;
+                }
+                rank += i64::from(layout.new_peer[position]);
+                rank
+            });
+            Arc::new(Int64Array::from_iter_values(ranks))
+        }
+        WindowFn::PercentRank => {
+            // The rows that come before the row's peers, as a share of the other rows.
+            let mut before = 0;
+            let shares = (0..rows).map(|position| {
+                if layout.new_peer[position] {
+                    before = position - layout.start[position];
+                }
+                match layout.end[position] - layout.start[position] - 1 {
+                    0 => 0.0,
+                    others => before as f64 / others as f64,
+                }
+            });
+            Arc::new(Float64Array::from_iter_values(shares))
+        }
+        WindowFn::Ntile => {
+            let groups = call.offset.max(1);
+            let tiles = (0..rows).map(|position| {
+                let size = layout.end[position] - layout.start[position];
+                let index = position - layout.start[position];
+                // The groups differ in size by at most one row, and the larger come first.
+                let (small, larger) = (size / groups, size % groups);
+                let tile = match index < larger * (small + 1) {
+                    true => index / (small + 1),
+                    false => larger + (index - larger * (small + 1)) / small.max(1),
+                };
+                (tile + 1) as i64
+            });
+            Arc::new(Int64Array::from_iter_values(tiles))
+        }
+        WindowFn::CumCount => {
+            let mut count = 0;
+            let counts = (0..rows).map(|position| {
+                if layout.start[position] == position {
+                    count = 0;
+                }
+                let counted = values
+                    .as_ref()
+                    .is_none_or(|values| values.is_valid(position));
+                count += i64::from(counted);
+                count
+            });
+            Arc::new(Int64Array::from_iter_values(counts))
+        }
+        WindowFn::CumMean => {
+            let floats = cast(&argument()?, &ArrowType::Float64)?;
+            let floats = floats.as_primitive::<Float64Type>();
+            let (mut sum, mut count) = (0.0, 0u64);
+            let means: Float64Array = (0..rows)
+                .map(|position| {
+                    if layout.start[position] == position {
+                        (sum, count) = (0.0, 0);
+                    }
+                    if floats.is_valid(position) {
+                        sum += floats.value(position);
+                        count += 1;
+                    }
+                    (count > 0).then(|| sum / count as f64)
+                })
+                .collect();
+            Arc::new(means)
+        }
+        WindowFn::CumMin | WindowFn::CumMax => {
+            // Values of any type compare as their sort keys do; the result is the value at
+            // the best position so far.
+            let values = argument()?;
+            let field = SortField::new(values.data_type().clone());
+            let keys =
+                RowConverter::new(vec![field])?.convert_columns(std::slice::from_ref(&values))?;
+            let largest = call.func == WindowFn::CumMax;
+            let mut best: Option<usize> = None;
+            let chosen: UInt32Array = (0..rows)
+                .map(|position| {
+                    if layout.start[position] == position {
+                        best = None;
+                    }
+                    if values.is_valid(position) {
+                        let better = best.is_none_or(|best| match largest {
+                            true => keys.row(position) > keys.row(best),
+                            false => keys.row(position) < keys.row(best),
+                        });
+                        if better {
+                            best = Some(position);
+                        }
+                    }
+                    best.map(|best| best as u32)
+                })
+                .collect();
+            take(&values, &chosen, None)?
+        }
+        WindowFn::MovingSum => {
+            let values = argument()?;
+            // Running totals let each window be a difference of two of them. Whole numbers
+            // are totalled wide enough that only a window's own sum can overflow.
+            let first = |position: usize| {
+                (position + 1)
+                    .saturating_sub(call.offset)
+                    .max(layout.start[position])
+            };
+            let mut counts = Vec::with_capacity(rows + 1);
+            counts.push(0u64);
+            for position in 0..rows {
+                counts.push(counts[position] + u64::from(values.is_valid(position)));
+            }
+            let some = |position: usize| counts[position + 1] > counts[first(position)];
+            if values.data_type() == &ArrowType::Int64 {
+                let ints = values.as_primitive::<Int64Type>();
+                let mut totals = Vec::with_capacity(rows + 1);
+                totals.push(0i128);
+                for position in 0..rows {
+                    let value = if ints.is_valid(position) {
+                        ints.value(position)
+                    } else {
+                        0
+                    };
+                    totals.push(totals[position] + i128::from(value));
+                }
+                let mut overflowed = false;
+                let sums: Int64Array = (0..rows)
+                    .map(|position| {
+                        let sum = totals[position + 1] - totals[first(position)];
+                        let sum = i64::try_from(sum).unwrap_or_else(|_| {
+                            overflowed = true;
+                            0
+                        });
+                        some(position).then_some(sum)
+                    })
+                    .collect();
+                if overflowed {
+                    return Err(Error("integer overflow".into()));
+                }
+                Arc::new(sums)
+            } else {
+                let floats = values.as_primitive::<Float64Type>();
+                let sums: Float64Array = moving_totals(floats, layout, call.offset)
+                    .into_iter()
+                    .map(|(sum, count)| (count > 0).then_some(sum))
+                    .collect();
+                Arc::new(sums)
+            }
+        }
+        WindowFn::MovingMin | WindowFn::MovingMax => {
+            let values = argument()?;
+            let largest = call.func == WindowFn::MovingMax;
+            if values.data_type() == &ArrowType::Int64 {
+                let ints = values.as_primitive::<Int64Type>();
+                Arc::new(moving_extreme(
+                    ints,
+                    layout,
+                    call.offset,
+                    |a, b| match largest {
+                        true => a > b,
+                        false => a < b,
+                    },
+                ))
+            } else {
+                // "Not a number" sorts above every number, as it does in `sort`.
+                let floats = values.as_primitive::<Float64Type>();
+                Arc::new(moving_extreme(
+                    floats,
+                    layout,
+                    call.offset,
+                    |a, b| match largest {
+                        true => a.total_cmp(&b).is_gt(),
+                        false => a.total_cmp(&b).is_lt(),
+                    },
+                ))
+            }
+        }
+        WindowFn::Diff | WindowFn::PctChange => {
+            let values = argument()?;
+            let earlier = |position: usize| {
+                let earlier = position.checked_sub(call.offset);
+                earlier.filter(|earlier| *earlier >= layout.start[position])
+            };
+            if call.func == WindowFn::Diff && values.data_type() == &ArrowType::Int64 {
+                let ints = values.as_primitive::<Int64Type>();
+                let mut overflowed = false;
+                let changes: Int64Array = (0..rows)
+                    .map(|position| {
+                        let earlier = earlier(position)?;
+                        if ints.is_null(position) || ints.is_null(earlier) {
+                            return None;
+                        }
+                        let change = ints.value(position).checked_sub(ints.value(earlier));
+                        overflowed |= change.is_none();
+                        change
+                    })
+                    .collect();
+                if overflowed {
+                    return Err(Error("integer overflow".into()));
+                }
+                Arc::new(changes)
+            } else {
+                let floats = cast(&values, &ArrowType::Float64)?;
+                let floats = floats.as_primitive::<Float64Type>();
+                let share = call.func == WindowFn::PctChange;
+                let changes: Float64Array = (0..rows)
+                    .map(|position| {
+                        let earlier = earlier(position)?;
+                        if floats.is_null(position) || floats.is_null(earlier) {
+                            return None;
+                        }
+                        let (now, then) = (floats.value(position), floats.value(earlier));
+                        Some(if share {
+                            (now - then) / then
+                        } else {
+                            now - then
+                        })
+                    })
+                    .collect();
+                Arc::new(changes)
+            }
+        }
+        WindowFn::FillForward | WindowFn::FillBackward => {
+            let values = argument()?;
+            // Each position takes the value at the nearest position that has one, looking
+            // back, or looking ahead, and never past the ends of its partition.
+            let forward = call.func == WindowFn::FillForward;
+            let mut source: Vec<Option<u32>> = vec![None; rows];
+            let mut nearest = None;
+            let mut fill = |position: usize, slot: &mut Option<u32>| {
+                let edge = match forward {
+                    true => layout.start[position] == position,
+                    false => layout.end[position] == position + 1,
+                };
+                if edge {
+                    nearest = None;
+                }
+                if values.is_valid(position) {
+                    nearest = Some(position as u32);
+                }
+                *slot = nearest;
+            };
+            match forward {
+                true => source
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(at, slot)| fill(at, slot)),
+                false => source
+                    .iter_mut()
+                    .enumerate()
+                    .rev()
+                    .for_each(|(at, slot)| fill(at, slot)),
+            }
+            take(&values, &UInt32Array::from(source), None)?
         }
         WindowFn::Agg(func) => {
             let agg = AggCall {

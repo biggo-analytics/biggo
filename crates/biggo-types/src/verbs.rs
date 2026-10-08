@@ -100,15 +100,7 @@ const VERBS: [&str; 60] = [
 pub fn builtin_names() -> Vec<&'static str> {
     let scalars = ScalarFn::ALL.iter().copied().map(ScalarFn::name);
     let aggregates = AggFn::ALL.iter().copied().map(AggFn::name);
-    let windows = [
-        WindowFn::RowNumber,
-        WindowFn::Rank,
-        WindowFn::Lag,
-        WindowFn::Lead,
-        WindowFn::CumSum,
-        WindowFn::MovingAvg,
-    ];
-    let windows = windows.into_iter().map(WindowFn::name);
+    let windows = WindowFn::OWN.iter().map(|(_, name)| *name);
     let mut names: Vec<&str> = VERBS.into_iter().chain(scalars).collect();
     names.extend(aggregates.chain(windows));
     names.sort_unstable();
@@ -2103,20 +2095,30 @@ impl Cx<'_> {
             .expect("called in a column scope")
             .schema
             .clone();
+        use WindowFn::*;
         let (value, rows) = match (func, call.args) {
-            (WindowFn::RowNumber | WindowFn::Rank, []) => (None, None),
-            (WindowFn::RowNumber | WindowFn::Rank, _) => {
+            (RowNumber | Rank | DenseRank | PercentRank | CumCount | Agg(AggFn::Count), []) => {
+                (None, None)
+            }
+            (RowNumber | Rank | DenseRank | PercentRank, _) => {
                 return self.error(call.span, format!("`{name}` takes no arguments"));
             }
-            (WindowFn::Agg(AggFn::Count), []) => (None, None),
-            (WindowFn::Lag | WindowFn::Lead | WindowFn::CumSum | WindowFn::Agg(_), [value]) => {
-                (Some(value), None)
+            (Ntile, [groups]) => (None, Some(groups)),
+            (Ntile, _) => {
+                let message = "`ntile` takes the number of groups, as in `ntile(4)`";
+                return self.error(call.span, message);
             }
-            (WindowFn::Lag | WindowFn::Lead | WindowFn::MovingAvg, [value, rows]) => {
-                (Some(value), Some(rows))
-            }
-            (WindowFn::MovingAvg, _) => {
-                let message = "`moving_avg` takes a column and a number of rows";
+            (
+                Lag | Lead | CumSum | CumCount | CumMin | CumMax | CumMean | Diff | PctChange
+                | FillForward | FillBackward | Agg(_),
+                [value],
+            ) => (Some(value), None),
+            (
+                Lag | Lead | MovingAvg | MovingSum | MovingMin | MovingMax | Diff | PctChange,
+                [value, rows],
+            ) => (Some(value), Some(rows)),
+            (MovingAvg | MovingSum | MovingMin | MovingMax, _) => {
+                let message = format!("`{name}` takes a column and a number of rows");
                 return self.error(call.span, message);
             }
             _ => return self.error(call.span, format!("`{name}` takes one column")),
@@ -2127,8 +2129,10 @@ impl Cx<'_> {
                 ast::Expr::Int(rows) if *rows >= 1 => *rows as usize,
                 _ => {
                     let span = self.ast.span(rows.value);
-                    let message =
-                        "the number of rows must be written as a whole number of at least 1";
+                    let what = if func == Ntile { "groups" } else { "rows" };
+                    let message = format!(
+                        "the number of {what} must be written as a whole number of at least 1"
+                    );
                     return self.error(span, message);
                 }
             },
@@ -2149,17 +2153,29 @@ impl Cx<'_> {
         };
         let numeric = arg_ty.is_some_and(|ty| matches!(ty.dtype, DataType::Int | DataType::Float));
         let ty = match (func, arg_ty) {
-            (WindowFn::RowNumber | WindowFn::Rank, _) => Ok(ColType::required(DataType::Int)),
-            (WindowFn::Lag | WindowFn::Lead, Some(arg)) => Ok(ColType::nullable(arg.dtype)),
-            (WindowFn::CumSum, Some(arg)) if numeric => Ok(arg),
-            (WindowFn::MovingAvg, Some(arg)) if numeric => {
+            (RowNumber | Rank | DenseRank | Ntile | CumCount, _) => {
+                Ok(ColType::required(DataType::Int))
+            }
+            (PercentRank, _) => Ok(ColType::required(DataType::Float)),
+            (Lag | Lead, Some(arg)) => Ok(ColType::nullable(arg.dtype)),
+            (FillForward | FillBackward, Some(arg)) => Ok(arg),
+            (CumMin | CumMax, Some(arg)) if arg.dtype == DataType::Bool => {
+                Err(format!("`{name}` does not work on bool"))
+            }
+            (CumMin | CumMax, Some(arg)) => Ok(arg),
+            (CumSum | MovingSum | MovingMin | MovingMax, Some(arg)) if numeric => Ok(arg),
+            (MovingAvg | CumMean, Some(arg)) if numeric => {
                 Ok(ColType::new(DataType::Float, arg.nullable))
             }
-            (WindowFn::CumSum | WindowFn::MovingAvg, Some(arg)) => {
-                Err(format!("`{name}` needs numbers, found {arg}"))
-            }
+            // The first rows of a partition have no earlier row to compare with.
+            (Diff, Some(arg)) if numeric => Ok(ColType::nullable(arg.dtype)),
+            (PctChange, Some(_)) if numeric => Ok(ColType::nullable(DataType::Float)),
+            (
+                CumSum | MovingAvg | MovingSum | MovingMin | MovingMax | CumMean | Diff | PctChange,
+                Some(arg),
+            ) => Err(format!("`{name}` needs numbers, found {arg}")),
             // A partition always has at least one row.
-            (WindowFn::Agg(agg), arg) => agg_type(agg, arg, None, true),
+            (Agg(agg), arg) => agg_type(agg, arg, None, true),
             _ => Err(format!("`{name}` needs a column")),
         };
         match ty {

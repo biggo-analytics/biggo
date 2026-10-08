@@ -10,8 +10,10 @@ root = pathlib.Path(__file__).resolve().parents[2]
 functions = (root / "crates/biggo-plan/src/expr.rs").read_text()
 verbs = (root / "crates/biggo-types/src/verbs.rs").read_text()
 
-# Scalar, aggregate and window functions are declared as `Variant => "name"`.
+# Scalar and aggregate functions are declared as `Variant => "name"`, and window functions as
+# `(WindowFn::Variant, "name")`.
 names = set(re.findall(r'=> "([a-z_0-9]+)"', functions))
+names |= set(re.findall(r'\(WindowFn::\w+, "([a-z_0-9]+)"\)', functions))
 # The other built-in functions are the strings of the `VERBS` list.
 listed = re.search(r"const VERBS: \[&str; \d+\] = \[(.*?)\];", verbs, re.S).group(1)
 names |= set(re.findall(r'"([a-z_0-9]+)"', listed))
