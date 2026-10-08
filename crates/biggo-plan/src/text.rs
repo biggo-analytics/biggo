@@ -96,6 +96,181 @@ pub fn index_of(text: &str, part: &str) -> Option<i64> {
     Some(text[..at].chars().count() as i64)
 }
 
+/// `text` without the characters of `chars` at its start, at its end, or both. With no
+/// `chars`, what is cut is whitespace.
+pub fn trim<'t>(text: &'t str, chars: Option<&str>, start: bool, end: bool) -> &'t str {
+    let cut = |c: char| match chars {
+        Some(chars) => chars.contains(c),
+        None => c.is_whitespace(),
+    };
+    let text = if start {
+        text.trim_start_matches(cut)
+    } else {
+        text
+    };
+    if end {
+        text.trim_end_matches(cut)
+    } else {
+        text
+    }
+}
+
+/// The first `count` characters of `text`, or the last.
+pub fn edge(text: &str, count: i64, first: bool) -> &str {
+    let count = count.max(0);
+    match first {
+        true => substring(text, 0, Some(count)),
+        false => {
+            let chars = text.chars().count() as i64;
+            substring(text, (chars - count).max(0), None)
+        }
+    }
+}
+
+/// `text` written `count` times over.
+pub fn repeat(text: &str, count: i64) -> Result<String, String> {
+    let count = count.max(0);
+    let length = (text.chars().count() as i64).saturating_mul(count);
+    if length > MAX_PADDED {
+        return Err(format!(
+            "cannot repeat a string to {length} characters; the most is {MAX_PADDED}"
+        ));
+    }
+    Ok(text.repeat(count as usize))
+}
+
+/// `text` with its characters in the opposite order.
+pub fn reverse(text: &str) -> String {
+    text.chars().rev().collect()
+}
+
+/// `text` with the first letter of each word in upper case and the rest in lower case. A
+/// word is a run of letters and digits.
+pub fn title(text: &str) -> String {
+    let mut titled = String::with_capacity(text.len());
+    let mut inside = false;
+    for c in text.chars() {
+        match (c.is_alphanumeric(), inside) {
+            (true, false) => titled.extend(c.to_uppercase()),
+            (true, true) => titled.extend(c.to_lowercase()),
+            (false, _) => titled.push(c),
+        }
+        inside = c.is_alphanumeric();
+    }
+    titled
+}
+
+/// Puts `separator` between every three digits of a whole number, counted from the right.
+fn grouped(digits: &str, separator: &str) -> String {
+    let mut text = String::with_capacity(digits.len() + digits.len() / 3 * separator.len());
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            text.push_str(separator);
+        }
+        text.push(digit);
+    }
+    text
+}
+
+/// A number from its sign, the digits before the point, and the digits after it.
+fn written(negative: bool, whole: &str, fraction: &str, separator: &str) -> String {
+    let zero = whole
+        .bytes()
+        .chain(fraction.bytes())
+        .all(|digit| digit == b'0');
+    let mut text = String::new();
+    // What rounds to zero is written without a sign.
+    if negative && !zero {
+        text.push('-');
+    }
+    text.push_str(&grouped(whole, separator));
+    if !fraction.is_empty() {
+        text.push('.');
+        text.push_str(fraction);
+    }
+    text
+}
+
+/// The most digits after the point that a formatted number can have.
+pub const MAX_DECIMALS: i64 = 15;
+
+/// A float with `decimals` digits after the point, rounded as `round` rounds, and with
+/// `separator` between the thousands.
+pub fn format_float(value: f64, decimals: i64, separator: &str) -> String {
+    if !value.is_finite() {
+        return value.to_string();
+    }
+    let decimals = decimals.clamp(0, MAX_DECIMALS) as usize;
+    let scale = 10f64.powi(decimals as i32);
+    let scaled = (value * scale).round();
+    let rounded = if scaled.is_finite() {
+        scaled / scale
+    } else {
+        value
+    };
+    let digits = format!("{:.decimals$}", rounded.abs());
+    let (whole, fraction) = digits.split_once('.').unwrap_or((&digits, ""));
+    written(rounded < 0.0, whole, fraction, separator)
+}
+
+/// A whole number, likewise. `scale` is the power of ten that `value` is multiplied by, 0
+/// for an int and more for a decimal, whose digits after the point it gives exactly.
+pub fn format_exact(value: i128, scale: u32, decimals: i64, separator: &str) -> String {
+    let decimals = decimals.clamp(0, MAX_DECIMALS) as u32;
+    let mut digits = value.unsigned_abs();
+    let mut have = scale;
+    // Digits past the last one wanted are rounded away, halves away from zero.
+    if have > decimals {
+        let unit = 10u128.pow(have - decimals);
+        digits = (digits + unit / 2) / unit;
+        have = decimals;
+    }
+    let unit = 10u128.pow(have);
+    let whole = (digits / unit).to_string();
+    let mut fraction = match have {
+        0 => String::new(),
+        have => format!("{:0width$}", digits % unit, width = have as usize),
+    };
+    fraction.extend(std::iter::repeat_n('0', (decimals - have) as usize));
+    written(value < 0, &whole, &fraction, separator)
+}
+
+/// The regular expression that matches what a SQL `LIKE` pattern matches: `%` stands for
+/// any run of characters, `_` for any one, and a backslash makes the next character plain.
+pub fn like(pattern: &str) -> Result<Regex, String> {
+    let mut source = String::from("(?s)^");
+    let mut chars = pattern.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '%' => source.push_str(".*"),
+            '_' => source.push('.'),
+            '\\' => match chars.next() {
+                Some(plain) => source.push_str(&regex::escape(plain.encode_utf8(&mut [0; 4]))),
+                None => return Err(format!("the pattern `{pattern}` ends in a backslash")),
+            },
+            c => source.push_str(&regex::escape(c.encode_utf8(&mut [0; 4]))),
+        }
+    }
+    source.push('$');
+    Regex::new(&source).map_err(|_| format!("`{pattern}` is too long a pattern"))
+}
+
+/// The SHA-256 digest of the bytes of `text`, as 64 hexadecimal digits, and the MD5 digest
+/// as 32.
+pub fn sha256(text: &str) -> String {
+    use sha2::Digest;
+    hex(&sha2::Sha256::digest(text.as_bytes()))
+}
+
+pub fn md5(text: &str) -> String {
+    use md5::Digest;
+    hex(&md5::Md5::digest(text.as_bytes()))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 /// The truth value that `text` spells out, in any letter case and with space around it.
 pub fn to_bool(text: &str) -> Option<bool> {
     let text = text.trim();
@@ -243,6 +418,69 @@ mod tests {
         assert_eq!(index_of("größe", "ß"), Some(3));
         assert_eq!(index_of("abc", ""), Some(0));
         assert_eq!(index_of("abc", "x"), None);
+    }
+
+    #[test]
+    fn numbers_are_written_for_people() {
+        assert_eq!(format_float(1234567.891, 2, ","), "1,234,567.89");
+        assert_eq!(format_float(-1234.5, 0, ","), "-1,235");
+        assert_eq!(format_float(0.5, 0, ","), "1");
+        assert_eq!(format_float(-0.004, 2, ","), "0.00");
+        assert_eq!(format_float(999.9995, 3, " "), "1 000.000");
+        assert_eq!(format_float(12.0, 3, ""), "12.000");
+        assert_eq!(format_float(f64::NAN, 2, ","), "NaN");
+        assert_eq!(format_float(f64::INFINITY, 2, ","), "inf");
+        assert_eq!(format_float(1e15, 0, ","), "1,000,000,000,000,000");
+        // A float this large is written out in full: 301 digits, a point, and two more.
+        assert_eq!(format_float(1e300, 2, "").len(), 304);
+        assert_eq!(format_exact(1234567, 0, 2, ","), "1,234,567.00");
+        assert_eq!(format_exact(-999, 0, 0, ","), "-999");
+        assert_eq!(format_exact(1_234_567_895_000, 6, 2, ","), "1,234,567.90");
+        assert_eq!(format_exact(-2_500_000, 6, 0, ","), "-3");
+        assert_eq!(format_exact(1_500_000, 6, 8, ","), "1.50000000");
+        assert_eq!(format_exact(-4_000, 6, 2, ","), "0.00");
+        assert_eq!(
+            format_exact(i128::from(i64::MIN), 0, 0, ","),
+            "-9,223,372,036,854,775,808"
+        );
+    }
+
+    #[test]
+    fn strings_are_cut_and_reshaped() {
+        assert_eq!(trim("  a b  ", None, true, false), "a b  ");
+        assert_eq!(trim("  a b  ", None, false, true), "  a b");
+        assert_eq!(trim("xxhixyx", Some("xy"), true, true), "hi");
+        assert_eq!(trim("abc", Some(""), true, true), "abc");
+        assert_eq!(edge("hello", 2, true), "he");
+        assert_eq!(edge("hello", 2, false), "lo");
+        assert_eq!(edge("hello", 9, false), "hello");
+        assert_eq!(edge("hello", -1, true), "");
+        assert_eq!(repeat("ab", 3).unwrap(), "ababab");
+        assert_eq!(repeat("ab", -1).unwrap(), "");
+        assert!(repeat("ab", MAX_PADDED).is_err());
+        assert_eq!(reverse("größe"), "eßörg");
+        assert_eq!(title("hELLO wORLD-wide 2nd"), "Hello World-Wide 2nd");
+        assert_eq!(
+            sha256("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(md5("abc"), "900150983cd24fb0d6963f7d28e17f72");
+    }
+
+    #[test]
+    fn like_patterns_match_whole_strings() {
+        let matches = |pattern: &str, text: &str| like(pattern).unwrap().is_match(text);
+        assert!(matches("wid%", "widget"));
+        assert!(!matches("wid%", "a widget"));
+        assert!(matches("%get", "widget"));
+        assert!(matches("w_dget", "widget"));
+        assert!(!matches("w_dget", "wdget"));
+        assert!(matches("50\\%", "50%"));
+        assert!(!matches("50\\%", "500"));
+        assert!(matches("a.b", "a.b"));
+        assert!(!matches("a.b", "axb"));
+        assert!(matches("%", "two\nlines"));
+        assert!(like("oops\\").is_err());
     }
 
     #[test]

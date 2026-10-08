@@ -1,0 +1,46 @@
+// Numbers written for people, and more ways to cut, test and reshape strings.
+
+print(format_number(1234567.891, 2), format_number(1234567, 0), format_number(-1234.5, 1), format_number(0.5, 0))
+print(format_number(1234567.895d, 2), format_number(2.5d, 0), format_number(-2.5d, 0), format_number(1.5d, 8))
+print(format_number(1234567.891, 2, " "), format_number(1234567.891, 2, ""), format_number(1234567.891, 3, "."))
+print(format_number(-0.004, 2), format_number(0.0 / 0.0, 2), format_number(1.0 / 0.0, 2), format_number(999.9995, 3))
+print(format_percent(0.125), format_percent(0.125, 1), format_percent(1), format_percent(-0.0049, 1), format_percent(0.5d, 2))
+
+print(trim_left("  a b  ") + "|", trim_right("  a b  ") + "|", trim("xxhixyx", "xy"), trim_left("0012300", "0"), trim_right("0012300", "0"))
+print(left("hello", 2), right("hello", 2), left("hello", 9), right("hello", 0) + "|", left("größe", 3), right("ราคา", 2))
+print(repeat("ab", 3), repeat("-", 10), repeat("ab", 0) + "|", reverse("hello"), reverse("größe"))
+print(title("hELLO wORLD-wide 2nd"), title("o'neil mcdonald"), title(""))
+print(concat("a", 1, 2.5, true, @2026-01-02, 1.50d), concat("only"), concat("a", null ?? "b", "c"))
+
+print(like("widget", "wid%"), like("a widget", "wid%"), like("widget", "%get"), like("widget", "w_dget"), like("50%", "50\\%"), like("500", "50\\%"))
+print(regex_count("a1b22c333", "[0-9]+"), regex_count("banana", "an"), regex_count("none", "x"), regex_count("", "x*"))
+print(sha256("abc"), md5("abc"))
+print(sha256(""), length(sha256("x")), length(md5("x")))
+
+// A null gives null, except in `concat`, which leaves it out.
+let none: string? = null
+let no_number: float? = null
+print(format_number(no_number, 2), trim_left(none), left(none, 2), repeat(none, 2), title(none), like(none, "%"), sha256(none))
+print(concat("a", none, "b"), concat(none), concat(no_number, 1))
+
+// On columns.
+type Sale = { date: date, region: string, product: string, qty: int, price: float? }
+let sales = read_csv<Sale>("data/sales.csv")
+sales
+  |> derive(revenue = qty * price)
+  |> select(
+    label = concat(title(product), " #", qty),
+    revenue = format_number(revenue, 2),
+    share = format_percent(qty / 45, 1),
+    code = upper(left(region, 1)) + right(to_string(date), 2),
+    starts = like(product, "g%"),
+    vowels = regex_count(product, "[aeiou]"),
+    key = left(md5(product), 8),
+  )
+  |> take(5)
+  |> print()
+print(sales |> where(like(region, "%th")) |> count_by(region))
+print(sales |> group(region) |> agg(units = sum(qty), paid = sum(qty * price)) |> select(region, units = format_number(units, 0), paid = format_number(paid, 1)))
+
+// The length of a string is limited.
+print(repeat("ab", 1000000))

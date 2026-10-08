@@ -544,7 +544,9 @@ fn call(func: ScalarFn, mut args: Vec<Col>, dtype: DataType, rows: usize) -> Res
         ScalarFn::Sqrt => first.map(|array| floats(array, f64::sqrt)),
         ScalarFn::Lower => first.map(|array| strings(array, str::to_lowercase)),
         ScalarFn::Upper => first.map(|array| strings(array, str::to_uppercase)),
-        ScalarFn::Trim => first.map(|array| strings(array, |s| s.trim().to_string())),
+        ScalarFn::Trim if args.is_empty() => {
+            first.map(|array| strings(array, |s| s.trim().to_string()))
+        }
         ScalarFn::Length => first.map(|array| {
             let lengths = array.as_string::<i32>().iter();
             let lengths: Int64Array = lengths
@@ -617,7 +619,22 @@ fn call(func: ScalarFn, mut args: Vec<Col>, dtype: DataType, rows: usize) -> Res
         | ScalarFn::IndexOf
         | ScalarFn::RegexMatch
         | ScalarFn::RegexExtract
-        | ScalarFn::RegexReplace => {
+        | ScalarFn::RegexReplace
+        | ScalarFn::Trim
+        | ScalarFn::TrimLeft
+        | ScalarFn::TrimRight
+        | ScalarFn::Left
+        | ScalarFn::Right
+        | ScalarFn::Repeat
+        | ScalarFn::Reverse
+        | ScalarFn::Title
+        | ScalarFn::Concat
+        | ScalarFn::Like
+        | ScalarFn::RegexCount
+        | ScalarFn::FormatNumber
+        | ScalarFn::FormatPercent
+        | ScalarFn::Sha256
+        | ScalarFn::Md5 => {
             args.insert(0, first);
             crate::text::call(func, &args, dtype, rows)
         }

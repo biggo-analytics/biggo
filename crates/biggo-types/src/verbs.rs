@@ -189,6 +189,18 @@ pub(crate) fn pass_through(field: &Field) -> (Arc<str>, plan::Expr) {
     )
 }
 
+/// The whole number that an expression writes out, with or without a minus sign.
+fn written_int(expr: &Expr) -> Option<i64> {
+    match &expr.kind {
+        ExprKind::Int(number) => Some(*number),
+        ExprKind::Neg(inner) => match inner.kind {
+            ExprKind::Int(number) => Some(-number),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// The result type of an aggregate over values of type `arg`, and of type `second` for the
 /// aggregates that relate two columns. `grouped` says that every group is known to have at
 /// least one row.
@@ -647,6 +659,11 @@ impl Cx<'_> {
                         let fixed: &[(usize, &str)] = match func {
                             ScalarFn::Round | ScalarFn::Trunc => &[(1, "the number of digits")],
                             ScalarFn::Hash => &[(1, "the seed")],
+                            ScalarFn::Like | ScalarFn::RegexCount => &[(1, "the pattern")],
+                            ScalarFn::FormatPercent => &[(1, "the number of decimals")],
+                            ScalarFn::FormatNumber => {
+                                &[(1, "the number of decimals"), (2, "the separator")]
+                            }
                             ScalarFn::RegexMatch | ScalarFn::RegexReplace => &[(1, "the pattern")],
                             ScalarFn::RegexExtract => &[(1, "the pattern"), (2, "the group")],
                             ScalarFn::FormatDate
@@ -2680,6 +2697,24 @@ impl Cx<'_> {
             ScalarFn::Greatest | ScalarFn::Least => {
                 return self.extreme(func, func.name(), call.span, args);
             }
+            // Values of any type, written one after the other.
+            ScalarFn::Concat => {
+                if args.is_empty() {
+                    return self.error(call.span, "`concat` takes one or more values");
+                }
+                for arg in &args {
+                    if arg.ty.to_col().is_none() {
+                        let message = match arg.ty {
+                            Type::Null => {
+                                "cannot tell which type this `null` has for `concat`".to_string()
+                            }
+                            _ => format!("`concat` cannot work on {}", arg.ty),
+                        };
+                        return self.error(arg.span, message);
+                    }
+                }
+                return Expr::new(ExprKind::Scalar(func, args), Type::Str, call.span);
+            }
             ScalarFn::NullIf => return self.null_if(call, args),
             _ => {}
         }
@@ -2768,7 +2803,26 @@ impl Cx<'_> {
             ScalarFn::Round if args.len() == 2 => &[Want::Fraction, Want::Count],
             ScalarFn::Round => &[Want::Fraction],
             ScalarFn::Floor | ScalarFn::Ceil | ScalarFn::Sqrt => &[Want::Float],
-            ScalarFn::Lower | ScalarFn::Upper | ScalarFn::Trim | ScalarFn::Length => &[Want::Str],
+            ScalarFn::Trim | ScalarFn::TrimLeft | ScalarFn::TrimRight if args.len() == 2 => {
+                &[Want::Str, Want::Str]
+            }
+            ScalarFn::Lower
+            | ScalarFn::Upper
+            | ScalarFn::Trim
+            | ScalarFn::TrimLeft
+            | ScalarFn::TrimRight
+            | ScalarFn::Length
+            | ScalarFn::Reverse
+            | ScalarFn::Title
+            | ScalarFn::Sha256
+            | ScalarFn::Md5 => &[Want::Str],
+            ScalarFn::Left | ScalarFn::Right | ScalarFn::Repeat => &[Want::Str, Want::Int],
+            ScalarFn::Like | ScalarFn::RegexCount => &[Want::Str, Want::Str],
+            ScalarFn::FormatNumber if args.len() == 3 => &[Want::Number, Want::Count, Want::Str],
+            ScalarFn::FormatNumber => &[Want::Number, Want::Count],
+            ScalarFn::FormatPercent if args.len() == 2 => &[Want::Number, Want::Count],
+            ScalarFn::FormatPercent => &[Want::Number],
+            ScalarFn::Concat => unreachable!("checked above"),
             ScalarFn::Contains | ScalarFn::StartsWith | ScalarFn::EndsWith => {
                 &[Want::Str, Want::Str]
             }
@@ -2797,9 +2851,14 @@ impl Cx<'_> {
                 | ScalarFn::PadLeft
                 | ScalarFn::PadRight
                 | ScalarFn::RegexExtract => "2 or 3 arguments".to_string(),
-                ScalarFn::Round | ScalarFn::Trunc | ScalarFn::Hash => {
-                    "1 or 2 arguments".to_string()
-                }
+                ScalarFn::Round
+                | ScalarFn::Trunc
+                | ScalarFn::Hash
+                | ScalarFn::Trim
+                | ScalarFn::TrimLeft
+                | ScalarFn::TrimRight
+                | ScalarFn::FormatPercent => "1 or 2 arguments".to_string(),
+                ScalarFn::FormatNumber => "2 or 3 arguments".to_string(),
                 _ if dated => {
                     let what = if func == ScalarFn::FormatDate {
                         "a date"
@@ -2900,8 +2959,29 @@ impl Cx<'_> {
         // A pattern that is written out is checked now, and so is the group asked of it.
         let regex = matches!(
             func,
-            ScalarFn::RegexMatch | ScalarFn::RegexExtract | ScalarFn::RegexReplace
+            ScalarFn::RegexMatch
+                | ScalarFn::RegexExtract
+                | ScalarFn::RegexReplace
+                | ScalarFn::RegexCount
         );
+        if func == ScalarFn::Like
+            && let ExprKind::Str(pattern) = &args[1].kind
+            && let Err(message) = text::like(pattern)
+        {
+            return self.error(args[1].span, message);
+        }
+        let formats = matches!(func, ScalarFn::FormatNumber | ScalarFn::FormatPercent);
+        if formats
+            && let Some(decimals) = args.get(1)
+            && let Some(count) = written_int(decimals)
+            && !(0..=text::MAX_DECIMALS).contains(&count)
+        {
+            let message = format!(
+                "the number of decimals is from 0 to {}, not {count}",
+                text::MAX_DECIMALS
+            );
+            return self.error(decimals.span, message);
+        }
         if regex && let ExprKind::Str(pattern) = &args[1].kind {
             let regex = match text::regex(pattern) {
                 Ok(regex) => regex,
@@ -2932,7 +3012,8 @@ impl Cx<'_> {
             | ScalarFn::TryToBool
             | ScalarFn::IsNan
             | ScalarFn::IsFinite
-            | ScalarFn::IsWeekend => Bool,
+            | ScalarFn::IsWeekend
+            | ScalarFn::Like => Bool,
             // A decimal stays exact when rounded.
             ScalarFn::Abs
             | ScalarFn::Round
@@ -2979,7 +3060,19 @@ impl Cx<'_> {
             | ScalarFn::RegexReplace
             | ScalarFn::FormatDate
             | ScalarFn::MonthName
-            | ScalarFn::DayName => Str,
+            | ScalarFn::DayName
+            | ScalarFn::TrimLeft
+            | ScalarFn::TrimRight
+            | ScalarFn::Left
+            | ScalarFn::Right
+            | ScalarFn::Repeat
+            | ScalarFn::Reverse
+            | ScalarFn::Title
+            | ScalarFn::Concat
+            | ScalarFn::FormatNumber
+            | ScalarFn::FormatPercent
+            | ScalarFn::Sha256
+            | ScalarFn::Md5 => Str,
             ScalarFn::Length
             | ScalarFn::IndexOf
             | ScalarFn::Year
@@ -3001,7 +3094,8 @@ impl Cx<'_> {
             | ScalarFn::YearsBetween
             | ScalarFn::ToUnix
             | ScalarFn::FiscalYear
-            | ScalarFn::Hash => Int,
+            | ScalarFn::Hash
+            | ScalarFn::RegexCount => Int,
             ScalarFn::ToDate
             | ScalarFn::TryToDate
             | ScalarFn::StartOfWeek

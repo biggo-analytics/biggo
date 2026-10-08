@@ -92,7 +92,17 @@ true false 3.14159 1.0 180.0
 | --- | --- | --- |
 | `length(s)` | `int` | Number of characters (Unicode code points) |
 | `lower(s)` `upper(s)` | `string` | Lowercase / uppercase |
-| `trim(s)` | `string` | Removes whitespace at both ends |
+| `trim(s)`, `trim_left(s)`, `trim_right(s)` | `string` | Removes whitespace at both ends, at the start, or at the end |
+| `trim(s, chars)`, `trim_left(s, chars)`, `trim_right(s, chars)` | `string` | Removes any of the characters of `chars` instead of whitespace |
+| `left(s, n)`, `right(s, n)` | `string` | The first `n` characters, and the last |
+| `repeat(s, n)` | `string` | `s` written `n` times over |
+| `reverse(s)` | `string` | The characters in the opposite order |
+| `title(s)` | `string` | Each word with its first letter in upper case and the rest in lower case |
+| `concat(a, b, ...)` | `string` | Values of any type written one after the other, nulls left out |
+| `like(s, pattern)` | `bool` | Whether `s` fits a SQL pattern: `%` is any run of characters, `_` any one |
+| `format_number(x, decimals)`, `format_number(x, decimals, separator)` | `string` | A number with that many digits after the point and `,` between thousands, or another separator |
+| `format_percent(x)`, `format_percent(x, decimals)` | `string` | A share as so many in a hundred: `0.125` as `"12.5%"` |
+| `sha256(s)`, `md5(s)` | `string` | The digest of the text, as 64 and as 32 hexadecimal digits |
 | `contains(s, part)` | `bool` | `s` has `part` inside it |
 | `starts_with(s, part)` | `bool` | `s` starts with `part` |
 | `ends_with(s, part)` | `bool` | `s` ends with `part` |
@@ -140,6 +150,36 @@ a/b/c b c
 - `split(s, separator)` gives all the pieces at once, as a list. It is under
   [Lists and maps](#lists-and-maps), because a column cannot hold a list.
 
+Numbers written for people, and the other functions:
+
+```biggo
+print(format_number(1234567.891, 2), format_number(1234567, 0), format_number(0.5d, 0), format_number(1234567.891, 2, " "))
+print(format_percent(0.125), format_percent(0.125, 1), concat("order #", 42, " on ", @2026-01-05))
+print(trim_left("0012300", "0"), left("hello", 2), right("hello", 3), repeat("=", 8), title("hello WORLD"))
+print(like("widget", "wid%"), like("widget", "w_dget"), like("a widget", "wid%"), left(sha256("abc"), 12))
+```
+
+```text output
+1,234,567.89 1,234,567 1 1 234 567.89
+13% 12.5% order #42 on 2026-01-05
+12300 he llo ======== Hello World
+true true false ba7816bf8f01
+```
+
+- `format_number` rounds as `round` does, halves away from zero, and writes what rounds to zero
+  without a sign. The mark before the decimals is always a point. It takes 0 to 15 decimals,
+  and both they and the separator are values of the program, not columns.
+- `concat` writes each value as `to_string` does and leaves nulls out, where `+` takes only
+  strings and gives null as soon as one is null.
+- `like` matches the whole string and tells upper case from lower. Write `\%` or `\_` for a
+  percent sign or an underscore as such. For anything more, there is `regex_match`.
+- `reverse`, `left`, `right` and `title` go by characters. A letter made of several, such as a
+  Thai consonant with a vowel above it, is taken apart by `reverse`.
+- `sha256` and `md5` give the same digest as every other tool does for the same UTF-8 text.
+  Use them for keys that have to be the same everywhere, and to hide an identifier before data
+  is passed on. A digest of a short value, such as a phone number, can be undone by trying
+  every value, so it hides little unless a secret text is joined on first.
+
 ### Regular expressions
 
 | Function | Returns | Meaning |
@@ -147,6 +187,7 @@ a/b/c b c
 | `regex_match(s, pattern)` | `bool` | Whether `pattern` matches anywhere in `s` |
 | `regex_extract(s, pattern)`, `regex_extract(s, pattern, group)` | `string?` | The first match of `pattern` in `s`, or the part of it that group number `group` matched; null if there is no match |
 | `regex_replace(s, pattern, to)` | `string` | `s` with every match of `pattern` replaced by `to` |
+| `regex_count(s, pattern)` | `int` | How many times `pattern` matches in `s` |
 
 ```biggo
 print(regex_match("order-123", "[0-9]+"), regex_match("order-123", "^[0-9]+$"))

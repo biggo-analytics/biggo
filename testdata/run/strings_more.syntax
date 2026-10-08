@@ -1,0 +1,108 @@
+(call print
+  (call format_number 1234567.891 2)
+  (call format_number 1234567 0)
+  (call format_number (- 1234.5) 1)
+  (call format_number 0.5 0))
+(call print
+  (call format_number 1234567.895d 2)
+  (call format_number 2.5d 0)
+  (call format_number (- 2.5d) 0)
+  (call format_number 1.5d 8))
+(call print
+  (call format_number 1234567.891 2 " ")
+  (call format_number 1234567.891 2 "")
+  (call format_number 1234567.891 3 "."))
+(call print
+  (call format_number (- 0.004) 2)
+  (call format_number (/ 0.0 0.0) 2)
+  (call format_number (/ 1.0 0.0) 2)
+  (call format_number 999.9995 3))
+(call print
+  (call format_percent 0.125)
+  (call format_percent 0.125 1)
+  (call format_percent 1)
+  (call format_percent (- 0.0049) 1)
+  (call format_percent 0.5d 2))
+(call print
+  (+ (call trim_left "  a b  ") "|")
+  (+ (call trim_right "  a b  ") "|")
+  (call trim "xxhixyx" "xy")
+  (call trim_left "0012300" "0")
+  (call trim_right "0012300" "0"))
+(call print
+  (call left "hello" 2)
+  (call right "hello" 2)
+  (call left "hello" 9)
+  (+ (call right "hello" 0) "|")
+  (call left "größe" 3)
+  (call right "ราคา" 2))
+(call print
+  (call repeat "ab" 3)
+  (call repeat "-" 10)
+  (+ (call repeat "ab" 0) "|")
+  (call reverse "hello")
+  (call reverse "größe"))
+(call print
+  (call title "hELLO wORLD-wide 2nd")
+  (call title "o'neil mcdonald")
+  (call title ""))
+(call print
+  (call concat "a" 1 2.5 true @2026-01-02 1.5d)
+  (call concat "only")
+  (call concat "a" (?? null "b") "c"))
+(call print
+  (call like "widget" "wid%")
+  (call like "a widget" "wid%")
+  (call like "widget" "%get")
+  (call like "widget" "w_dget")
+  (call like "50%" "50\\%")
+  (call like "500" "50\\%"))
+(call print
+  (call regex_count "a1b22c333" "[0-9]+")
+  (call regex_count "banana" "an")
+  (call regex_count "none" "x")
+  (call regex_count "" "x*"))
+(call print (call sha256 "abc") (call md5 "abc"))
+(call print
+  (call sha256 "")
+  (call length (call sha256 "x"))
+  (call length (call md5 "x")))
+(let none: string? null)
+(let no_number: float? null)
+(call print
+  (call format_number no_number 2)
+  (call trim_left none)
+  (call left none 2)
+  (call repeat none 2)
+  (call title none)
+  (call like none "%")
+  (call sha256 none))
+(call print
+  (call concat "a" none "b")
+  (call concat none)
+  (call concat no_number 1))
+(type Sale {date: date, region: string, product: string, qty: int, price: float?})
+(let sales (call read_csv <Sale> "data/sales.csv"))
+(|> sales
+  (call derive (revenue: (* qty price)))
+  (call select
+    (label: (call concat (call title product) " #" qty))
+    (revenue: (call format_number revenue 2))
+    (share: (call format_percent (/ qty 45) 1))
+    (code:
+      (+ (call upper (call left region 1)) (call right (call to_string date) 2)))
+    (starts: (call like product "g%"))
+    (vowels: (call regex_count product "[aeiou]"))
+    (key: (call left (call md5 product) 8)))
+  (call take 5)
+  (call print))
+(call print
+  (|> sales (call where (call like region "%th")) (call count_by region)))
+(call print
+  (|> sales
+    (call group region)
+    (call agg (units: (call sum qty)) (paid: (call sum (* qty price))))
+    (call select region
+      (units: (call format_number units 0))
+      (paid: (call format_number paid 1)))))
+(call print (call repeat "ab" 1000000))

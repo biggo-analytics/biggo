@@ -295,6 +295,25 @@ functions! {
     BuddhistYear => "buddhist_year",
     /// A number that is the same for the same value everywhere, and spread evenly.
     Hash => "hash",
+    TrimLeft => "trim_left",
+    TrimRight => "trim_right",
+    /// The first characters of a string, and the last.
+    Left => "left",
+    Right => "right",
+    Repeat => "repeat",
+    Reverse => "reverse",
+    /// Each word with its first letter in upper case.
+    Title => "title",
+    /// Values of any type joined as text, nulls left out.
+    Concat => "concat",
+    /// Whether a string fits a SQL pattern, in which `%` is any run of characters.
+    Like => "like",
+    RegexCount => "regex_count",
+    /// A number as text with separators of thousands and a fixed count of decimals.
+    FormatNumber => "format_number",
+    FormatPercent => "format_percent",
+    Sha256 => "sha256",
+    Md5 => "md5",
     }
 }
 
@@ -404,6 +423,17 @@ impl ScalarFn {
                 | IsWeekend
                 | ToUnix
                 | Hash
+                | TrimLeft
+                | TrimRight
+                | Left
+                | Right
+                | Reverse
+                | Title
+                | Concat
+                | FormatNumber
+                | FormatPercent
+                | Sha256
+                | Md5
         )
     }
 }

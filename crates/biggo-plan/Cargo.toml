@@ -9,4 +9,6 @@ repository.workspace = true
 biggo-syntax.workspace = true
 chrono = "0.4.45"
 encoding_rs = "0.8.42"
+md-5 = "0.11.0"
 regex = "1.13.1"
+sha2 = "0.11.0"

@@ -111,7 +111,7 @@ type rule, gives the same answer on a column as on a single value, handles null,
 | 3 | Aggregates | [4](#4-aggregates) | Quantiles, conditional counts and joined strings are in every report |
 | 4 | Window functions | [5](#5-window-functions) | Growth, running totals and gap filling for time series |
 | 5 | Table operations | [6](#6-table-operations) | `count_by`, sampling, set operations, checks on data quality |
-| 6 | Strings and formatting | [3](#3-strings-and-formatting) | Numbers formatted for people, and tables that line up for Thai text |
+| 6 | Strings and formatting | [3](#3-strings-and-formatting) | Numbers formatted for people, and the string functions that SQL and spreadsheets have |
 | 7 | Lists, maps and records | [7](#7-lists-maps-and-records) | Ordinary code catches up with what tables can do |
 | 8 | CI, prebuilt binaries, the extension tried in VS Code | [11](#11-tooling) | Completes 0.2. It can be done at any point, since nothing else depends on it |
 | 9 | `biggo infer`, the remaining CSV and JSON layouts, many files, `env` | [8](#8-getting-data-in-and-out) | Removes the first obstacle of a new user: writing every column type by hand |
@@ -178,28 +178,24 @@ Exists: date and datetime literals, `year` `month` `day` `hour` `minute` `second
 
 ### 3. Strings and formatting
 
-Exists: `length` `lower` `upper` `trim` `contains` `starts_with` `ends_with` `index_of`
-`substring` `replace` `split` `split_part` `pad_left` `pad_right` `regex_match` `regex_extract`
-`regex_replace`, and `+`.
+Exists: `length` `lower` `upper` `title` `trim` `trim_left` `trim_right` `contains` `starts_with`
+`ends_with` `index_of` `like` `substring` `left` `right` `replace` `split` `split_part` `pad_left`
+`pad_right` `repeat` `reverse` `concat` `format_number` `format_percent` `sha256` `md5`
+`regex_match` `regex_extract` `regex_replace` `regex_count`, and `+`. Tables print with their
+columns lined up by display width, for Thai and other scripts too.
 
 | Feature | Result | What it does | Priority |
 | --- | --- | --- | --- |
-| `format_number(x, decimals)`, with `thousands = ","` | `string` | `1234567.5` as `"1,234,567.50"` | Must |
-| `trim_left(s)`, `trim_right(s)`, `trim(s, chars)` | `string` | Trimming one end, or other characters than whitespace | Must |
-| table printing by display width | | Columns that line up for Thai, Chinese, Japanese and combining marks. Today each code point is counted as one cell, so such tables print ragged | Should |
-| `format_percent(x, decimals)` | `string` | `0.125` as `"12.5%"` | Should |
-| `left(s, n)`, `right(s, n)` | `string` | The first or last `n` characters | Should |
-| `repeat(s, n)`, `reverse(s)`, `title(s)` | `string` | Repeated, backwards, and with each word capitalized | Should |
-| `concat(a, b, ...)` | `string` | Values of any type joined as text, without `to_string` on each | Should |
-| `like(s, pattern)` | `bool` | The SQL pattern with `%` and `_`, for people who think in SQL | Should |
-| `regex_count(s, pattern)` | `int` | How many times a pattern matches | Should |
-| `sha256(s)`, `md5(s)` | `string` | A stable key, or a personal identifier masked before data is shared | Should |
 | `json_get(s, path)` | `string?` | A value out of JSON text that sits in a string column | Should |
 | `levenshtein(a, b)`, `similarity(a, b)` | `int`, `float` | How alike two strings are, for matching names that are spelled differently | Later |
 | `normalize(s)`, `remove_accents(s)` | `string` | One Unicode form for text that looks the same | Later |
 
 - [x] `substring`, `replace`, `split`, `split_part`, `pad_left`, `pad_right`, `index_of`
-- [x] Regular expressions: `regex_match`, `regex_extract`, `regex_replace`
+- [x] Regular expressions: `regex_match`, `regex_extract`, `regex_replace`, `regex_count`
+- [x] `format_number`, `format_percent`, `concat`, `like`
+- [x] `trim_left`, `trim_right`, trimming other characters, `left`, `right`, `repeat`, `reverse`,
+      `title`
+- [x] `sha256`, `md5`
 
 ### 4. Aggregates
 

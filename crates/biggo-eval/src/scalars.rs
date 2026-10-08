@@ -22,8 +22,9 @@ pub fn call(func: ScalarFn, args: &[Value]) -> Option<Result<Value, String>> {
     if func == IsNull {
         return Some(Ok(Value::Bool(matches!(args[0], Value::Null))));
     }
-    // `null_if` keeps its value when what it looks for is null; the engine works that out.
-    if func == NullIf {
+    // `null_if` keeps its value when what it looks for is null, and `concat` leaves nulls
+    // out; the engine works those out.
+    if matches!(func, NullIf | Concat) {
         return None;
     }
     // Every other function gives null for a null argument.

@@ -1,0 +1,203 @@
+error: `format_number` takes 2 or 3 arguments
+ --> check/strings_more.bgo:5:1
+  |
+5 | format_number(1)
+  | ^^^^^^^^^^^^^^^^
+
+error: `format_number` expects a number, found string
+ --> check/strings_more.bgo:6:15
+  |
+6 | format_number("1", 2)
+  |               ^^^
+
+error: `format_number` expects an int, found float
+ --> check/strings_more.bgo:7:18
+  |
+7 | format_number(1, 2.5)
+  |                  ^^^
+
+error: the number of decimals is from 0 to 15, not -1
+ --> check/strings_more.bgo:8:18
+  |
+8 | format_number(1, -1)
+  |                  ^^
+
+error: the number of decimals is from 0 to 15, not 16
+ --> check/strings_more.bgo:9:18
+  |
+9 | format_number(1, 16)
+  |                  ^^
+
+error: `format_number` expects a string, found int
+  --> check/strings_more.bgo:10:21
+   |
+10 | format_number(1, 2, 3)
+   |                     ^
+
+error: `format_number` takes 2 or 3 arguments
+  --> check/strings_more.bgo:11:1
+   |
+11 | format_number(1, 2, ",", ".")
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the number of decimals of `format_number` cannot depend on a column
+  --> check/strings_more.bgo:12:21
+   |
+12 | sales |> derive(a = format_number(price, qty))
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: the separator of `format_number` cannot depend on a column
+  --> check/strings_more.bgo:13:21
+   |
+13 | sales |> derive(a = format_number(price, 2, region))
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `format_percent` expects a number, found string
+  --> check/strings_more.bgo:14:16
+   |
+14 | format_percent("half")
+   |                ^^^^^^
+
+error: the number of decimals is from 0 to 15, not 99
+  --> check/strings_more.bgo:15:21
+   |
+15 | format_percent(0.5, 99)
+   |                     ^^
+
+error: `trim_left` takes 1 or 2 arguments
+  --> check/strings_more.bgo:16:1
+   |
+16 | trim_left()
+   | ^^^^^^^^^^^
+
+error: `trim_left` expects a string, found int
+  --> check/strings_more.bgo:17:11
+   |
+17 | trim_left(1)
+   |           ^
+
+error: `trim` expects a string, found int
+  --> check/strings_more.bgo:18:11
+   |
+18 | trim("a", 1)
+   |           ^
+
+error: `trim` takes 1 or 2 arguments
+  --> check/strings_more.bgo:19:1
+   |
+19 | trim("a", "b", "c")
+   | ^^^^^^^^^^^^^^^^^^^
+
+error: `left` takes 2 arguments
+  --> check/strings_more.bgo:20:1
+   |
+20 | left("abc")
+   | ^^^^^^^^^^^
+
+error: `left` expects an int, found string
+  --> check/strings_more.bgo:21:13
+   |
+21 | left("abc", "2")
+   |             ^^^
+
+error: `right` expects a string, found int
+  --> check/strings_more.bgo:22:7
+   |
+22 | right(5, 2)
+   |       ^
+
+error: `repeat` takes 2 arguments
+  --> check/strings_more.bgo:23:1
+   |
+23 | repeat("a")
+   | ^^^^^^^^^^^
+
+error: `repeat` expects an int, found float
+  --> check/strings_more.bgo:24:13
+   |
+24 | repeat("a", 1.5)
+   |             ^^^
+
+error: `reverse` expects a string, found int
+  --> check/strings_more.bgo:25:9
+   |
+25 | reverse(123)
+   |         ^^^
+
+error: `title` takes 1 argument
+  --> check/strings_more.bgo:26:1
+   |
+26 | title()
+   | ^^^^^^^
+
+error: `concat` takes one or more values
+  --> check/strings_more.bgo:27:1
+   |
+27 | concat()
+   | ^^^^^^^^
+
+error: `concat` cannot work on list<int>
+  --> check/strings_more.bgo:28:8
+   |
+28 | concat([1])
+   |        ^^^
+
+error: `concat` cannot work on table<{region: string, qty: int, price: float?}>
+  --> check/strings_more.bgo:29:8
+   |
+29 | concat(sales)
+   |        ^^^^^
+
+error: `like` takes 2 arguments
+  --> check/strings_more.bgo:30:1
+   |
+30 | like("abc")
+   | ^^^^^^^^^^^
+
+error: `like` expects a string, found int
+  --> check/strings_more.bgo:31:13
+   |
+31 | like("abc", 5)
+   |             ^
+
+error: the pattern `oops\` ends in a backslash
+  --> check/strings_more.bgo:32:13
+   |
+32 | like("abc", "oops\\")
+   |             ^^^^^^^^
+
+error: the pattern of `like` cannot depend on a column
+  --> check/strings_more.bgo:33:16
+   |
+33 | sales |> where(like(region, region))
+   |                ^^^^^^^^^^^^^^^^^^^^
+
+error: `regex_count` takes 2 arguments
+  --> check/strings_more.bgo:34:1
+   |
+34 | regex_count("abc")
+   | ^^^^^^^^^^^^^^^^^^
+
+error: `a(` is not a regular expression: unclosed group
+  --> check/strings_more.bgo:35:20
+   |
+35 | regex_count("abc", "a(")
+   |                    ^^^^
+
+error: the pattern of `regex_count` cannot depend on a column
+  --> check/strings_more.bgo:36:21
+   |
+36 | sales |> derive(n = regex_count(region, region))
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `sha256` expects a string, found int
+  --> check/strings_more.bgo:37:8
+   |
+37 | sha256(1)
+   |        ^
+
+error: `md5` takes 1 argument
+  --> check/strings_more.bgo:38:1
+   |
+38 | md5()
+   | ^^^^^
