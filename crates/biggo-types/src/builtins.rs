@@ -24,6 +24,7 @@ impl Cx<'_> {
             "to_rows" => self.builtin_to_rows(call),
             "from_rows" => self.builtin_from_rows(call),
             "assert" => self.builtin_assert(call),
+            "fail" => self.builtin_fail(call),
             "assert_eq" => self.builtin_assert_eq(call),
             "args" => self.builtin_args(call),
             "env" => self.builtin_env(call),
@@ -455,6 +456,22 @@ impl Cx<'_> {
     }
 
     /// `assert(condition)` or `assert(condition, "what went wrong")`
+    /// `fail(message)` stops the program. It is written where a value is wanted, so its type
+    /// is that of any value.
+    fn builtin_fail(&mut self, call: &Call) -> Option<Expr> {
+        let [message] = self.exactly(call, "a message")?;
+        // A value that a query takes from the program is worked out before any row is
+        // read, so the program would stop whatever the rows hold.
+        if !self.columns.is_empty() {
+            let message = "`fail` stops the program at once, so it cannot be part of an \
+                           expression over columns; check the table with `assert` instead";
+            self.error(call.span, message);
+            return None;
+        }
+        let message = self.scalar_arg(message, Type::Str, "the message")?;
+        self.builtin(call, Builtin::Fail, vec![message], Type::Never)
+    }
+
     fn builtin_assert(&mut self, call: &Call) -> Option<Expr> {
         if !self.all_positional(call, call.args) {
             return None;

@@ -1,0 +1,10 @@
+(let t (call from_rows (list (record (n: 1)))))
+(call fail)
+(call fail 5)
+(call fail "a" "b")
+(|> t (call derive (m: (if (> n 0) (block n) (block (call fail "negative"))))))
+(fn checked(n: int) -> int
+  (block (if (> n 0) (block n) (block (call fail "negative")))))
+(|> t (call derive (m: (call checked n))))
+(let n: int (if true (block "one") (block (call fail "x"))))
+(let xs (list (call fail "x")))

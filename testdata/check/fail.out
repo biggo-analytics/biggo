@@ -1,0 +1,41 @@
+error: `fail` takes a message
+ --> check/fail.bgo:4:1
+  |
+4 | fail()
+  | ^^^^^^
+
+error: the message must be string, found int
+ --> check/fail.bgo:5:6
+  |
+5 | fail(5)
+  |      ^
+
+error: `fail` takes a message
+ --> check/fail.bgo:6:1
+  |
+6 | fail("a", "b")
+  | ^^^^^^^^^^^^^^
+
+error: `fail` stops the program at once, so it cannot be part of an expression over columns; check the table with `assert` instead
+ --> check/fail.bgo:7:39
+  |
+7 | t |> derive(m = if n > 0 { n } else { fail("negative") })
+  |                                       ^^^^^^^^^^^^^^^^
+
+error: `checked` cannot be used on a column: it can stop the program with `fail`
+ --> check/fail.bgo:9:17
+  |
+9 | t |> derive(m = checked(n))
+  |                 ^^^^^^^^^^
+
+error: expected int, found string
+  --> check/fail.bgo:10:14
+   |
+10 | let n: int = if true { "one" } else { fail("x") }
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: a list cannot hold values of type never
+  --> check/fail.bgo:11:10
+   |
+11 | let xs = [fail("x")]
+   |          ^^^^^^^^^^^

@@ -191,6 +191,8 @@ pub enum Builtin {
     /// A map with one entry added or replaced.
     Put,
     HasKey,
+    /// Stops the program with a message.
+    Fail,
     /// Stops the program unless its argument is true.
     Assert,
     /// Stops the program unless its two arguments are equal.

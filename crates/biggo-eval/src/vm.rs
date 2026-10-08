@@ -985,6 +985,7 @@ impl<W: Write> Vm<W> {
                     pieces.map(|piece| Value::Str(piece.into())).collect(),
                 ))
             }
+            Builtin::Fail => self.fail(frame, text(0).to_string()),
             Builtin::Assert => match (&args[0], args.get(1)) {
                 (Value::Bool(true), _) => Ok(Value::Unit),
                 (_, Some(message)) => self.fail(frame, format!("assertion failed: {message}")),

@@ -1,0 +1,11 @@
+// Mistakes with `fail`.
+let t = from_rows([{ n: 1 }])
+
+fail()
+fail(5)
+fail("a", "b")
+t |> derive(m = if n > 0 { n } else { fail("negative") })
+fn checked(n: int) -> int { if n > 0 { n } else { fail("negative") } }
+t |> derive(m = checked(n))
+let n: int = if true { "one" } else { fail("x") }
+let xs = [fail("x")]

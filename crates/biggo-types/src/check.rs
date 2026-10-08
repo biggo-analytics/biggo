@@ -292,7 +292,7 @@ fn base_type(base: Base) -> Type {
 pub(crate) fn storable(ty: &Type) -> bool {
     !matches!(
         ty,
-        Type::Unit | Type::Table(_) | Type::Grouped(_) | Type::Fn(_)
+        Type::Unit | Type::Never | Type::Table(_) | Type::Grouped(_) | Type::Fn(_)
     )
 }
 
@@ -343,6 +343,8 @@ pub(crate) fn unify(a: &Type, b: &Type) -> Option<Type> {
     }
     match (a, b) {
         (Type::Error, other) | (other, Type::Error) => Some(other.clone()),
+        // Where one branch does not come back, the value is that of the other.
+        (Type::Never, other) | (other, Type::Never) => Some(other.clone()),
         (Type::Null, other) | (other, Type::Null) => {
             storable(other).then(|| other.clone().or_null())
         }
@@ -391,7 +393,7 @@ fn retype(expr: &mut Expr, ty: &Type) {
 /// differ only in that `to` allows null in more places. Values never change after they are
 /// made, so a list of ints can stand in for a list of ints that may be null.
 fn fits(from: &Type, to: &Type) -> bool {
-    if from == to {
+    if from == to || *from == Type::Never {
         return true;
     }
     match (from, to) {

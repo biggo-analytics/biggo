@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use biggo_syntax::Span;
 
 use crate::check::Cx;
-use crate::hir::{Callee, Expr, ExprKind, Stmt};
+use crate::hir::{Builtin, Callee, Expr, ExprKind, Stmt};
 
 /// How many calls deep a function may reach other functions: more is a function that calls
 /// itself, which has no body to write out.
@@ -87,6 +87,11 @@ impl Cx<'_> {
             }
             ExprKind::Capture(_) | ExprKind::SelfFn | ExprKind::Closure(..) => {
                 return Err(Some("it is, or makes, a function inside a function"));
+            }
+            // A query takes what does not depend on a row before it reads any row, so the
+            // program would stop whatever the rows hold.
+            ExprKind::Builtin(Builtin::Fail, _) => {
+                return Err(Some("it can stop the program with `fail`"));
             }
             _ => {
                 let mut result = Ok(());

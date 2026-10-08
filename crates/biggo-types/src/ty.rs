@@ -29,6 +29,9 @@ pub enum Type {
     /// The result of `group`, which only `agg` accepts.
     Grouped(Arc<Grouped>),
     Fn(Arc<FnType>),
+    /// The type of an expression that gives no value because the program does not go on
+    /// after it, such as a call to `fail`. It stands in for a value of any type.
+    Never,
     /// The type of an expression that already has an error. It is accepted everywhere, so that
     /// one mistake is reported once.
     Error,
@@ -69,7 +72,7 @@ impl Type {
     /// `T?` for this type; types that already admit null stay as they are.
     pub fn or_null(self) -> Type {
         match self {
-            Type::Nullable(_) | Type::Null | Type::Error | Type::Unit => self,
+            Type::Nullable(_) | Type::Null | Type::Error | Type::Unit | Type::Never => self,
             other => Type::Nullable(Box::new(other)),
         }
     }
@@ -150,6 +153,7 @@ impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Type::Unit => f.write_str("unit"),
+            Type::Never => f.write_str("never"),
             Type::Null => f.write_str("null"),
             Type::Int => f.write_str("int"),
             Type::Float => f.write_str("float"),

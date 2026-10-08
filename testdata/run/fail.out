@@ -1,0 +1,9 @@
+0.07 0.0 3
+[0.07, 0.0] 3
+true
+2026-01
+error: expected a positive number, got -4
+  --> run/fail.bgo:13:25
+   |
+13 |   if n > 0 { n } else { fail("expected a positive number, got " + to_string(n)) }
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

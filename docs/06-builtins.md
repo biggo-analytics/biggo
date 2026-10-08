@@ -834,6 +834,7 @@ Details: [statistics](04-tables.md#statistics)
 | `to_markdown(t)`, `to_html(t)` | The whole table as the text of a Markdown table, or of an HTML `<table>` |
 | `write_markdown(t, path)`, `write_html(t, path)` | Writes the whole table as a Markdown file, or as a page that a browser opens |
 | `explain(t)` | Prints the query's plan, both before and after it is optimized, without running it |
+| `fail(message)` | Stops the program with the message as its error. It can be written where a value of any type is wanted |
 | `assert(cond)`, `assert(cond, message)` | Stops the program with an error if `cond` is not `true` |
 | `assert_eq(a, b)` | Stops the program if the two values are not equal; it can compare lists, records, maps and tables |
 
@@ -859,6 +860,37 @@ optimized plan:
 `print` shows strings and dates bare when they are top-level values, and as literals
 (with `"` or `@`) when they are inside a list, record or map. Details of `assert`:
 [biggo test](07-tools.md#biggo-test)
+
+`fail` is for a function that is given something it cannot work with. Since it never gives a
+value, it fits in a branch of an `if` or a `match`, or after `??` (as in
+`env("TOKEN") ?? fail("TOKEN is not set")`), whatever type the other branch has:
+
+```biggo error
+fn rate(code: string) -> float {
+  match code {
+    "std" => 0.07
+    "zero" => 0.0
+    _ => fail("there is no tax rate `" + code + "`")
+  }
+}
+
+let folder = env("REPORT_FOLDER") ?? "data"
+print(rate("std"), folder)
+print(rate("reduced"))
+```
+
+```text output
+0.07 data
+error: there is no tax rate `reduced`
+ --> example.bgo:5:10
+  |
+5 |     _ => fail("there is no tax rate `" + code + "`")
+  |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```
+
+`fail` cannot be used in an expression over columns, where it would stop the program before any
+row is read. To stop on bad data in a table, count the bad rows and `assert` on the count:
+`assert(count(orders |> where(qty < 0)) == 0, "an order has a negative quantity")`.
 
 A result that goes into a document, a chat message or a page:
 

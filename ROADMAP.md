@@ -339,7 +339,6 @@ arguments, type inference for lambdas.
 | user-defined generic functions | `fn first<T>(xs: list<T>) -> T?` | Should |
 | named imports | `import "lib/geo.bgo" as geo`, then `geo.area(...)`. Today the names of every file share one namespace | Should |
 | a fuller `match` | Ranges of values, guards, and taking a record's fields apart. Today a pattern can only be a literal or `_` | Should |
-| `fail(message)` | Stops the program with a message of its own | Should |
 | documentation comments | A comment above a function, shown when the editor hovers over a call | Should |
 | a `decimal` with a chosen number of decimal places | Today it is fixed at 6 | Later |
 | user-defined aggregates | An aggregate written in biggo | Later |
@@ -351,6 +350,7 @@ arguments, type inference for lambdas.
 - [x] A function that takes `table<{region: string, qty: int}>` accepts a table with more
       columns than those
 - [x] Default values for parameters: `fn top(t: table<Sale>, n: int = 10)`
+- [x] `fail(message)` stops the program with a message of its own, where a value is wanted
 
 ### 11. Tooling
 

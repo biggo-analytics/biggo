@@ -1,0 +1,26 @@
+(fn rate(code: string) -> float
+  (block
+    (match code
+      (arm "std" 0.07)
+      (arm "zero" 0.0)
+      (arm _ (call fail (+ (+ "there is no tax rate `" code) "`"))))))
+(fn positive(n: int) -> int
+  (block
+    (if
+      (> n 0)
+      (block n)
+      (block
+        (call fail (+ "expected a positive number, got " (call to_string n)))))))
+(call print (call rate "std") (call rate "zero") (call positive 3))
+(let known (call map (list "std" "zero") rate))
+(call print known (|> (list 1 2) (call map positive) (call sum)))
+(fn wanted(name: string) -> string
+  (block
+    (?? (call env name) (call fail (+ "set the environment variable " name)))))
+(call print (> (call length (call wanted "PATH")) 0))
+(let given (call args))
+(let month
+  (if (> (call len given) 0) (block (index given 0)) (block "2026-01")))
+(call print month)
+(call print (call positive (- 0 4)))
+(call print "not reached")

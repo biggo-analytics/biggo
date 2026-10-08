@@ -32,7 +32,7 @@ pub(crate) enum Mode {
     Window,
 }
 
-const VERBS: [&str; 82] = [
+const VERBS: [&str; 83] = [
     "print",
     "read_csv",
     "read_parquet",
@@ -69,6 +69,7 @@ const VERBS: [&str; 82] = [
     "put",
     "has_key",
     "assert",
+    "fail",
     "assert_eq",
     "args",
     "env",
@@ -658,6 +659,8 @@ impl Cx<'_> {
         };
         let Some(ty) = expr.ty.to_col() else {
             let message = match expr.ty {
+                // What is wrong with it has been said.
+                Type::Error => return None,
                 Type::Null => "cannot tell which type this `null` has".to_string(),
                 _ => format!("a {} cannot be used in a column expression", expr.ty),
             };

@@ -1,0 +1,31 @@
+// `fail` stops the program with a message of its own. It is written where a value is
+// wanted, so a function can refuse what it was given.
+
+fn rate(code: string) -> float {
+  match code {
+    "std" => 0.07
+    "zero" => 0.0
+    _ => fail("there is no tax rate `" + code + "`")
+  }
+}
+
+fn positive(n: int) -> int {
+  if n > 0 { n } else { fail("expected a positive number, got " + to_string(n)) }
+}
+
+print(rate("std"), rate("zero"), positive(3))
+let known = map(["std", "zero"], rate)
+print(known, [1, 2] |> map(positive) |> sum())
+
+// A value that may be null, where null is a mistake.
+fn wanted(name: string) -> string {
+  env(name) ?? fail("set the environment variable " + name)
+}
+print(length(wanted("PATH")) > 0)
+
+let given = args()
+let month = if len(given) > 0 { given[0] } else { "2026-01" }
+print(month)
+
+print(positive(0 - 4))
+print("not reached")
