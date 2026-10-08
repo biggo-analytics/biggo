@@ -23,7 +23,7 @@ them follow the same principles:
 | Excel | `read_excel` | `write_excel` | | ✓ (cells are not converted) |
 | SQLite | `read_sql` | `write_sql` | | (you write it in the query yourself) |
 | PostgreSQL | `read_sql` | `write_sql` | | ✓ (the server sends only those columns) |
-| MySQL, MariaDB | `read_sql` | `write_sql` | | ✓ (the server sends only those columns) |
+| MySQL, MariaDB | `read_sql` | `write_sql` | | (you write it in the query yourself) |
 
 ## The row type
 
@@ -645,8 +645,8 @@ write_sql(daily, shop, "reports.daily_revenue")
   `date` and `datetime`. A `timestamptz` is read as its moment in UTC, since a `datetime` has no
   time zone. Any column can be read as `string`.
 - Only the columns the program uses are sent by the server, and `take(n)` right after `read_sql`
-  stops it after `n` rows. A `where` in biggo is checked after the rows arrive: to filter a large
-  table, filter in the query.
+  stops it after `n` rows; the rows keep the order that the query asks for. A `where` in biggo is
+  checked after the rows arrive: to filter a large table, filter in the query.
 - `write_sql` **replaces** the table of that name, in one transaction: the table changes when
   every row is in it, or not at all. `"schema.table"` names a table in a schema. Columns are
   made as `bigint`, `double precision`, `boolean`, `text`, `date`, `timestamp` and
@@ -690,7 +690,8 @@ write_sql(orders |> where(not paid), shop, "unpaid_orders")
 
 - The query is MySQL's SQL. Values are read as the declared type, as for PostgreSQL: a
   `TINYINT(1)` or `BOOLEAN` column holds 1 and 0, which a `bool` reads.
-- Only the columns the program uses are sent, and `take(n)` right after `read_sql` stops the
+- The query runs as it is written, and its rows come in the order it asks for. Every column it
+  selects is sent, so select the ones you need; `take(n)` right after `read_sql` stops the
   server after `n` rows.
 - `write_sql` **replaces** the table of that name. MySQL cannot undo the making of a table, so
   the rows are written to a new table that takes the name, in one step, when every row is in it;

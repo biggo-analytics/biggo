@@ -455,38 +455,24 @@ pub(crate) fn mysql_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>
         let shown = &shape.file;
         let fail = |err: mysql::Error| Error(format!("{shown}: {}", mysql_reason(&err)));
         let mut connection = mysql_connect(&address, shown)?;
-        let query = query.trim().trim_end_matches(';');
-        // A query that gives no rows still tells the names of its columns.
-        let described = format!("SELECT * FROM (\n{query}\n) AS biggo_source LIMIT 0");
+        // The query runs as it is written. Inside another query, these servers may give
+        // its rows in another order than the one it asks for.
+        let mut result = connection
+            .query_iter(query.trim().trim_end_matches(';'))
+            .map_err(fail)?;
         let available: Vec<String> = {
-            let result = connection.query_iter(&described).map_err(fail)?;
             let columns = result.columns();
             let names = columns.as_ref().iter();
             names.map(|column| column.name_str().into_owned()).collect()
         };
+        let mut places = Vec::with_capacity(shape.read.fields.len());
         for field in &shape.read.fields {
-            if !available.iter().any(|name| *name == *field.name) {
-                return Err(shape.missing_column(&field.name, &available));
-            }
-        }
-        let columns: Vec<String> = shape
-            .read
-            .fields
-            .iter()
-            .map(|field| mysql_name(&field.name))
-            .collect();
-        let mut select = format!(
-            "SELECT {} FROM (\n{query}\n) AS biggo_source",
-            columns.join(", ")
-        );
-        if let Some(limit) = limit {
-            select.push_str(&format!(" LIMIT {limit}"));
+            let place = available.iter().position(|name| *name == *field.name);
+            places.push(place.ok_or_else(|| shape.missing_column(&field.name, &available))?);
         }
 
-        let width = shape.read.fields.len();
         let mut batches = Vec::new();
-        let mut texts: Vec<StringBuilder> = (0..width).map(|_| StringBuilder::new()).collect();
-        let mut rows = 0;
+        let mut texts: Vec<StringBuilder> = places.iter().map(|_| StringBuilder::new()).collect();
         let mut flush = |texts: &mut Vec<StringBuilder>| -> Result<()> {
             let columns = shape.read.fields.iter().zip(texts.iter_mut());
             let columns = columns
@@ -495,18 +481,20 @@ pub(crate) fn mysql_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>
             batches.push(shape.finish(&batch)?);
             Ok(())
         };
-        for row in connection.query_iter(&select).map_err(fail)? {
+        let (mut rows, mut pending) = (0, 0);
+        let mut cut = false;
+        for row in result.by_ref() {
             let row = row.map_err(fail)?;
-            for (index, text) in texts.iter_mut().enumerate() {
+            for (text, &place) in texts.iter_mut().zip(&places) {
                 // Without a prepared statement, a server sends every value as text.
-                match row.as_ref(index) {
+                match row.as_ref(place) {
                     None | Some(mysql::Value::NULL) => text.append_null(),
                     Some(mysql::Value::Bytes(bytes)) => match std::str::from_utf8(bytes) {
                         Ok(value) => text.append_value(value),
                         Err(_) => {
                             return Err(Error(format!(
                                 "column `{}` of {shown} holds bytes that are not text",
-                                shape.read.fields[index].name
+                                available[place]
                             )));
                         }
                     },
@@ -514,13 +502,23 @@ pub(crate) fn mysql_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>
                 }
             }
             rows += 1;
-            if rows == BATCH_ROWS {
+            pending += 1;
+            if pending == BATCH_ROWS {
                 flush(&mut texts)?;
-                rows = 0;
+                pending = 0;
+            }
+            if limit.is_some_and(|limit| rows >= limit) {
+                cut = true;
+                break;
             }
         }
-        if rows > 0 {
+        if pending > 0 {
             flush(&mut texts)?;
+        }
+        if cut {
+            // The rest of the rows are not wanted. Letting go of the result would read
+            // them all first; closing the connection tells the server to stop.
+            std::mem::forget(result);
         }
         Ok(batches)
     };

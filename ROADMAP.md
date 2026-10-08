@@ -289,7 +289,7 @@ Exists: `read_csv` and `write_csv` (with `delimiter`, `encoding`, `header`, `ski
 | `read_csv(..., on_error = "null")` | A value that does not fit its column becomes null, and the number of such values is reported, instead of the first one stopping the query | Should |
 | compressed files | `.csv.gz`, `.json.gz`, `.zst` | Should |
 | standard input and output | `read_csv<T>("-")` and `write_csv(t, "-")`, to use biggo between other commands | Should |
-| pushdown of `where` | biggo's `where` becomes part of the SQL, so the database does that work. The columns and `take` already are for PostgreSQL and MySQL; for SQLite nothing is yet, and the filter runs after the rows are read out | Should |
+| pushdown of `where` | biggo's `where` becomes part of the SQL, so the database does that work. The columns and `take` already are for PostgreSQL, and `take` for MySQL; for SQLite nothing is yet, and the filter runs after the rows are read out | Should |
 | appending | `write_csv(t, path, append = true)`, `write_sql(t, path, name, mode = "append")` | Should |
 | files as values | `exists(path)`, `list_files(pattern)`, `read_text(path)`, `write_text(path, s)` | Should |
 | nested JSON | A field inside an object, named by its path in the row type | Should |
@@ -307,7 +307,7 @@ Exists: `read_csv` and `write_csv` (with `delimiter`, `encoding`, `header`, `ski
       row's file in a column (`file_name = "..."`)
 - [x] `env(name)` for paths and passwords that do not belong in a program
 - [x] PostgreSQL and MySQL (and MariaDB) through `read_sql` and `write_sql` with an address,
-      encrypted connections, and the columns and `take` of a query done by the server
+      encrypted connections, and a `take` that stops the server early
 - [x] `read_excel` with `sheet`, `range`, `skip`, `header` and `nulls`, for `.xlsx`, `.xls` and
       `.ods`, and `write_excel`
 - [x] Programs can read their command-line arguments with `args()`
