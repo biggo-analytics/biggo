@@ -14,7 +14,9 @@ use arrow::datatypes::{
     DataType as ArrowType, Field as ArrowField, Float64Type, Schema as ArrowSchema, SchemaRef,
 };
 use biggo_plan::Date;
-use biggo_plan::{ColType, DataType, Expr, Field, Format, Scalar, Scan, Schema, scalar};
+use biggo_plan::{
+    ColType, DataType, Expr, Field, Format, Scalar, Scan, Schema, scalar, shown_path,
+};
 use memmap2::Mmap;
 use parquet::arrow::ProjectionMask;
 use parquet::arrow::arrow_reader::{
@@ -80,7 +82,7 @@ fn files(scan: &Scan) -> Result<Vec<Scan>> {
     let matches = glob::glob(&pattern)
         .map_err(|err| Error(format!("{shown:?} is not a pattern for files: {}", err.msg)))?;
     // A file is named as the program names the pattern: without the folder of the program.
-    let folder = match pattern.ends_with(shown) {
+    let folder = match shown_path(&*pattern).ends_with(shown) {
         true => pattern.len() - shown.len(),
         false => 0,
     };
@@ -92,8 +94,8 @@ fn files(scan: &Scan) -> Result<Vec<Scan>> {
             continue;
         }
         let display_path = match path.to_string_lossy().get(folder..) {
-            Some(name) => name.into(),
-            None => path.to_string_lossy().into(),
+            Some(name) => shown_path(name).into(),
+            None => shown_path(&path).into(),
         };
         found.push(Scan {
             path,
@@ -356,7 +358,7 @@ pub(crate) fn quoted_value(message: &str) -> Option<&str> {
 }
 
 fn open(scan: &Scan) -> Result<File> {
-    File::open(&scan.path).map_err(|err| Error(format!("cannot open {}: {err}", scan.display_path)))
+    crate::open(&scan.path, &scan.display_path)
 }
 
 /// The end of the row that starts at `start`: the first line break outside quotes.
@@ -818,8 +820,7 @@ fn parquet_pieces(scan: &Scan, shape: &Arc<Shape>) -> Result<Vec<Piece>> {
         let (shape, path, names, metadata) =
             (shape.clone(), path.clone(), names.clone(), metadata.clone());
         Box::new(move || {
-            let file = File::open(&path)
-                .map_err(|err| Error(format!("cannot open {}: {err}", shape.file)))?;
+            let file = crate::open(&path, &shape.file)?;
             let builder = ParquetRecordBatchReaderBuilder::new_with_metadata(file, metadata);
             let columns = names.iter().map(String::as_str);
             let mask = ProjectionMask::columns(builder.parquet_schema(), columns);

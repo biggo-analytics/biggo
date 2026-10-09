@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use biggo_syntax::{Interner, SourceFile, parse};
+use biggo_syntax::{Interner, SourceFile, parse, shown_path};
 
 fn testdata() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata")
@@ -46,7 +46,7 @@ fn syntax_snapshots() {
     let bless = std::env::var_os("BIGGO_BLESS").is_some();
     let mut failures = Vec::new();
     for path in test_files() {
-        let name = path.strip_prefix(&root).unwrap().to_string_lossy();
+        let name = shown_path(path.strip_prefix(&root).unwrap());
         let actual = render(&name, &fs::read_to_string(&path).unwrap());
         let snapshot = path.with_extension("syntax");
         if bless {

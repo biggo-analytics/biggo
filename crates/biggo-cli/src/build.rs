@@ -5,6 +5,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use biggo_eval::{Session, normalize};
+use biggo_syntax::shown_path;
 
 /// The size of the reserved block, which bounds the size of an embedded program.
 const CAPACITY: usize = 256 << 10;
@@ -71,13 +72,14 @@ fn path_from(base: &Path, path: &Path) -> PathBuf {
 
 /// Writes an executable to `output` that runs the program at `path`.
 pub fn build(path: &str, output: &str) -> Result<(), String> {
+    let shown = shown_path(path);
     let source =
-        std::fs::read_to_string(path).map_err(|err| format!("cannot read {path}: {err}"))?;
+        std::fs::read_to_string(path).map_err(|err| format!("cannot read {shown}: {err}"))?;
     // An executable that cannot run is of no use: check the program first.
     let dir = normalize(Path::new(path).parent().unwrap_or(Path::new("")));
     let mut session = Session::new(std::io::sink());
     session.vm().set_base_dir(&dir);
-    if let Err(errors) = session.check(path, &source) {
+    if let Err(errors) = session.check(&shown, &source) {
         let count = errors.diagnostics.len();
         let plural = if count == 1 { "" } else { "s" };
         return Err(format!(
@@ -95,7 +97,7 @@ pub fn build(path: &str, output: &str) -> Result<(), String> {
     imported.sort();
     for import in imported {
         let source = std::fs::read_to_string(import)
-            .map_err(|err| format!("cannot read {}: {err}", import.display()))?;
+            .map_err(|err| format!("cannot read {}: {err}", shown_path(import)))?;
         files.push((
             path_from(&dir, import).to_string_lossy().into_owned(),
             source,
@@ -111,14 +113,14 @@ pub fn build(path: &str, output: &str) -> Result<(), String> {
     if program.len() > CAPACITY - HEADER {
         let limit = (CAPACITY - HEADER) >> 10;
         return Err(format!(
-            "{path} is too large to embed; the limit is {limit} KiB"
+            "{shown} is too large to embed; the limit is {limit} KiB"
         ));
     }
 
     let tool = std::env::current_exe()
         .map_err(|err| format!("cannot find the biggo executable: {err}"))?;
     let mut executable =
-        std::fs::read(&tool).map_err(|err| format!("cannot read {}: {err}", tool.display()))?;
+        std::fs::read(&tool).map_err(|err| format!("cannot read {}: {err}", shown_path(&tool)))?;
     let marker = &payload()[..MAGIC.len()];
     let mut places = executable
         .windows(MAGIC.len())
@@ -131,7 +133,8 @@ pub fn build(path: &str, output: &str) -> Result<(), String> {
     executable[start + MAGIC.len()..start + HEADER].copy_from_slice(&length);
     executable[start + HEADER..start + HEADER + program.len()].copy_from_slice(&program);
 
-    std::fs::write(output, executable).map_err(|err| format!("cannot write {output}: {err}"))?;
+    std::fs::write(output, executable)
+        .map_err(|err| format!("cannot write {}: {err}", shown_path(output)))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

@@ -9,7 +9,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use biggo_eval::{Failure, Session, StaticErrors};
-use biggo_syntax::{Interner, SourceFile};
+use biggo_syntax::{Interner, SourceFile, shown_path};
 
 const USAGE: &str = "\
 usage: biggo <command> [args]
@@ -143,8 +143,12 @@ fn command(args: &[&str]) -> u8 {
 const STDIN: &str = "-";
 
 /// The name of a source in messages.
-fn shown(path: &str) -> &str {
-    if path == STDIN { "<stdin>" } else { path }
+fn shown(path: &str) -> String {
+    if path == STDIN {
+        "<stdin>".into()
+    } else {
+        shown_path(path)
+    }
 }
 
 fn read(path: &str) -> Option<String> {
@@ -158,7 +162,7 @@ fn read(path: &str) -> Option<String> {
     match text {
         Ok(source) => Some(source),
         Err(err) => {
-            eprintln!("biggo: cannot read {path}: {err}");
+            eprintln!("biggo: cannot read {}: {err}", shown(path));
             None
         }
     }
@@ -177,7 +181,7 @@ fn check(path: &str) -> u8 {
     };
     let mut session = Session::new(io::sink());
     session.vm().set_base_dir(base_dir(path));
-    match session.check(shown(path), &source) {
+    match session.check(&shown(path), &source) {
         Ok(_) => 0,
         Err(errors) => {
             report(&errors);
@@ -196,7 +200,8 @@ fn parse(path: &str) -> u8 {
         print!("{}", parsed.ast.dump(&interner));
         return 0;
     }
-    let file = SourceFile::new(shown(path), &source);
+    let name = shown(path);
+    let file = SourceFile::new(&name, &source);
     for diag in &parsed.diagnostics {
         eprintln!("{}", file.render(diag));
     }
@@ -217,17 +222,18 @@ fn fmt(paths: &[&str], check: bool) -> u8 {
             Ok(formatted) if formatted == source => {}
             // With `--check` nothing is written: the files that would change are listed.
             Ok(_) if check => {
-                println!("{path}");
+                println!("{}", shown(path));
                 status = 1;
             }
             Ok(formatted) => {
                 if let Err(err) = std::fs::write(path, formatted) {
-                    eprintln!("biggo: cannot write {path}: {err}");
+                    eprintln!("biggo: cannot write {}: {err}", shown(path));
                     status = 1;
                 }
             }
             Err(diagnostics) => {
-                let file = SourceFile::new(shown(path), &source);
+                let name = shown(path);
+                let file = SourceFile::new(&name, &source);
                 for diag in &diagnostics {
                     eprintln!("{}", file.render(diag));
                 }
@@ -260,7 +266,7 @@ fn run(path: &str, explain: bool, args: &[&str]) -> u8 {
     let Some(source) = read(path) else {
         return 1;
     };
-    run_source(shown(path), &source, base_dir(path), explain, &[], args)
+    run_source(&shown(path), &source, base_dir(path), explain, &[], args)
 }
 
 /// Runs a program. `bundled` are the files it imports, when they come with it and are not

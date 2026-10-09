@@ -1,7 +1,6 @@
 //! Works out the columns of a file from what is in it, so that the row type a program needs
 //! can be written for the person instead of by them.
 
-use std::fs::File;
 use std::ops::Range;
 use std::path::Path;
 
@@ -263,7 +262,7 @@ fn declare(columns: &[Column], notes: &mut Vec<String>) -> Vec<Field> {
 }
 
 fn map(path: &Path, shown: &str) -> Result<Mmap> {
-    let file = File::open(path).map_err(|err| Error(format!("cannot open {shown}: {err}")))?;
+    let file = crate::open(path, shown)?;
     if file.metadata().map(|meta| meta.len() == 0).unwrap_or(false) {
         return Err(Error(format!("{shown} is empty")));
     }
@@ -492,7 +491,7 @@ fn infer_json(path: &Path, shown: &str) -> Result<Guess> {
 }
 
 fn infer_parquet(path: &Path, shown: &str) -> Result<Guess> {
-    let file = File::open(path).map_err(|err| Error(format!("cannot open {shown}: {err}")))?;
+    let file = crate::open(path, shown)?;
     let metadata = ArrowReaderMetadata::load(&file, ArrowReaderOptions::new())
         .map_err(|err| Error(format!("{shown} is not a Parquet file: {err}")))?;
     let mut notes = Vec::new();

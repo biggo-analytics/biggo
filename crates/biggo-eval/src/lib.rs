@@ -17,7 +17,7 @@ use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
 use biggo_syntax::ast::StmtKind;
-use biggo_syntax::{Diagnostic, Interner, SourceFile, Span};
+use biggo_syntax::{Diagnostic, Interner, SourceFile, Span, shown_path};
 use biggo_types::hir::{Builtin, Expr, ExprKind, Program};
 use biggo_types::{Checked, Checker, Names, Type};
 
@@ -261,12 +261,12 @@ impl<W: Write> Session<W> {
             None => match std::fs::read_to_string(&path) {
                 Ok(text) => text,
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return fail(format!("there is no file `{}`", path.display()));
+                    return fail(format!("there is no file `{}`", shown_path(&path)));
                 }
-                Err(err) => return fail(format!("cannot read `{}`: {err}", path.display())),
+                Err(err) => return fail(format!("cannot read `{}`: {err}", shown_path(&path))),
             },
         };
-        let name = path.display().to_string();
+        let name = shown_path(&path);
         let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
         let source = Source {
             name: &name,

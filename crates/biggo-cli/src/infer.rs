@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use biggo_exec::infer::{Guess, Known, infer};
-use biggo_plan::{CsvOptions, Format, Name};
+use biggo_plan::{CsvOptions, Format, Name, shown_path};
 
 const USAGE: &str = "\
 usage: biggo infer <file> [<table>] [--delimiter <d>] [--encoding <e>] [--skip <n>] [--no-header]
@@ -174,9 +174,11 @@ pub fn command(args: &[&str]) -> u8 {
             return 2;
         }
     };
-    match infer(Path::new(file), file, &known) {
+    // The path is shown with `/`, which is also how a program can name it on every system.
+    let shown = shown_path(file);
+    match infer(Path::new(file), &shown, &known) {
         Ok(guess) => {
-            print!("{}", render(file, &known, &guess));
+            print!("{}", render(&shown, &known, &guess));
             0
         }
         Err(err) => {

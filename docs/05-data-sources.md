@@ -716,7 +716,7 @@ case), after a `?` at the end of the address:
 
 | Message | Cause |
 | --- | --- |
-| `cannot open x.csv: No such file or directory` | Wrong path: paths are relative to the folder of the program file |
+| `cannot open x.csv: there is no such file` | Wrong path: paths are relative to the folder of the program file |
 | `x.csv has no column `c`; its columns are a, b` | The column name does not match the header (upper and lower case are treated as different) |
 | `column `c` of x.csv has missing values, but is declared `int`; declare it `int?`` | There are missing values in a column that is not declared nullable |
 | `x.csv, line 12: cannot read 'abc' as an int for column `c`` | The value on that line is not of the declared type |

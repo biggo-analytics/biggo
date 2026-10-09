@@ -37,7 +37,7 @@ use arrow::util::display::FormatOptions;
 use arrow::util::pretty::pretty_format_batches_with_options;
 use biggo_plan::{
     AggCall, AggFn, ColType, CsvOptions, DataType, Expr, ExprKind, Field, Memory, Plan, Scalar,
-    ScalarFn, Schema, describe_schema, histogram_schema,
+    ScalarFn, Schema, describe_schema, histogram_schema, shown_path,
 };
 use encoding_rs::{EncoderResult, Encoding};
 use parquet::arrow::ArrowWriter;
@@ -48,6 +48,17 @@ use parquet::file::properties::WriterProperties;
 /// An error that stops a query.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Error(pub String);
+
+/// Opens a file to read. `shown` is its name in messages. That there is no such file is
+/// said in the same words on every system, and not in those of the system.
+pub(crate) fn open(path: &Path, shown: &str) -> Result<File> {
+    File::open(path).map_err(|err| match err.kind() {
+        std::io::ErrorKind::NotFound => {
+            Error(format!("cannot open {shown}: there is no such file"))
+        }
+        _ => Error(format!("cannot open {shown}: {err}")),
+    })
+}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -266,7 +277,8 @@ struct Draft {
 impl Draft {
     /// Opens a file to write what `path` is to hold.
     fn create(path: &Path) -> Result<(File, Draft)> {
-        let refuse = |err: std::io::Error| Error(format!("cannot write {}: {err}", path.display()));
+        let refuse =
+            |err: std::io::Error| Error(format!("cannot write {}: {err}", shown_path(path)));
         let existing = std::fs::metadata(path).ok();
         // Only a regular file is replaced. Anything else, such as a terminal or a pipe, is
         // written to as it is.
@@ -301,8 +313,9 @@ impl Draft {
     /// Gives the file its own name, in place of the file that had it.
     fn keep(mut self) -> Result<()> {
         if !self.kept {
-            std::fs::rename(&self.written, &self.wanted)
-                .map_err(|err| Error(format!("cannot write {}: {err}", self.wanted.display())))?;
+            std::fs::rename(&self.written, &self.wanted).map_err(|err| {
+                Error(format!("cannot write {}: {err}", shown_path(&self.wanted)))
+            })?;
             self.kept = true;
         }
         Ok(())
@@ -378,7 +391,7 @@ fn csv_into(plan: &Arc<Plan>, path: &Path, file: File, options: CsvOptions) -> R
                 Error(format!("{c:?} cannot be written as {name}"))
             })?;
             let written = file.write_all(&bytes);
-            written.map_err(|err| Error(format!("cannot write {}: {err}", path.display())))?;
+            written.map_err(|err| Error(format!("cannot write {}: {err}", shown_path(path))))?;
             text.clear();
         }
         Ok(())
@@ -481,7 +494,7 @@ fn sql_name(name: &str) -> String {
 /// datetimes, and decimals are stored as text, and durations as seconds.
 pub fn write_sqlite(plan: &Arc<Plan>, path: &Path, table: &str) -> Result<()> {
     use rusqlite::types::Value;
-    let fail = |err: rusqlite::Error| Error(format!("{}: {err}", path.display()));
+    let fail = |err: rusqlite::Error| Error(format!("{}: {err}", shown_path(path)));
     let schema = plan.schema();
     let columns = schema.fields.iter().map(|field| {
         let kind = match field.ty.dtype {

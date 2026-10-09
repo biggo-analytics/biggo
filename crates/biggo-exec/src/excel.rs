@@ -12,7 +12,7 @@ use arrow::datatypes::{
     DataType as ArrowType, Date32Type, Decimal128Type, DurationMicrosecondType, Float64Type,
     Int64Type, TimestampMicrosecondType,
 };
-use biggo_plan::{DataType, Field, Plan, Scan, scalar};
+use biggo_plan::{DataType, Field, Plan, Scan, scalar, shown_path};
 use calamine::{Data, Range, Reader, open_workbook_auto};
 use rust_xlsxwriter::{Format, Workbook};
 
@@ -70,7 +70,7 @@ pub(crate) fn open(
     range: Option<&str>,
 ) -> Result<(String, Range<Data>)> {
     // Opened first as any file, for the same message as the other readers give.
-    std::fs::File::open(path).map_err(|err| Error(format!("cannot open {shown}: {err}")))?;
+    crate::open(path, shown)?;
     let mut workbook = open_workbook_auto(path).map_err(|err| match err {
         calamine::Error::Msg(_) => Error(format!(
             "{shown} is not a workbook by its name; those that can be read are \
@@ -274,8 +274,9 @@ fn column<'c>(
 /// Writes a table as a workbook with one sheet, with the names of the columns in its
 /// first row.
 pub fn write_excel(plan: &Arc<Plan>, path: &Path, sheet: &str) -> Result<()> {
-    let refuse =
-        |err: rust_xlsxwriter::XlsxError| Error(format!("cannot write {}: {err}", path.display()));
+    let refuse = |err: rust_xlsxwriter::XlsxError| {
+        Error(format!("cannot write {}: {err}", shown_path(path)))
+    };
     let schema = plan.schema();
     let mut workbook = Workbook::new();
     let page = workbook.add_worksheet();

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::csv::{CsvOptions, ReadOptions};
 use crate::expr::{AggCall, Expr, SortKey, WindowCall};
 use crate::schema::{Field, Name, Scalar, Schema};
+use crate::shown_path;
 
 /// A query: a tree of relational operators, each producing a table from its inputs. Plans are
 /// immutable and shared, so one table value can feed several pipelines.
@@ -113,7 +114,7 @@ impl Format {
 pub struct Scan {
     pub format: Format,
     pub path: PathBuf,
-    /// The path as written in the program.
+    /// The path as written in the program, with `/` between its parts whatever the system.
     pub display_path: Arc<str>,
     /// For a database, the query whose rows are read.
     pub query: Option<Arc<str>>,
@@ -376,7 +377,7 @@ impl TableOp {
                 };
                 let (format, file, shown) = match server {
                     Some((format, shown)) => (format, PathBuf::from(&*path), shown.into()),
-                    None => (*format, base_dir.join(&*path), path),
+                    None => (*format, base_dir.join(&*path), shown_path(&*path).into()),
                 };
                 Plan::Scan(Scan {
                     format,

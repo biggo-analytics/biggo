@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use biggo_eval::Session;
 use biggo_syntax::Interner;
 use biggo_syntax::ast::StmtKind;
+use biggo_syntax::shown_path;
 
 const SUFFIX: &str = "_test.bgo";
 
@@ -32,7 +33,7 @@ pub fn test(paths: &[&str]) -> u8 {
         } else {
             eprintln!(
                 "biggo test: there is no file or directory `{}`",
-                path.display()
+                shown_path(path)
             );
             return 2;
         }
@@ -107,7 +108,7 @@ fn report(label: &str, error: &str, output: &[u8]) {
 }
 
 fn run_file(path: &Path, totals: &mut Totals) {
-    let name = path.display().to_string();
+    let name = shown_path(path);
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
         Err(err) => {

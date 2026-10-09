@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use arrow::array::{Array, AsArray};
-use biggo_plan::{DataType, Plan, Schema};
+use biggo_plan::{DataType, Plan, Schema, shown_path};
 
 use crate::{Draft, Error, Result, execute, expr, optimize};
 
@@ -130,7 +130,7 @@ fn write(path: &Path, text: &str) -> Result<()> {
     use std::io::Write;
     let (mut file, draft) = Draft::create(path)?;
     file.write_all(text.as_bytes())
-        .map_err(|err| Error(format!("cannot write {}: {err}", path.display())))?;
+        .map_err(|err| Error(format!("cannot write {}: {err}", shown_path(path))))?;
     drop(file);
     draft.keep()
 }

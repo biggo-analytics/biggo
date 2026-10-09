@@ -1,6 +1,8 @@
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
 
+use biggo_syntax::shown_path;
+
 fn biggo(args: &[&str], stdin: &str) -> (String, String, Option<i32>) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_biggo"))
         .args(args)
@@ -229,7 +231,10 @@ fn fmt_rewrites_files_and_check_lists_them() {
     );
 
     let (stdout, _, code) = biggo(&["fmt", "--check", messy, tidy], "");
-    assert_eq!((stdout, code), (format!("{messy}\n"), Some(1)));
+    assert_eq!(
+        (stdout, code),
+        (format!("{}\n", shown_path(messy)), Some(1))
+    );
     assert_eq!(
         std::fs::read_to_string(messy).unwrap(),
         "let   x=1\n// note\nlet y = [ 1,2 ]"
@@ -396,7 +401,7 @@ fn imports_are_found_from_the_importing_file() {
             format!(
                 "error: expected int, found float\n --> {0}:1:17\n  |\n1 | let half: int = 0.5\n  \
                  |                 ^^^\n\n1 error in {0}\n",
-                lib.display()
+                shown_path(&lib)
             )
         );
         assert_eq!(code, Some(1));
@@ -407,7 +412,7 @@ fn imports_are_found_from_the_importing_file() {
     assert!(
         stderr.starts_with(&format!(
             "error: there is no file `{}`\n",
-            dir.join("missing.bgo").display()
+            shown_path(dir.join("missing.bgo"))
         )),
         "{stderr}"
     );
@@ -821,7 +826,7 @@ fn files_that_do_not_fit_their_options_are_explained() {
         ),
         (
             format!("print(read_excel<{{ id: int }}>(\"{data}/missing.xlsx\"))"),
-            format!("error: cannot open {data}/missing.xlsx: No such file or directory (os error 2)"),
+            format!("error: cannot open {data}/missing.xlsx: there is no such file"),
         ),
         (
             format!("print(read_excel<{{ id: int }}>(\"{data}/sales.csv\"))"),

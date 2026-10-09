@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use biggo_eval::Session;
+use biggo_syntax::shown_path;
 
 fn testdata() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata")
@@ -24,7 +25,7 @@ fn programs(dir: &str) -> Vec<PathBuf> {
 /// running.
 fn run(path: &Path, source: &str, explain: bool) -> String {
     let root = testdata();
-    let name = path.strip_prefix(&root).unwrap().to_string_lossy();
+    let name = shown_path(path.strip_prefix(&root).unwrap());
     let mut session = Session::new(Vec::new());
     // Paths in a program are relative to the program's own directory.
     session.vm().set_base_dir(path.parent().unwrap());
@@ -42,7 +43,7 @@ fn snapshot(path: &Path, actual: &str, failures: &mut Vec<String>) {
     if std::env::var_os("BIGGO_BLESS").is_some() {
         fs::write(path, actual).unwrap();
     } else if fs::read_to_string(path).ok().as_deref() != Some(actual) {
-        let name = path.strip_prefix(testdata()).unwrap().display();
+        let name = shown_path(path.strip_prefix(testdata()).unwrap());
         failures.push(format!("{name} does not match; got:\n{actual}"));
     }
 }

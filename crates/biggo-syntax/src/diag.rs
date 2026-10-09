@@ -1,4 +1,16 @@
+use std::path::Path;
+
 use crate::span::Span;
+
+/// A path as messages and results show it: with `/` between its parts on every system, so
+/// that a program reports and prints the same wherever it runs.
+pub fn shown_path(path: impl AsRef<Path>) -> String {
+    let path = path.as_ref().to_string_lossy();
+    match std::path::MAIN_SEPARATOR {
+        '/' => path.into_owned(),
+        separator => path.replace(separator, "/"),
+    }
+}
 
 /// A compile error attached to a source location.
 #[derive(Clone, Debug, PartialEq)]
@@ -81,6 +93,13 @@ mod tests {
             file.render(&diag),
             "error: boom\n --> demo.bgo:2:6\n  |\n2 | \tlet total = (1 +\n  | \t    ^^^^^\n"
         );
+    }
+
+    #[test]
+    fn paths_are_shown_with_slashes_on_every_system() {
+        let path: std::path::PathBuf = ["data", "logs", "2026-01.csv"].iter().collect();
+        assert_eq!(shown_path(&path), "data/logs/2026-01.csv");
+        assert_eq!(shown_path("lib/rates.bgo"), "lib/rates.bgo");
     }
 
     #[test]
