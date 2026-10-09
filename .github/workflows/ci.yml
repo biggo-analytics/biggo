@@ -30,6 +30,8 @@ jobs:
       - name: Run the tests
         run: cargo test --workspace --no-fail-fast
 
+  # The password is a word that is nowhere in the test programs: a test looks for it in the
+  # messages, to see that an address is shown without it.
   databases:
     name: Databases
     runs-on: ubuntu-latest
@@ -38,7 +40,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: app
-          POSTGRES_PASSWORD: biggo
+          POSTGRES_PASSWORD: kept-9f31c7
           POSTGRES_DB: shop
         ports:
           - 5432:5432
@@ -53,11 +55,11 @@ jobs:
           MYSQL_ROOT_PASSWORD: biggo-root
           MYSQL_DATABASE: shop
           MYSQL_USER: app
-          MYSQL_PASSWORD: biggo
+          MYSQL_PASSWORD: kept-9f31c7
         ports:
           - 3306:3306
         options: >-
-          --health-cmd "mysqladmin ping -uapp -pbiggo --silent"
+          --health-cmd "mysqladmin ping -uapp -pkept-9f31c7 --silent"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
@@ -67,8 +69,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Read and write a PostgreSQL and a MySQL server
         env:
-          BIGGO_TEST_POSTGRES: postgres://app:biggo@localhost:5432/shop
-          BIGGO_TEST_MYSQL: mysql://app:biggo@127.0.0.1:3306/shop
+          BIGGO_TEST_POSTGRES: postgres://app:kept-9f31c7@localhost:5432/shop
+          BIGGO_TEST_MYSQL: mysql://app:kept-9f31c7@127.0.0.1:3306/shop
         run: cargo test -p biggo-cli --test cli server_is_read_and_written
 
   lint:
