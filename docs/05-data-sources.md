@@ -11,7 +11,9 @@ them follow the same principles:
   is there: a query that fails leaves the old file as it was, and a query can replace the file
   that it reads.
 - **path** is relative to the folder of the program file, not to where you run the command. So you
-  can move a program, together with its data, and run it from anywhere.
+  can move a program, together with its data, and run it from anywhere. Write it with `/` between
+  its parts on every system, Windows included: that is also how biggo shows a path, in its
+  messages and in its results.
 - Reading is lazy: `read_xxx` does not open the file yet. The file is read when the query runs, and
   only the columns the query uses are read.
 
@@ -347,7 +349,8 @@ print(logs |> group(source) |> agg(hits = sum(hits)) |> sort(source))
   of no files is more likely a wrong path than what was meant.
 - If a file exists whose name is exactly the path, that file is read, whatever characters its
   name has.
-- The path in the `file_name` column is written the way the pattern is: relative to the program.
+- The path in the `file_name` column is written the way the pattern is: relative to the program,
+  and with `/` between its parts on every system.
   `regex_extract(source, r"(\d{4}-\d{2})")` or `split_part` takes a part of it, such as a month.
 - `file_name` also works with a path that is one file.
 

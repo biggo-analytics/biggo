@@ -138,7 +138,7 @@ and functions that you declare stay available until you exit:
 
 ```text
 $ biggo repl
-biggo 0.1.0 (Ctrl-D to exit)
+biggo 0.2.0 (Ctrl-D to exit)
 >> let x = 2
 >> x * 21
 42

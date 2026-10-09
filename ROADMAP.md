@@ -3,8 +3,8 @@
 This document says what biggo can do today, lists everything it still needs, and gives the order
 in which that will be built.
 
-- The current version is **0.1.0**, the first release. Until 1.0, the language and the commands
-  can change without staying compatible with earlier versions.
+- The current version is **0.2.0**, the first with prebuilt executables. Until 1.0, the language
+  and the commands can change without staying compatible with earlier versions.
 - Work is listed in the order it will be done. There are **no dates**, and the order can change
   with the problems people actually run into.
 - An item that is ticked is done. Every other item is something the code does **not** do today.
@@ -37,9 +37,9 @@ in which that will be built.
 
 ## Where things stand
 
-0.1.0 is the released version. The `main` branch has since gained most of what was planned for
-0.2 and 0.3 and the first part of 0.4: in the catalog below, a line that starts with `[x]` is
-done on `main`, and a row of a table is still to do.
+0.2.0 is the released version. It has most of what was planned for 0.2 and 0.3 and the first
+part of 0.4: in the catalog below, a line that starts with `[x]` is done, and a row of a table
+is still to do.
 
 | Area | What exists on `main` |
 | --- | --- |
@@ -65,9 +65,9 @@ The main limitations today, which the rest of the plan comes from:
   generic functions, and the names of every imported file share one namespace.
 - A `where` in biggo is not made part of the SQL that a database runs, and SQL Server cannot
   be read.
-- CI and the release build are written but have not run on GitHub yet. The tests pass on macOS
-  (Apple Silicon) and on Linux (arm64, in a container); nothing has been tried on Windows, and
-  there are no prebuilt binaries until the first release is tagged.
+- The tests run on macOS, Linux and Windows on every change, but on Windows nothing more than
+  the tests has been tried. There are prebuilt executables for these three systems, and no
+  Homebrew formula yet.
 - The VS Code extension has been packaged and its grammar tested, but it has never been run
   inside VS Code.
 
@@ -118,7 +118,7 @@ type rule, gives the same answer on a column as on a single value, handles null,
 | 5 | Table operations | [6](#6-table-operations) | `count_by`, sampling, set operations, checks on data quality | done |
 | 6 | Strings and formatting | [3](#3-strings-and-formatting) | Numbers formatted for people, and the string functions that SQL and spreadsheets have | done |
 | 7 | Lists, maps and records | [7](#7-lists-maps-and-records) | Ordinary code catches up with what tables can do | done |
-| 8 | CI, prebuilt binaries, the extension tried in VS Code | [11](#11-tooling) | Completes 0.2. It can be done at any point, since nothing else depends on it | written; its first run on GitHub and the first release are still to come |
+| 8 | CI, prebuilt binaries, the extension tried in VS Code | [11](#11-tooling) | Completes 0.2. It can be done at any point, since nothing else depends on it | done, except that the extension has not been tried in VS Code |
 | 9 | `biggo infer`, the remaining CSV and JSON layouts, many files, `env` | [8](#8-getting-data-in-and-out) | Removes the first obstacle of a new user: writing every column type by hand | done |
 | 10 | Excel | [8](#8-getting-data-in-and-out) | Where most analysts' data is | done |
 | 11 | Output: more rows, Markdown, HTML | [9](#9-output-and-reports) | Results that go into a document or a message | done |
@@ -361,8 +361,7 @@ with a grammar.
 
 | Feature | What it does | Priority |
 | --- | --- | --- |
-| CI on GitHub Actions: first run | The workflow is written, and the tests, the format check and clippy pass on Linux in a container and on macOS. What is left is its first run on GitHub, and the fixes for what differs on Windows, where nothing has been tried | Must |
-| prebuilt binaries: first release | The release workflow and `install.sh` are written, and the script is tried against stand-in archives. What is left is a tagged release to build the real ones, and a Homebrew formula | Must |
+| a Homebrew formula | `brew install` of the prebuilt executable of a release | Must |
 | the VS Code extension, verified | Tried in VS Code, fixed, and published to the Marketplace and Open VSX | Must |
 | language server: more | Go to definition, rename, the arguments of the function being typed, the outline of a file, and the type of the table between the stages of a pipeline | Should |
 | `biggo test` | Tests chosen by name, several files at once, and the time each took | Should |
@@ -373,6 +372,10 @@ with a grammar.
 | a changelog, a contributing guide, issue templates | What changed in each release, and how to take part | Should |
 | a web playground | The language compiled to WebAssembly, to try it without installing | Later |
 
+- [x] CI on GitHub Actions: the tests on Linux, macOS and Windows, the format check, clippy,
+      and a PostgreSQL and a MySQL server that are read and written
+- [x] Prebuilt executables: a tag builds biggo for macOS, Linux and Windows and publishes them
+      with their checksums as a release, which `install.sh` installs
 - [x] REPL: line editing, history that lasts between sessions, `:type` and `:help`
 - [x] `biggo help <name>`, `biggo run -e '...'`, and `-` for standard input in `run`, `explain`,
       `check` and `fmt`

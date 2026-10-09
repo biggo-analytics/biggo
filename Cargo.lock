@@ -340,7 +340,7 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "biggo-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "biggo-eval",
  "biggo-exec",
@@ -354,7 +354,7 @@ dependencies = [
 
 [[package]]
 name = "biggo-eval"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "biggo-exec",
  "biggo-plan",
@@ -365,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "biggo-exec"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arrow",
  "biggo-plan",
@@ -390,14 +390,14 @@ dependencies = [
 
 [[package]]
 name = "biggo-fmt"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "biggo-syntax",
 ]
 
 [[package]]
 name = "biggo-lsp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "biggo-eval",
  "biggo-fmt",
@@ -409,7 +409,7 @@ dependencies = [
 
 [[package]]
 name = "biggo-plan"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "biggo-syntax",
  "chrono",
@@ -421,14 +421,14 @@ dependencies = [
 
 [[package]]
 name = "biggo-syntax"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "unicode-ident",
 ]
 
 [[package]]
 name = "biggo-types"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "biggo-plan",
  "biggo-syntax",

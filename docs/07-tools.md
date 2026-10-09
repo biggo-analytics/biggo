@@ -148,7 +148,7 @@ Inside a program, you can call `explain(table)` to print the plan of a single ta
 
 ```text
 $ biggo repl
-biggo 0.1.0 (:help for commands, Ctrl-D to exit)
+biggo 0.2.0 (:help for commands, Ctrl-D to exit)
 >> type Sale = { region: string, qty: int }
 >> let sales = read_csv<Sale>("docs/data/sales.csv")
 >> sales |> group(region) |> agg(units = sum(qty))

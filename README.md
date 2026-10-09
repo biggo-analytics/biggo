@@ -5,8 +5,8 @@ A program reads data in as tables, transforms them with pipelines, and prints or
 Everything is type-checked before the program runs, including the name and type of every column,
 and queries run on a columnar engine that uses every core of the machine.
 
-**Status:** version 0.1.0, the first release. It works as documented, but the language can still
-change, and it has been tested on macOS (Apple Silicon) only. See the
+**Status:** version 0.2.0. It works as documented, but the language can still change. Its tests
+run on macOS, Linux and Windows; it has been used by hand on macOS (Apple Silicon) only. See the
 [known limitations](#known-limitations) and the [roadmap](ROADMAP.md).
 
 ```biggo
@@ -304,7 +304,8 @@ python3 bench/run.py           # benchmarks (build with --release and generate t
   generic functions.
 - The language server has no go-to-definition or rename yet. The VS Code extension has been
   packaged and its grammar tested, but it has not been run inside VS Code.
-- Tested on macOS (Apple Silicon) and on Linux. Nothing has been tried on Windows.
+- The tests run on macOS, Linux and Windows on every change. On Windows nothing more than the
+  tests has been tried.
 
 ## Roadmap
 
